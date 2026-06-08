@@ -20,11 +20,16 @@ const sql = readFileSync(
   'utf-8'
 )
 
-// Split on semicolons, filter empty statements
+// Split on semicolons, strip comment lines, filter empty statements
 const statements = sql
   .split(';')
-  .map(s => s.trim())
-  .filter(s => s.length > 0 && !s.startsWith('--'))
+  .map(s =>
+    s.split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n')
+      .trim()
+  )
+  .filter(s => s.length > 0)
 
 console.log(`Applying ${statements.length} statements to Turso...`)
 
