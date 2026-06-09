@@ -31,6 +31,7 @@ const prismaAdapter = {
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  trustHost: true,
   adapter: prismaAdapter as never,
   providers: [
     GoogleProvider({
