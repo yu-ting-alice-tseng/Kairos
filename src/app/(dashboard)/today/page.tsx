@@ -315,7 +315,7 @@ export default function TodayPage() {
 
           {todayHabits.length > 0 && (
             <div>
-              <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-[#4a4866] mb-3 flex items-center gap-2">
                 <Flame className="h-4 w-4 text-amber-500" />
                 {t('habits', language)}
               </h2>
@@ -350,10 +350,10 @@ export default function TodayPage() {
 
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-[#4a4866] flex items-center gap-2">
                 <Clock className="h-4 w-4 text-indigo-500" />
                 {language === 'fr' ? 'Tâches prioritaires' : 'Priority tasks'}
-                <Badge variant="default" className="text-xs">{prioritizedTasks.length}</Badge>
+                <Badge variant="default" className="text-xs bg-indigo-100 text-indigo-700 border-0">{prioritizedTasks.length}</Badge>
               </h2>
             </div>
 
