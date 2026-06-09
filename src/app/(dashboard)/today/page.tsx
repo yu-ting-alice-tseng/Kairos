@@ -358,19 +358,23 @@ export default function TodayPage() {
             </div>
 
             {prioritizedTasks.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 py-12 text-center">
-                <CheckCircle2 className="h-10 w-10 text-gray-300 mb-3" />
-                <p className="text-sm font-medium text-gray-500">{t('noTasks', language)}</p>
-                <Button variant="outline" size="sm" className="mt-4" onClick={() => setShowTaskForm(true)}>
+              <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#ebe8f8] py-12 text-center bg-white/60">
+                <div className="h-14 w-14 rounded-2xl bg-[#f7f6ff] border border-[#ebe8f8] flex items-center justify-center mb-4">
+                  <CheckCircle2 className="h-7 w-7 text-indigo-300" />
+                </div>
+                <p className="text-sm font-medium text-[#9896a8]">{t('noTasks', language)}</p>
+                <Button variant="outline" size="sm"
+                  className="mt-4 border-[#ebe8f8] text-[#4a4866] hover:bg-[#f7f6ff] hover:border-indigo-200"
+                  onClick={() => setShowTaskForm(true)}>
                   <Plus className="h-4 w-4" />
                   {t('addTask', language)}
                 </Button>
               </div>
             ) : (
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-2.5 stagger">
                 {prioritizedTasks.map((task, index) => (
                   <div key={task.id} className="flex items-start gap-3">
-                    <span className="h-6 w-6 flex items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-500 shrink-0 mt-3">
+                    <span className="h-6 w-6 flex items-center justify-center rounded-full bg-indigo-50 text-xs font-bold text-indigo-400 shrink-0 mt-3 border border-indigo-100">
                       {index + 1}
                     </span>
                     <div className="flex-1">
@@ -392,7 +396,7 @@ export default function TodayPage() {
 
           {completedToday.length > 0 && (
             <div>
-              <h2 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-[#b8b4cc] mb-3 flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4" />
                 {language === 'fr' ? `Terminées aujourd'hui (${completedToday.length})` : `Completed today (${completedToday.length})`}
               </h2>
