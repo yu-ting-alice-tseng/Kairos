@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { generatePriorityList, formatDate, formatTime } from '@/lib/utils'
 import {
   Plus, Sparkles, Sun, Flame, RefreshCw, MessageSquare, ChevronRight,
-  CheckCircle2, Clock, Loader2, X, AlarmCheck,
+  CheckCircle2, Clock, Loader2, X, AlarmCheck, Zap,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { fr, enUS } from 'date-fns/locale'
