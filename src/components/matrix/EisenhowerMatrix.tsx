@@ -170,19 +170,19 @@ export function EisenhowerMatrix({ tasks, onTaskUpdate, onTaskClick, lang = 'fr'
         </div>
       </div>
 
-      <div className="flex gap-2">
-        {/* Y-axis label: importance increases upward */}
-        <div className="w-8 flex items-center justify-center shrink-0">
-          <span
-            className="text-xs font-semibold text-indigo-600 whitespace-nowrap select-none"
-            style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
-          >
-            {lang === 'fr' ? '↑  Importance haute · Importance basse  ↓' : '↑  High importance · Low importance  ↓'}
+      <div className="flex gap-3">
+        {/* Y-axis label: two horizontal labels top/bottom */}
+        <div className="w-16 flex flex-col justify-between items-center shrink-0 py-2">
+          <span className="text-xs font-semibold text-indigo-600 text-center leading-tight">
+            ↑ {lang === 'fr' ? 'Importance haute' : 'High importance'}
+          </span>
+          <span className="text-xs font-semibold text-gray-400 text-center leading-tight">
+            ↓ {lang === 'fr' ? 'Importance basse' : 'Low importance'}
           </span>
         </div>
 
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <div className="flex-1 grid grid-cols-2 gap-3">
+          <div className="flex-1 grid grid-cols-2 gap-4">
             {displayQuadrants.map((q) => (
               <QuadrantDroppable
                 key={q.id}
