@@ -9,7 +9,8 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
-import { signIn } from 'next-auth/react'
+import { signIn, useSession } from 'next-auth/react'
+import { DEMO_USER_ID } from '@/lib/demo-data'
 import {
   Settings, Plus, Trash2, Globe, Calendar, Check,
   MonitorSmartphone, Loader2, AlertTriangle,
@@ -26,11 +27,12 @@ const PROVIDER_CONFIG: Record<CalendarProvider, { label: string; icon: string; c
 
 const COLORS = ['#4F46E5', '#7C3AED', '#DC2626', '#16A34A', '#D97706', '#0891B2', '#DB2777', '#059669']
 
-function AddCalendarDialog({ open, onClose, onAdd, lang }: {
+function AddCalendarDialog({ open, onClose, onAdd, lang, isDemo }: {
   open: boolean
   onClose: () => void
   onAdd: (data: { provider: CalendarProvider; name: string; color: string }) => Promise<void>
   lang: 'fr' | 'en'
+  isDemo?: boolean
 }) {
   const [provider, setProvider] = useState<CalendarProvider>('GOOGLE')
   const [name, setName] = useState('')
@@ -38,9 +40,13 @@ function AddCalendarDialog({ open, onClose, onAdd, lang }: {
   const [saving, setSaving] = useState(false)
 
   const handleAdd = async () => {
-    if (!name.trim()) return
-    setSaving(true)
     const config = PROVIDER_CONFIG[provider]
+    if (!config.oauthKey && !name.trim()) return
+    if (isDemo) {
+      onClose()
+      return
+    }
+    setSaving(true)
     if (config.oauthKey) {
       await signIn(config.oauthKey, { callbackUrl: '/settings' })
       return
@@ -93,7 +99,14 @@ function AddCalendarDialog({ open, onClose, onAdd, lang }: {
               </div>
             </>
           )}
-          {PROVIDER_CONFIG[provider].oauthKey && (
+          {isDemo && (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">
+              {lang === 'fr'
+                ? 'La synchronisation calendrier n\'est pas disponible en mode démo.'
+                : 'Calendar sync is not available in demo mode.'}
+            </div>
+          )}
+          {!isDemo && PROVIDER_CONFIG[provider].oauthKey && (
             <div className="rounded-xl bg-blue-50 border border-blue-100 p-3 text-sm text-blue-700">
               {lang === 'fr'
                 ? `Vous serez redirigé vers ${PROVIDER_CONFIG[provider].label} pour autoriser l'accès à votre calendrier.`
@@ -115,6 +128,8 @@ function AddCalendarDialog({ open, onClose, onAdd, lang }: {
 
 export default function SettingsPage() {
   const { language, setLanguage, calendarAccounts, setCalendarAccounts } = useAppStore()
+  const { data: session } = useSession()
+  const isDemo = session?.user?.id === DEMO_USER_ID
   const { toast } = useGlobalToast()
   const [loading, setLoading] = useState(true)
   const [showAddCalendar, setShowAddCalendar] = useState(false)
@@ -277,7 +292,7 @@ export default function SettingsPage() {
         </DialogContent>
       </Dialog>
 
-      <AddCalendarDialog open={showAddCalendar} onClose={() => setShowAddCalendar(false)} onAdd={handleAddCalendar} lang={language} />
+      <AddCalendarDialog open={showAddCalendar} onClose={() => setShowAddCalendar(false)} onAdd={handleAddCalendar} lang={language} isDemo={isDemo} />
     </div>
   )
 }
