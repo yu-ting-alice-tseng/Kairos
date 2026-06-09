@@ -182,8 +182,13 @@ export default function TodayPage() {
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+      <div className="flex h-full items-center justify-center bg-[#f7f6ff]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30 animate-float">
+            <Zap className="h-5 w-5 text-white" />
+          </div>
+          <Loader2 className="h-5 w-5 animate-spin text-indigo-400" />
+        </div>
       </div>
     )
   }
