@@ -13,15 +13,15 @@ import {
 } from 'lucide-react'
 
 const navItems = [
-  { href: '/today', icon: Zap, key: 'today' as const },
-  { href: '/matrix', icon: LayoutGrid, key: 'matrix' as const },
-  { href: '/calendar', icon: Calendar, key: 'calendar' as const },
-  { href: '/habits', icon: Repeat2, key: 'habits' as const },
-  { href: '/settings', icon: Settings, key: 'settings' as const },
+  { href: '/today',    icon: Zap,        key: 'today'    as const },
+  { href: '/matrix',   icon: LayoutGrid, key: 'matrix'   as const },
+  { href: '/calendar', icon: Calendar,   key: 'calendar' as const },
+  { href: '/habits',   icon: Repeat2,    key: 'habits'   as const },
+  { href: '/settings', icon: Settings,   key: 'settings' as const },
 ]
 
 export function Sidebar() {
-  const pathname = usePathname()
+  const pathname    = usePathname()
   const { language, setLanguage } = useAppStore()
   const { data: session } = useSession()
   const [collapsed, setCollapsed] = React.useState(false)
@@ -29,58 +29,65 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'relative flex flex-col h-full bg-white border-r border-gray-100 transition-all duration-300 ease-in-out',
-        collapsed ? 'w-16' : 'w-56'
+        'relative flex flex-col h-full transition-all duration-300 ease-in-out shrink-0',
+        'bg-[#0c0a17] border-r border-white/[0.06]',
+        collapsed ? 'w-[68px]' : 'w-[220px]'
       )}
     >
-      <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100">
-        {!collapsed && (
-          <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-              <Zap className="h-4 w-4 text-white" />
-            </div>
-            <span className="font-bold text-gray-900">FlowPlan</span>
-          </div>
-        )}
-        {collapsed && (
-          <div className="mx-auto h-7 w-7 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+      {/* ── Logo header ── */}
+      <div className={cn(
+        'flex items-center border-b border-white/[0.06] px-4 h-[64px]',
+        collapsed ? 'justify-center' : 'justify-between'
+      )}>
+        <div className="flex items-center gap-2.5">
+          <div className="relative h-8 w-8 rounded-xl bg-gradient-to-br from-indigo-400 via-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/25 shrink-0">
             <Zap className="h-4 w-4 text-white" />
+            {/* inner shine */}
+            <div className="absolute inset-0 rounded-xl bg-gradient-to-b from-white/20 to-transparent pointer-events-none" />
           </div>
-        )}
+          {!collapsed && (
+            <span className="font-bold text-white tracking-tight text-[15px]">FlowPlan</span>
+          )}
+        </div>
+
         {!collapsed && (
           <button
             onClick={() => setCollapsed(true)}
-            className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+            className="p-1.5 rounded-lg text-white/25 hover:text-white/60 hover:bg-white/[0.06] transition-all"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
         )}
       </div>
 
+      {/* Expand handle when collapsed */}
       {collapsed && (
         <button
           onClick={() => setCollapsed(false)}
-          className="absolute -right-3 top-14 z-10 h-6 w-6 rounded-full bg-white border border-gray-200 shadow flex items-center justify-center text-gray-400 hover:text-gray-600"
+          className="absolute -right-[13px] top-[72px] z-10 h-6 w-6 rounded-full bg-[#1a1730] border border-white/10 shadow-lg flex items-center justify-center text-white/35 hover:text-white/70 transition-all"
         >
           <ChevronRight className="h-3 w-3" />
         </button>
       )}
 
-      <nav className="flex-1 flex flex-col gap-1 p-3 overflow-y-auto">
+      {/* ── Nav items ── */}
+      <nav className="flex-1 flex flex-col gap-0.5 p-3 pt-4 overflow-y-auto">
         {navItems.map(({ href, icon: Icon, key }) => {
           const active = pathname === href || (href !== '/today' && pathname.startsWith(href))
           return (
             <Link
               key={href}
               href={href}
+              title={collapsed ? t(key, language) : undefined}
               className={cn(
-                'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150',
+                'relative flex items-center gap-3 rounded-xl text-sm font-medium transition-all duration-200',
+                collapsed ? 'justify-center h-10 w-10 mx-auto' : 'px-3 py-2.5',
                 active
-                  ? 'bg-indigo-50 text-indigo-700'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
-                collapsed && 'justify-center px-2'
+                  ? 'bg-indigo-500/[0.18] text-indigo-300'
+                  : 'text-white/35 hover:bg-white/[0.06] hover:text-white/75'
               )}
             >
+              {active && <span className="nav-active-bar" />}
               <Icon className="h-4 w-4 shrink-0" />
               {!collapsed && <span>{t(key, language)}</span>}
             </Link>
@@ -88,36 +95,51 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="p-3 border-t border-gray-100 flex flex-col gap-2">
+      {/* ── Footer ── */}
+      <div className="p-3 border-t border-white/[0.06] flex flex-col gap-0.5">
+        {/* Language toggle */}
         <button
           onClick={() => setLanguage(language === 'fr' ? 'en' : 'fr')}
+          title={collapsed ? (language === 'fr' ? 'EN' : 'FR') : undefined}
           className={cn(
-            'flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors',
-            collapsed && 'justify-center px-2'
+            'flex items-center gap-3 rounded-xl text-white/30 hover:bg-white/[0.06] hover:text-white/65 transition-all text-xs font-medium',
+            collapsed ? 'justify-center h-10 w-10 mx-auto' : 'px-3 py-2'
           )}
         >
           <Globe className="h-4 w-4 shrink-0" />
           {!collapsed && <span>{language === 'fr' ? 'EN' : 'FR'}</span>}
         </button>
 
+        {/* User profile */}
         {session?.user && (
-          <div className={cn('flex items-center gap-3', collapsed && 'flex-col gap-1')}>
-            {session.user.image && !collapsed && (
+          <div className={cn(
+            'flex items-center gap-2.5 rounded-xl transition-all',
+            collapsed ? 'flex-col gap-1.5 items-center py-2' : 'px-3 py-2'
+          )}>
+            {session.user.image ? (
               <img
                 src={session.user.image}
                 alt={session.user.name ?? ''}
-                className="h-7 w-7 rounded-full object-cover"
+                className="h-7 w-7 rounded-full object-cover ring-2 ring-white/10 shrink-0"
               />
-            )}
-            {!collapsed && (
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-gray-900 truncate">{session.user.name}</p>
+            ) : (
+              <div className="h-7 w-7 rounded-full bg-gradient-to-br from-indigo-400 to-violet-600 flex items-center justify-center shrink-0">
+                <span className="text-[11px] font-bold text-white">
+                  {session.user.name?.[0]?.toUpperCase() ?? '?'}
+                </span>
               </div>
             )}
+
+            {!collapsed && (
+              <p className="flex-1 min-w-0 text-xs font-medium text-white/55 truncate">
+                {session.user.name}
+              </p>
+            )}
+
             <button
               onClick={() => signOut({ callbackUrl: '/auth/signin' })}
-              className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors shrink-0"
               title={t('signOut', language)}
+              className="p-1.5 rounded-lg text-white/20 hover:text-red-400 hover:bg-red-500/10 transition-all shrink-0"
             >
               <LogOut className="h-3.5 w-3.5" />
             </button>
