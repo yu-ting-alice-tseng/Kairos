@@ -268,17 +268,46 @@ export default function TodayPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-3 gap-4 stagger">
             {[
-              { label: language === 'fr' ? 'À faire' : 'To do', value: prioritizedTasks.length, icon: AlarmCheck, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-              { label: language === 'fr' ? 'Terminées' : 'Completed', value: completedToday.length, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-              { label: language === 'fr' ? 'Habitudes' : 'Habits', value: todayHabits.length, icon: Flame, color: 'text-amber-600', bg: 'bg-amber-50' },
-            ].map(({ label, value, icon: Icon, color, bg }) => (
-              <div key={label} className={`rounded-2xl ${bg} p-4 flex items-center gap-3`}>
-                <Icon className={`h-5 w-5 ${color}`} />
+              {
+                label: language === 'fr' ? 'À faire' : 'To do',
+                value: prioritizedTasks.length,
+                icon: AlarmCheck,
+                gradient: 'from-indigo-500 to-violet-600',
+                shadow: 'shadow-indigo-500/20',
+                textColor: 'text-indigo-700',
+                bg: 'bg-gradient-to-br from-indigo-50 to-violet-50',
+                border: 'border-indigo-100',
+              },
+              {
+                label: language === 'fr' ? 'Terminées' : 'Completed',
+                value: completedToday.length,
+                icon: CheckCircle2,
+                gradient: 'from-emerald-400 to-teal-500',
+                shadow: 'shadow-emerald-500/20',
+                textColor: 'text-emerald-700',
+                bg: 'bg-gradient-to-br from-emerald-50 to-teal-50',
+                border: 'border-emerald-100',
+              },
+              {
+                label: language === 'fr' ? 'Habitudes' : 'Habits',
+                value: todayHabits.length,
+                icon: Flame,
+                gradient: 'from-amber-400 to-orange-500',
+                shadow: 'shadow-amber-500/20',
+                textColor: 'text-amber-700',
+                bg: 'bg-gradient-to-br from-amber-50 to-orange-50',
+                border: 'border-amber-100',
+              },
+            ].map(({ label, value, icon: Icon, gradient, shadow, textColor, bg, border }) => (
+              <div key={label} className={`card-lift rounded-2xl border ${border} ${bg} p-4 flex items-center gap-3.5`}>
+                <div className={`h-9 w-9 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md ${shadow} shrink-0`}>
+                  <Icon className="h-4.5 w-4.5 text-white h-[18px] w-[18px]" />
+                </div>
                 <div>
-                  <p className="text-2xl font-bold text-gray-900">{value}</p>
-                  <p className="text-xs text-gray-600">{label}</p>
+                  <p className="text-2xl font-bold text-[#0f0d1e] leading-none mb-0.5">{value}</p>
+                  <p className={`text-xs font-medium ${textColor}`}>{label}</p>
                 </div>
               </div>
             ))}
