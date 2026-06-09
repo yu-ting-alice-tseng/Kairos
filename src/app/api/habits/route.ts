@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { isDemoUser, getDemoHabits } from '@/lib/demo-data'
 import { z } from 'zod'
 
 const createHabitSchema = z.object({
@@ -17,6 +18,8 @@ const createHabitSchema = z.object({
 export async function GET() {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  if (isDemoUser(session.user.id)) return NextResponse.json(getDemoHabits())
 
   const habits = await prisma.habit.findMany({
     where: { userId: session.user.id, isActive: true },

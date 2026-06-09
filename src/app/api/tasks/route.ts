@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { calculatePriority } from '@/lib/utils'
+import { isDemoUser, getDemoTasks } from '@/lib/demo-data'
 import { z } from 'zod'
 
 const createTaskSchema = z.object({
@@ -22,6 +23,8 @@ const createTaskSchema = z.object({
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  if (isDemoUser(session.user.id)) return NextResponse.json(getDemoTasks())
 
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status')
@@ -60,6 +63,10 @@ export async function POST(req: NextRequest) {
 
   const data = parsed.data
   const priority = calculatePriority(data.importance, data.urgency)
+
+  if (isDemoUser(session.user.id)) {
+    return NextResponse.json({ id: `demo-t-${Date.now()}`, userId: session.user.id, ...data, priority, status: 'PENDING', aiSuggested: false, deadline: data.deadline ? new Date(data.deadline) : null, scheduledStart: null, scheduledEnd: null, completedAt: null, actualMinutes: null, isRecurring: false, parentTaskId: null, calendarEventId: null, calendarAccountId: null, createdAt: new Date(), updatedAt: new Date(), subTasks: [], calendarAccount: null }, { status: 201 })
+  }
 
   const task = await prisma.task.create({
     data: {
