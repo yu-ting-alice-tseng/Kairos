@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { addDays } from 'date-fns'
 
@@ -38,7 +38,7 @@ async function seedDemoData(userId: string) {
   })
 }
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   try {
     let user = await prisma.user.findUnique({ where: { id: DEMO_USER.id } })
     if (!user) {
@@ -54,19 +54,18 @@ export async function POST() {
       data: { sessionToken, userId: user.id, expires },
     })
 
+    // Match the cookie name Auth.js uses: __Secure- prefix on HTTPS, plain on HTTP
+    const proto = req.headers.get('x-forwarded-proto') ?? req.nextUrl.protocol.replace(':', '')
+    const isHttps = proto === 'https'
+    const cookieName = isHttps ? '__Secure-authjs.session-token' : 'authjs.session-token'
+
     const response = NextResponse.json({ ok: true })
-    response.cookies.set('authjs.session-token', sessionToken, {
+    response.cookies.set(cookieName, sessionToken, {
       expires,
       httpOnly: true,
       sameSite: 'lax',
       path: '/',
-    })
-    // Also set the non-secure version for local dev
-    response.cookies.set('next-auth.session-token', sessionToken, {
-      expires,
-      httpOnly: true,
-      sameSite: 'lax',
-      path: '/',
+      secure: isHttps,
     })
 
     return response
