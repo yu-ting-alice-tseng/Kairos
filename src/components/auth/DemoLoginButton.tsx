@@ -1,12 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 
 export function DemoLoginButton() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const router = useRouter()
 
   const handleDemo = async () => {
     setLoading(true)
@@ -14,8 +12,7 @@ export function DemoLoginButton() {
     try {
       const res = await fetch('/api/auth/demo', { method: 'POST' })
       if (!res.ok) throw new Error('Erreur')
-      router.push('/today')
-      router.refresh()
+      window.location.href = '/today'
     } catch {
       setError('Impossible de démarrer la démo. Réessayez.')
       setLoading(false)
