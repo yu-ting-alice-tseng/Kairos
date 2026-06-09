@@ -228,7 +228,7 @@ export default function TodayPage() {
       </div>
 
       <div className="flex-1 flex min-h-0 overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
+        <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 animate-fade-in">
           {AI_ENABLED && recap && (
             <div className="relative rounded-2xl bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 p-5">
               <button onClick={() => setRecap(null)} className="absolute right-3 top-3 p-1 rounded-lg hover:bg-white/50 text-gray-400">
