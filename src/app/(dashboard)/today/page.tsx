@@ -190,27 +190,32 @@ export default function TodayPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 bg-white sticky top-0 z-10">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#ebe8f8] bg-white/80 backdrop-blur-sm sticky top-0 z-10">
         <div>
           <div className="flex items-center gap-2">
-            <Sun className="h-5 w-5 text-amber-500" />
-            <h1 className="text-xl font-bold text-gray-900">{t('today', language)}</h1>
+            <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-sm shadow-amber-500/30">
+              <Sun className="h-3.5 w-3.5 text-white" />
+            </div>
+            <h1 className="text-xl font-bold text-[#0f0d1e] tracking-tight">{t('today', language)}</h1>
           </div>
-          <p className="text-sm text-gray-500 mt-0.5 capitalize">{today}</p>
+          <p className="text-[13px] text-[#9896a8] mt-0.5 capitalize pl-9">{today}</p>
         </div>
         <div className="flex items-center gap-2">
           {AI_ENABLED && (
-            <Button variant="outline" size="sm" onClick={handleGenerateRecap} disabled={recapLoading}>
+            <Button variant="outline" size="sm" onClick={handleGenerateRecap} disabled={recapLoading}
+              className="border-[#ebe8f8] text-[#4a4866] hover:bg-[#f7f6ff] hover:border-indigo-200 transition-all">
               {recapLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               {t('morningRecap', language)}
             </Button>
           )}
           {AI_ENABLED && (
-            <Button variant="ghost" size="icon" onClick={() => setShowChat(!showChat)}>
+            <Button variant="ghost" size="icon" onClick={() => setShowChat(!showChat)}
+              className="text-[#9896a8] hover:text-indigo-600 hover:bg-[#f7f6ff]">
               <MessageSquare className="h-4 w-4" />
             </Button>
           )}
-          <Button size="sm" onClick={() => setShowTaskForm(true)}>
+          <Button size="sm" onClick={() => setShowTaskForm(true)}
+            className="bg-gradient-to-br from-indigo-500 to-violet-600 hover:from-indigo-400 hover:to-violet-500 text-white border-0 shadow-md shadow-indigo-500/25 transition-all hover:scale-[1.02] active:scale-[0.98]">
             <Plus className="h-4 w-4" />
             {t('addTask', language)}
           </Button>
