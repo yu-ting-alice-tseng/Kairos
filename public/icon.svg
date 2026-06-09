@@ -1,10 +1,40 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" rx="8" fill="url(#g)"/>
-  <path d="M16 8L10 16h4.5v8l6-8H12l4-8z" fill="white"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#6366F1"/>
-      <stop offset="1" stop-color="#7C3AED"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="45%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#6d28d9"/>
     </linearGradient>
+    <radialGradient id="glow" cx="38%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#a78bfa" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="bolt-glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
   </defs>
+
+  <!-- Background rounded square -->
+  <rect width="64" height="64" rx="16" fill="url(#bg)"/>
+
+  <!-- Inner radial glow for depth -->
+  <rect width="64" height="64" rx="16" fill="url(#glow)"/>
+
+  <!-- Top edge highlight (glass feel) -->
+  <rect x="14" y="1.5" width="36" height="1.5" rx="0.75" fill="rgba(255,255,255,0.22)"/>
+
+  <!-- Lightning bolt — centered, bold, clean -->
+  <path
+    d="M36 9 L21 32 H30.5 L28 55 L45 32 H35 Z"
+    fill="white"
+    opacity="0.96"
+    filter="url(#bolt-glow)"
+  />
+
+  <!-- Sparkle dots -->
+  <circle cx="12" cy="17" r="2.2" fill="rgba(255,255,255,0.28)"/>
+  <circle cx="52" cy="47" r="1.8" fill="rgba(255,255,255,0.18)"/>
+  <circle cx="51" cy="14" r="1.4" fill="rgba(255,255,255,0.22)"/>
+  <circle cx="14" cy="50" r="1.2" fill="rgba(255,255,255,0.16)"/>
 </svg>
