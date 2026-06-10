@@ -33,6 +33,11 @@ const adapter = {
   },
 }
 
+const PROVIDER_MAP: Record<string, { provider: string; name: string; color: string }> = {
+  'google': { provider: 'GOOGLE', name: 'Google Calendar', color: '#4285F4' },
+  'microsoft-entra-id': { provider: 'OUTLOOK', name: 'Outlook Calendar', color: '#0078D4' },
+}
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
   // Fallback secret so the app works on Vercel even if AUTH_SECRET env var isn't set yet
@@ -66,6 +71,48 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     error: '/auth/error',
   },
   callbacks: {
+    // Fires on EVERY successful sign-in — ensures tokens are always fresh in CalendarAccount
+    async signIn({ user, account }) {
+      const userId = (user as { id?: string }).id
+      if (!userId || !account) return true
+
+      const config = PROVIDER_MAP[account.provider]
+      if (!config) return true
+
+      try {
+        const existing = await prisma.calendarAccount.findFirst({
+          where: { userId, provider: config.provider, isActive: true },
+        })
+        if (!existing) {
+          await prisma.calendarAccount.create({
+            data: {
+              userId,
+              provider: config.provider,
+              name: config.name,
+              color: config.color,
+              accessToken: account.access_token ?? null,
+              refreshToken: account.refresh_token ?? null,
+              expiresAt: account.expires_at ? new Date(account.expires_at * 1000) : null,
+            },
+          })
+        } else {
+          // Always refresh access token; preserve existing refresh token if provider didn't return a new one
+          await prisma.calendarAccount.update({
+            where: { id: existing.id },
+            data: {
+              accessToken: account.access_token ?? null,
+              ...(account.refresh_token ? { refreshToken: account.refresh_token } : {}),
+              ...(account.expires_at ? { expiresAt: new Date(account.expires_at * 1000) } : {}),
+            },
+          })
+        }
+      } catch (err) {
+        console.error('[auth] Failed to store CalendarAccount tokens:', err)
+        // Never block sign-in due to CalendarAccount errors
+      }
+
+      return true
+    },
     session({ session, user }) {
       if (session.user && user?.id) {
         session.user.id = user.id

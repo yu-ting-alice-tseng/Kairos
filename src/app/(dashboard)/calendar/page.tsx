@@ -2,18 +2,17 @@
 
 import React, { useEffect, useState, useCallback } from 'react'
 import { useAppStore } from '@/stores/useAppStore'
-import { Task } from '@/types'
+import { Task, CalendarEvent } from '@/types'
 import { t } from '@/lib/i18n'
 import { TaskForm } from '@/components/tasks/TaskForm'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { cn, formatTime, getQuadrant, EISENHOWER_QUADRANTS } from '@/lib/utils'
 import {
   ChevronLeft, ChevronRight, Calendar, Plus, Clock, Loader2,
 } from 'lucide-react'
 import {
   format, startOfWeek, endOfWeek, addDays, isSameDay, addWeeks, subWeeks,
-  isToday, startOfDay, getHours, getMinutes,
+  isToday, getHours,
 } from 'date-fns'
 import { fr, enUS } from 'date-fns/locale'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
@@ -28,10 +27,12 @@ export default function CalendarPage() {
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [loading, setLoading] = useState(true)
-  const [confirmChange, setConfirmChange] = useState<{ task: Task; newStart: Date; newEnd: Date } | null>(null)
+  const [externalEvents, setExternalEvents] = useState<CalendarEvent[]>([])
+  const [eventsLoading, setEventsLoading] = useState(false)
 
   const locale = language === 'fr' ? fr : enUS
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 })
+  const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 })
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
 
   const loadTasks = useCallback(async () => {
@@ -41,14 +42,37 @@ export default function CalendarPage() {
     setLoading(false)
   }, [setTasks])
 
-  useEffect(() => { loadTasks() }, [loadTasks])
+  const loadExternalEvents = useCallback(async () => {
+    if (calendarAccounts.length === 0) return
+    setEventsLoading(true)
+    try {
+      const res = await fetch(
+        `/api/calendar/events?start=${weekStart.toISOString()}&end=${weekEnd.toISOString()}`
+      )
+      if (res.ok) setExternalEvents(await res.json())
+    } catch {
+      // External events are best-effort
+    }
+    setEventsLoading(false)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendarAccounts.length, weekStart.toISOString(), weekEnd.toISOString()])
 
-  const scheduledTasks = tasks.filter((t) => t.scheduledStart && t.scheduledEnd)
+  useEffect(() => { loadTasks() }, [loadTasks])
+  useEffect(() => { loadExternalEvents() }, [loadExternalEvents])
+
+  const scheduledTasks = tasks.filter((task) => task.scheduledStart && task.scheduledEnd)
 
   const getTasksForDayHour = (day: Date, hour: number) =>
     scheduledTasks.filter((task) => {
       if (!task.scheduledStart) return false
       const start = new Date(task.scheduledStart)
+      return isSameDay(start, day) && getHours(start) === hour
+    })
+
+  const getEventsForDayHour = (day: Date, hour: number) =>
+    externalEvents.filter((ev) => {
+      if (!ev.start || ev.allDay) return false
+      const start = new Date(ev.start)
       return isSameDay(start, day) && getHours(start) === hour
     })
 
@@ -68,7 +92,7 @@ export default function CalendarPage() {
       })
       if (res.ok) {
         const updated = await res.json()
-        setTasks(tasks.map((t) => t.id === editingTask.id ? updated : t))
+        setTasks(tasks.map((task) => task.id === editingTask.id ? updated : task))
         toast({ title: language === 'fr' ? 'Événement modifié' : 'Event updated', variant: 'success' })
       }
     } else {
@@ -120,7 +144,7 @@ export default function CalendarPage() {
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <span className="text-sm font-medium text-gray-700 px-2 min-w-[160px] text-center">
-              {format(weekStart, 'dd MMM', { locale })} – {format(endOfWeek(currentWeek, { weekStartsOn: 1 }), 'dd MMM yyyy', { locale })}
+              {format(weekStart, 'dd MMM', { locale })} – {format(weekEnd, 'dd MMM yyyy', { locale })}
             </span>
             <Button variant="ghost" size="icon-sm" onClick={() => setCurrentWeek(addWeeks(currentWeek, 1))}>
               <ChevronRight className="h-4 w-4" />
@@ -130,10 +154,25 @@ export default function CalendarPage() {
             </Button>
           </div>
         </div>
-        <Button size="sm" onClick={() => { setSelectedDate(new Date()); setShowTaskForm(true) }}>
-          <Plus className="h-4 w-4" />
-          {t('addTask', language)}
-        </Button>
+        <div className="flex items-center gap-3">
+          {eventsLoading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+          {calendarAccounts.length > 0 && (
+            <div className="flex items-center gap-1.5" title={language === 'fr' ? 'Calendriers connectés' : 'Connected calendars'}>
+              {calendarAccounts.map((acc) => (
+                <div
+                  key={acc.id}
+                  className="h-2.5 w-2.5 rounded-full ring-1 ring-white"
+                  style={{ backgroundColor: acc.color }}
+                  title={acc.name}
+                />
+              ))}
+            </div>
+          )}
+          <Button size="sm" onClick={() => { setSelectedDate(new Date()); setShowTaskForm(true) }}>
+            <Plus className="h-4 w-4" />
+            {t('addTask', language)}
+          </Button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-auto">
@@ -164,6 +203,8 @@ export default function CalendarPage() {
                 </div>
                 {weekDays.map((day) => {
                   const cellTasks = getTasksForDayHour(day, hour)
+                  const cellEvents = getEventsForDayHour(day, hour)
+                  const isEmpty = cellTasks.length === 0 && cellEvents.length === 0
                   return (
                     <div
                       key={day.toISOString()}
@@ -171,8 +212,33 @@ export default function CalendarPage() {
                         'border-r border-gray-100 px-1 py-0.5 cursor-pointer hover:bg-gray-50 transition-colors min-h-[56px]',
                         isToday(day) && 'bg-indigo-50/30'
                       )}
-                      onClick={() => cellTasks.length === 0 && handleCellClick(day, hour)}
+                      onClick={() => isEmpty && handleCellClick(day, hour)}
                     >
+                      {/* External calendar events — dashed border to distinguish from tasks */}
+                      {cellEvents.map((ev) => {
+                        const evColor = ev.color ?? calendarAccounts.find((a) => a.id === ev.calendarAccountId)?.color ?? '#6366F1'
+                        return (
+                          <div
+                            key={ev.id}
+                            className="rounded-lg px-2 py-1 text-xs mb-0.5 border border-dashed select-none"
+                            style={{
+                              backgroundColor: evColor + '1a',
+                              borderColor: evColor,
+                              color: evColor,
+                            }}
+                          >
+                            <p className="font-medium truncate">{ev.title}</p>
+                            {ev.start && ev.end && (
+                              <p className="opacity-70 flex items-center gap-1">
+                                <Clock className="h-2.5 w-2.5" />
+                                {formatTime(ev.start)} – {formatTime(ev.end)}
+                              </p>
+                            )}
+                          </div>
+                        )
+                      })}
+
+                      {/* FlowPlan tasks */}
                       {cellTasks.map((task) => {
                         const qId = getQuadrant(task.importance, task.urgency)
                         const q = EISENHOWER_QUADRANTS.find((q) => q.id === qId)

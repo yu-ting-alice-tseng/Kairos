@@ -2,12 +2,58 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
+const OAUTH_PROVIDER_MAP: Record<string, { provider: string; name: string; color: string }> = {
+  'google': { provider: 'GOOGLE', name: 'Google Calendar', color: '#4285F4' },
+  'microsoft-entra-id': { provider: 'OUTLOOK', name: 'Outlook Calendar', color: '#0078D4' },
+}
+
 export async function GET() {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const userId = session.user.id
+
+  // Auto-create CalendarAccounts from NextAuth OAuth accounts so the user
+  // always sees their calendar(s) connected without a separate "Connect" step.
+  try {
+    const oauthAccounts = await prisma.account.findMany({
+      where: { userId, provider: { in: ['google', 'microsoft-entra-id'] } },
+    })
+    for (const oauth of oauthAccounts) {
+      const config = OAUTH_PROVIDER_MAP[oauth.provider]
+      if (!config || !oauth.access_token) continue
+      const existing = await prisma.calendarAccount.findFirst({
+        where: { userId, provider: config.provider, isActive: true },
+      })
+      if (!existing) {
+        await prisma.calendarAccount.create({
+          data: {
+            userId,
+            provider: config.provider,
+            name: config.name,
+            color: config.color,
+            accessToken: oauth.access_token,
+            refreshToken: oauth.refresh_token ?? null,
+            expiresAt: oauth.expires_at ? new Date(oauth.expires_at * 1000) : null,
+          },
+        })
+      } else if (!existing.accessToken && oauth.access_token) {
+        // Backfill missing token
+        await prisma.calendarAccount.update({
+          where: { id: existing.id },
+          data: {
+            accessToken: oauth.access_token,
+            ...(oauth.refresh_token ? { refreshToken: oauth.refresh_token } : {}),
+            ...(oauth.expires_at ? { expiresAt: new Date(oauth.expires_at * 1000) } : {}),
+          },
+        })
+      }
+    }
+  } catch (err) {
+    console.error('[accounts] Auto-populate from OAuth accounts failed:', err)
+  }
 
   const accounts = await prisma.calendarAccount.findMany({
-    where: { userId: session.user.id, isActive: true },
+    where: { userId, isActive: true },
     orderBy: { createdAt: 'asc' },
   })
 
@@ -33,6 +79,18 @@ export async function POST(req: NextRequest) {
   })
 
   return NextResponse.json(account, { status: 201 })
+}
+
+export async function PATCH(req: NextRequest) {
+  const session = await auth()
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id, name, color } = await req.json()
+  const account = await prisma.calendarAccount.update({
+    where: { id, userId: session.user.id },
+    data: { ...(name ? { name } : {}), ...(color ? { color } : {}) },
+  })
+  return NextResponse.json(account)
 }
 
 export async function DELETE(req: NextRequest) {

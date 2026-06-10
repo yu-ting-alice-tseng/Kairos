@@ -36,6 +36,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`)
   }
 
+  if (provider === 'microsoft') {
+    const params = new URLSearchParams({
+      client_id: process.env.MICROSOFT_CLIENT_ID ?? '',
+      redirect_uri: `${base}/api/calendar/callback/microsoft`,
+      response_type: 'code',
+      scope: 'Calendars.ReadWrite offline_access',
+      state: nonce,
+      response_mode: 'query',
+    })
+    return NextResponse.redirect(`https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params}`)
+  }
+
   if (provider === 'notion') {
     const params = new URLSearchParams({
       client_id: process.env.NOTION_CLIENT_ID ?? '',

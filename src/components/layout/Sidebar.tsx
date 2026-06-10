@@ -3,7 +3,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { signOut, useSession } from 'next-auth/react'
+import { useSession } from 'next-auth/react'
 import { useAppStore } from '@/stores/useAppStore'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
@@ -136,13 +136,13 @@ export function Sidebar() {
               </p>
             )}
 
-            <button
-              onClick={() => signOut({ callbackUrl: '/auth/signin' })}
+            <Link
+              href="/auth/signout"
               title={t('signOut', language)}
-              className="p-1.5 rounded-lg text-white/20 hover:text-red-400 hover:bg-red-500/10 transition-all shrink-0"
+              className="p-1.5 rounded-lg text-white/40 hover:text-red-400 hover:bg-red-500/10 transition-all shrink-0 flex items-center justify-center"
             >
               <LogOut className="h-3.5 w-3.5" />
-            </button>
+            </Link>
           </div>
         )}
       </div>

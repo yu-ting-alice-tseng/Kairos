@@ -9,20 +9,22 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
-import { useSession } from 'next-auth/react'
+import { signIn, useSession } from 'next-auth/react'
+import { prepareCalendarConnect } from '@/lib/actions'
 import { DEMO_USER_ID } from '@/lib/demo-data'
 import {
   Settings, Plus, Trash2, Globe, Calendar, Check,
   MonitorSmartphone, Loader2, AlertTriangle, ChevronDown, ChevronUp, RefreshCw,
-  Pencil, KeyRound,
+  Pencil, KeyRound, LogOut,
 } from 'lucide-react'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
 import { cn } from '@/lib/utils'
-import { useSearchParams } from 'next/navigation'
 
-const PROVIDER_CONFIG: Record<CalendarProvider, { label: string; icon: string; color: string; connectProvider?: string }> = {
-  GOOGLE: { label: 'Google Calendar', icon: '🔵', color: '#4285F4', connectProvider: 'google' },
-  OUTLOOK: { label: 'Outlook Calendar', icon: '🟦', color: '#0078D4' },
+// oauthKey  → OAuth via NextAuth signIn() + session-restore so the current session is preserved
+// connectProvider → dedicated /api/calendar/connect flow (Notion only)
+const PROVIDER_CONFIG: Record<CalendarProvider, { label: string; icon: string; color: string; oauthKey?: string; connectProvider?: string }> = {
+  GOOGLE: { label: 'Google Calendar', icon: '🔵', color: '#4285F4', oauthKey: 'google' },
+  OUTLOOK: { label: 'Outlook Calendar', icon: '🟦', color: '#0078D4', oauthKey: 'microsoft-entra-id' },
   APPLE: { label: 'Apple Calendar', icon: '⚫', color: '#1C1C1E' },
   NOTION: { label: 'Notion', icon: '⬜', color: '#000000', connectProvider: 'notion' },
   LOCAL: { label: 'Local', icon: '📅', color: '#6366F1' },
@@ -208,7 +210,20 @@ function CalendarAccountRow({
   const [expanded, setExpanded] = useState(false)
   const config = PROVIDER_CONFIG[account.provider as CalendarProvider]
   const supportsSubCalendars = account.provider === 'GOOGLE' || account.provider === 'OUTLOOK' || account.provider === 'NOTION'
-  const canReauthorize = !!config?.connectProvider
+  const canReauthorize = !!(config?.oauthKey || config?.connectProvider)
+
+  const handleReauthorize = async () => {
+    if (config?.oauthKey) {
+      await prepareCalendarConnect()
+      await signIn(
+        config.oauthKey,
+        { callbackUrl: `/api/calendar/finalize-connect?provider=${config.oauthKey}` },
+        { prompt: 'consent' },
+      )
+    } else if (config?.connectProvider) {
+      window.location.href = `/api/calendar/connect?provider=${config.connectProvider}&accountId=${account.id}`
+    }
+  }
 
   return (
     <div className="rounded-2xl border border-gray-100 bg-white overflow-hidden">
@@ -250,13 +265,13 @@ function CalendarAccountRow({
           </button>
 
           {canReauthorize && (
-            <a
-              href={`/api/calendar/connect?provider=${config.connectProvider}&accountId=${account.id}`}
+            <button
+              onClick={handleReauthorize}
               className="p-1.5 rounded-lg hover:bg-amber-50 text-gray-400 hover:text-amber-600 transition-colors"
               title={lang === 'fr' ? 'Ré-autoriser' : 'Re-authorize'}
             >
               <KeyRound className="h-3.5 w-3.5" />
-            </a>
+            </button>
           )}
 
           <button
@@ -296,8 +311,18 @@ function AddCalendarDialog({ open, onClose, onAdd, lang, isDemo }: {
 
   const handleAdd = async () => {
     if (isDemo) { onClose(); return }
+    if (config.oauthKey) {
+      // Save the current session token so finalize-connect can restore it after OAuth
+      await prepareCalendarConnect()
+      // 'select_account' forces the account picker so the user can choose a different account
+      await signIn(
+        config.oauthKey,
+        { callbackUrl: `/api/calendar/finalize-connect?provider=${config.oauthKey}` },
+        { prompt: 'select_account' },
+      )
+      return
+    }
     if (config.connectProvider) {
-      // Dedicated calendar-only OAuth — does NOT touch the auth session
       window.location.href = `/api/calendar/connect?provider=${config.connectProvider}`
       return
     }
@@ -336,7 +361,8 @@ function AddCalendarDialog({ open, onClose, onAdd, lang, isDemo }: {
             </div>
           </div>
 
-          {!config.connectProvider && (
+          {/* Name/color only needed for manual providers (APPLE, LOCAL) */}
+          {!config.connectProvider && !config.oauthKey && (
             <>
               <div className="flex flex-col gap-1.5">
                 <Label>{lang === 'fr' ? 'Nom affiché' : 'Display name'}</Label>
@@ -361,19 +387,19 @@ function AddCalendarDialog({ open, onClose, onAdd, lang, isDemo }: {
             </div>
           )}
 
-          {!isDemo && config.connectProvider && (
+          {!isDemo && (config.oauthKey || config.connectProvider) && (
             <div className="rounded-xl bg-blue-50 border border-blue-100 p-3 text-sm text-blue-700">
               {lang === 'fr'
-                ? `Vous serez redirigé vers ${config.label} pour autoriser l'accès au calendrier. Votre session restera active.`
-                : `You'll be redirected to ${config.label} to authorize calendar access. Your current session will stay active.`}
+                ? `Vous serez redirigé vers ${config.label} pour autoriser l'accès. Votre session restera active.`
+                : `You'll be redirected to ${config.label} to authorize access. Your current session will stay active.`}
             </div>
           )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t('cancel', lang)}</Button>
-          <Button onClick={handleAdd} disabled={saving || (!config.connectProvider && !name.trim())}>
+          <Button onClick={handleAdd} disabled={saving || (!config.connectProvider && !config.oauthKey && !name.trim())}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            {config.connectProvider ? (lang === 'fr' ? 'Connecter' : 'Connect') : t('save', lang)}
+            {(config.connectProvider || config.oauthKey) ? (lang === 'fr' ? 'Connecter' : 'Connect') : t('save', lang)}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -388,28 +414,35 @@ export default function SettingsPage() {
   const { data: session } = useSession()
   const isDemo = session?.user?.id === DEMO_USER_ID
   const { toast } = useGlobalToast()
-  const searchParams = useSearchParams()
-
   const [loading, setLoading] = useState(true)
   const [showAddCalendar, setShowAddCalendar] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [editAccount, setEditAccount] = useState<CalendarAccount | null>(null)
 
-  // Surface OAuth result toasts
+  // Surface OAuth result toasts — use window.location.search to avoid Suspense requirement
   useEffect(() => {
-    const success = searchParams.get('cal_success')
-    const error = searchParams.get('cal_error')
-    if (success === 'connected') toast({ title: language === 'fr' ? 'Calendrier connecté !' : 'Calendar connected!', variant: 'success' })
+    const params = new URLSearchParams(window.location.search)
+    const success = params.get('cal_success')
+    const error = params.get('cal_error')
+    if (success === 'connected') {
+      toast({ title: language === 'fr' ? 'Calendrier connecté !' : 'Calendar connected!', variant: 'success' })
+      loadAccounts()
+    }
     if (success === 'reauthorized') toast({ title: language === 'fr' ? 'Calendrier ré-autorisé !' : 'Calendar re-authorized!', variant: 'success' })
     if (error === 'access_denied') toast({ title: language === 'fr' ? 'Accès refusé.' : 'Access denied.', variant: 'error' })
-    if (error) toast({ title: `OAuth error: ${error}`, variant: 'error' })
+    else if (error) toast({ title: `OAuth error: ${error}`, variant: 'error' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const loadAccounts = useCallback(async () => {
     setLoading(true)
-    const res = await fetch('/api/calendar/accounts')
-    setCalendarAccounts(await res.json())
+    try {
+      const res = await fetch('/api/calendar/accounts')
+      const data = await res.json()
+      setCalendarAccounts(Array.isArray(data) ? data : [])
+    } catch {
+      setCalendarAccounts([])
+    }
     setLoading(false)
   }, [setCalendarAccounts])
 
@@ -541,6 +574,22 @@ export default function SettingsPage() {
             </div>
           </div>
         </section>
+
+        {/* Sign out */}
+        <section>
+          <h2 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+            <LogOut className="h-4 w-4 text-red-400" />
+            {language === 'fr' ? 'Session' : 'Session'}
+          </h2>
+          <a
+            href="/auth/signout"
+            className="inline-flex items-center gap-2 rounded-xl border border-red-100 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors"
+          >
+            <LogOut className="h-4 w-4" />
+            {language === 'fr' ? 'Se déconnecter' : 'Sign out'}
+          </a>
+        </section>
+
       </div>
 
       {/* Delete confirmation dialog */}

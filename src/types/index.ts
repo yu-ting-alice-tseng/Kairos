@@ -72,6 +72,18 @@ export interface CalendarAccount {
   isActive: boolean
   createdAt: Date | string
   updatedAt: Date | string
+  subCalendars?: SubCalendar[]
+}
+
+export interface SubCalendar {
+  id: string
+  calendarAccountId: string
+  externalId: string
+  name: string
+  color: string
+  isActive: boolean
+  createdAt: Date | string
+  updatedAt: Date | string
 }
 
 export interface DailyRecap {
