@@ -9,23 +9,276 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
-import { signIn, useSession } from 'next-auth/react'
+import { useSession } from 'next-auth/react'
 import { DEMO_USER_ID } from '@/lib/demo-data'
 import {
   Settings, Plus, Trash2, Globe, Calendar, Check,
-  MonitorSmartphone, Loader2, AlertTriangle,
+  MonitorSmartphone, Loader2, AlertTriangle, ChevronDown, ChevronUp, RefreshCw,
+  Pencil, KeyRound,
 } from 'lucide-react'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
+import { cn } from '@/lib/utils'
+import { useSearchParams } from 'next/navigation'
 
-const PROVIDER_CONFIG: Record<CalendarProvider, { label: string; icon: string; color: string; oauthKey?: string }> = {
-  GOOGLE: { label: 'Google Calendar', icon: '🔵', color: '#4285F4', oauthKey: 'google' },
-  OUTLOOK: { label: 'Outlook Calendar', icon: '🟦', color: '#0078D4', oauthKey: 'microsoft-entra-id' },
+const PROVIDER_CONFIG: Record<CalendarProvider, { label: string; icon: string; color: string; connectProvider?: string }> = {
+  GOOGLE: { label: 'Google Calendar', icon: '🔵', color: '#4285F4', connectProvider: 'google' },
+  OUTLOOK: { label: 'Outlook Calendar', icon: '🟦', color: '#0078D4' },
   APPLE: { label: 'Apple Calendar', icon: '⚫', color: '#1C1C1E' },
-  NOTION: { label: 'Notion', icon: '⬜', color: '#000000' },
+  NOTION: { label: 'Notion', icon: '⬜', color: '#000000', connectProvider: 'notion' },
   LOCAL: { label: 'Local', icon: '📅', color: '#6366F1' },
 }
 
-const COLORS = ['#4F46E5', '#7C3AED', '#DC2626', '#16A34A', '#D97706', '#0891B2', '#DB2777', '#059669']
+const COLORS = ['#4285F4', '#4F46E5', '#7C3AED', '#DC2626', '#16A34A', '#D97706', '#0891B2', '#DB2777']
+
+interface ProviderSubCalendar {
+  externalId: string
+  name: string
+  color: string
+  isActive: boolean
+  subCalendarId: string | null
+}
+
+// ── Sub-calendar panel ────────────────────────────────────────────────────────
+
+function SubCalendarPanel({ account, lang }: { account: CalendarAccount; lang: 'fr' | 'en'; }) {
+  const isNotion = account.provider === 'NOTION'
+  const [calendars, setCalendars] = useState<ProviderSubCalendar[]>([])
+  const [loading, setLoading] = useState(false)
+  const [toggling, setToggling] = useState<string | null>(null)
+  const { toast } = useGlobalToast()
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const res = await fetch(`/api/calendar/accounts/${account.id}/calendars`)
+    if (res.ok) {
+      setCalendars(await res.json())
+    } else {
+      const err = await res.json()
+      if (err.code === 'NO_TOKEN') {
+        toast({ title: lang === 'fr' ? 'Ré-autorisez ce calendrier pour voir les sous-calendriers.' : 'Re-authorize this calendar to view sub-calendars.', variant: 'error' })
+      } else {
+        toast({ title: err.error ?? 'Failed to load calendars', variant: 'error' })
+      }
+    }
+    setLoading(false)
+  }, [account.id, lang, toast])
+
+  useEffect(() => { load() }, [load])
+
+  const toggle = async (cal: ProviderSubCalendar) => {
+    setToggling(cal.externalId)
+    const res = await fetch(`/api/calendar/accounts/${account.id}/calendars`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ externalId: cal.externalId, name: cal.name, color: cal.color, isActive: !cal.isActive }),
+    })
+    if (res.ok) {
+      setCalendars((prev) => prev.map((c) => c.externalId === cal.externalId ? { ...c, isActive: !c.isActive } : c))
+    }
+    setToggling(null)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 py-3 px-4 text-sm text-gray-400">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        {lang === 'fr' ? 'Chargement…' : 'Loading…'}
+      </div>
+    )
+  }
+
+  if (calendars.length === 0) {
+    return (
+      <p className="py-3 px-4 text-xs text-gray-400">
+        {lang === 'fr' ? 'Aucun calendrier trouvé.' : 'No calendars found.'}
+      </p>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-1 py-2 px-4">
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+          {isNotion
+            ? (lang === 'fr' ? 'Bases de données' : 'Databases')
+            : (lang === 'fr' ? 'Sous-calendriers' : 'Sub-calendars')}
+        </p>
+        <button onClick={load} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+          <RefreshCw className="h-3 w-3" />
+        </button>
+      </div>
+      {calendars.map((cal) => (
+        <div key={cal.externalId} className="flex items-center gap-3 py-2 px-2 rounded-xl hover:bg-gray-50 transition-colors">
+          <div className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: cal.color }} />
+          <span className="text-sm text-gray-700 flex-1 truncate">{cal.name}</span>
+          {toggling === cal.externalId ? (
+            <Loader2 className="h-4 w-4 animate-spin text-gray-400 flex-shrink-0" />
+          ) : (
+            <button
+              onClick={() => toggle(cal)}
+              className={cn(
+                'relative w-9 h-5 rounded-full transition-colors flex-shrink-0',
+                cal.isActive ? 'bg-indigo-500' : 'bg-gray-200'
+              )}
+              aria-label={cal.isActive ? 'Disable' : 'Enable'}
+            >
+              <span className={cn(
+                'absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform',
+                cal.isActive && 'translate-x-4'
+              )} />
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Edit account dialog ───────────────────────────────────────────────────────
+
+function EditAccountDialog({
+  account, open, onClose, onSave, lang,
+}: {
+  account: CalendarAccount
+  open: boolean
+  onClose: () => void
+  onSave: (id: string, name: string, color: string) => Promise<void>
+  lang: 'fr' | 'en'
+}) {
+  const [name, setName] = useState(account.name)
+  const [color, setColor] = useState(account.color)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => { setName(account.name); setColor(account.color) }, [account])
+
+  const handleSave = async () => {
+    setSaving(true)
+    await onSave(account.id, name, color)
+    setSaving(false)
+    onClose()
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{lang === 'fr' ? 'Modifier le calendrier' : 'Edit calendar'}</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label>{lang === 'fr' ? 'Nom affiché' : 'Display name'}</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>{lang === 'fr' ? 'Couleur' : 'Color'}</Label>
+            <div className="flex gap-2 flex-wrap">
+              {COLORS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setColor(c)}
+                  className={`h-6 w-6 rounded-full border-2 transition-all ${color === c ? 'border-gray-900 scale-110' : 'border-transparent'}`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>{t('cancel', lang)}</Button>
+          <Button onClick={handleSave} disabled={saving || !name.trim()}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+            {t('save', lang)}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ── CalendarAccount row ───────────────────────────────────────────────────────
+
+function CalendarAccountRow({
+  account, lang, onDelete, onEdit,
+}: {
+  account: CalendarAccount
+  lang: 'fr' | 'en'
+  onDelete: () => void
+  onEdit: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const config = PROVIDER_CONFIG[account.provider as CalendarProvider]
+  const supportsSubCalendars = account.provider === 'GOOGLE' || account.provider === 'OUTLOOK' || account.provider === 'NOTION'
+  const canReauthorize = !!config?.connectProvider
+
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-white overflow-hidden">
+      <div className="flex items-center justify-between p-4">
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-xl flex items-center justify-center text-lg" style={{ backgroundColor: (config?.color ?? '#6366F1') + '15' }}>
+            {config?.icon ?? '📅'}
+          </div>
+          <div>
+            <p className="text-sm font-medium text-gray-900">{account.name}</p>
+            <p className="text-xs text-gray-500">{config?.label ?? account.provider}</p>
+          </div>
+          <div className="h-3 w-3 rounded-full border border-white shadow" style={{ backgroundColor: account.color }} />
+        </div>
+
+        <div className="flex items-center gap-1">
+          <Badge variant="success" className="text-xs mr-1">
+            {lang === 'fr' ? 'Connecté' : 'Connected'}
+          </Badge>
+
+          {supportsSubCalendars && (
+            <button
+              onClick={() => setExpanded((e) => !e)}
+              className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded-lg hover:bg-indigo-50 transition-colors"
+            >
+              {account.provider === 'NOTION'
+                ? (lang === 'fr' ? 'Bases' : 'Databases')
+                : (lang === 'fr' ? 'Calendriers' : 'Calendars')}
+              {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            </button>
+          )}
+
+          <button
+            onClick={onEdit}
+            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
+            title={lang === 'fr' ? 'Modifier' : 'Edit'}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+
+          {canReauthorize && (
+            <a
+              href={`/api/calendar/connect?provider=${config.connectProvider}&accountId=${account.id}`}
+              className="p-1.5 rounded-lg hover:bg-amber-50 text-gray-400 hover:text-amber-600 transition-colors"
+              title={lang === 'fr' ? 'Ré-autoriser' : 'Re-authorize'}
+            >
+              <KeyRound className="h-3.5 w-3.5" />
+            </a>
+          )}
+
+          <button
+            onClick={onDelete}
+            className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+            title={lang === 'fr' ? 'Supprimer' : 'Remove'}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {expanded && supportsSubCalendars && (
+        <div className="border-t border-gray-50">
+          <SubCalendarPanel account={account} lang={lang} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Add calendar dialog ───────────────────────────────────────────────────────
 
 function AddCalendarDialog({ open, onClose, onAdd, lang, isDemo }: {
   open: boolean
@@ -39,18 +292,17 @@ function AddCalendarDialog({ open, onClose, onAdd, lang, isDemo }: {
   const [color, setColor] = useState('#4F46E5')
   const [saving, setSaving] = useState(false)
 
+  const config = PROVIDER_CONFIG[provider]
+
   const handleAdd = async () => {
-    const config = PROVIDER_CONFIG[provider]
-    if (!config.oauthKey && !name.trim()) return
-    if (isDemo) {
-      onClose()
+    if (isDemo) { onClose(); return }
+    if (config.connectProvider) {
+      // Dedicated calendar-only OAuth — does NOT touch the auth session
+      window.location.href = `/api/calendar/connect?provider=${config.connectProvider}`
       return
     }
+    if (!name.trim()) return
     setSaving(true)
-    if (config.oauthKey) {
-      await signIn(config.oauthKey, { callbackUrl: '/settings' })
-      return
-    }
     await onAdd({ provider, name, color })
     setSaving(false)
     onClose()
@@ -83,15 +335,16 @@ function AddCalendarDialog({ open, onClose, onAdd, lang, isDemo }: {
               ))}
             </div>
           </div>
-          {!PROVIDER_CONFIG[provider].oauthKey && (
+
+          {!config.connectProvider && (
             <>
               <div className="flex flex-col gap-1.5">
                 <Label>{lang === 'fr' ? 'Nom affiché' : 'Display name'}</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={PROVIDER_CONFIG[provider].label} />
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={config.label} />
               </div>
               <div className="flex flex-col gap-2">
                 <Label>{lang === 'fr' ? 'Couleur' : 'Color'}</Label>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   {COLORS.map((c) => (
                     <button key={c} onClick={() => setColor(c)} className={`h-6 w-6 rounded-full border-2 transition-all ${color === c ? 'border-gray-900 scale-110' : 'border-transparent'}`} style={{ backgroundColor: c }} />
                   ))}
@@ -99,6 +352,7 @@ function AddCalendarDialog({ open, onClose, onAdd, lang, isDemo }: {
               </div>
             </>
           )}
+
           {isDemo && (
             <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">
               {lang === 'fr'
@@ -106,19 +360,20 @@ function AddCalendarDialog({ open, onClose, onAdd, lang, isDemo }: {
                 : 'Calendar sync is not available in demo mode.'}
             </div>
           )}
-          {!isDemo && PROVIDER_CONFIG[provider].oauthKey && (
+
+          {!isDemo && config.connectProvider && (
             <div className="rounded-xl bg-blue-50 border border-blue-100 p-3 text-sm text-blue-700">
               {lang === 'fr'
-                ? `Vous serez redirigé vers ${PROVIDER_CONFIG[provider].label} pour autoriser l'accès à votre calendrier.`
-                : `You'll be redirected to ${PROVIDER_CONFIG[provider].label} to authorize calendar access.`}
+                ? `Vous serez redirigé vers ${config.label} pour autoriser l'accès au calendrier. Votre session restera active.`
+                : `You'll be redirected to ${config.label} to authorize calendar access. Your current session will stay active.`}
             </div>
           )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t('cancel', lang)}</Button>
-          <Button onClick={handleAdd} disabled={saving || (!PROVIDER_CONFIG[provider].oauthKey && !name.trim())}>
+          <Button onClick={handleAdd} disabled={saving || (!config.connectProvider && !name.trim())}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            {PROVIDER_CONFIG[provider].oauthKey ? (lang === 'fr' ? 'Connecter' : 'Connect') : t('save', lang)}
+            {config.connectProvider ? (lang === 'fr' ? 'Connecter' : 'Connect') : t('save', lang)}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -126,14 +381,30 @@ function AddCalendarDialog({ open, onClose, onAdd, lang, isDemo }: {
   )
 }
 
+// ── Settings page ─────────────────────────────────────────────────────────────
+
 export default function SettingsPage() {
   const { language, setLanguage, calendarAccounts, setCalendarAccounts } = useAppStore()
   const { data: session } = useSession()
   const isDemo = session?.user?.id === DEMO_USER_ID
   const { toast } = useGlobalToast()
+  const searchParams = useSearchParams()
+
   const [loading, setLoading] = useState(true)
   const [showAddCalendar, setShowAddCalendar] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [editAccount, setEditAccount] = useState<CalendarAccount | null>(null)
+
+  // Surface OAuth result toasts
+  useEffect(() => {
+    const success = searchParams.get('cal_success')
+    const error = searchParams.get('cal_error')
+    if (success === 'connected') toast({ title: language === 'fr' ? 'Calendrier connecté !' : 'Calendar connected!', variant: 'success' })
+    if (success === 'reauthorized') toast({ title: language === 'fr' ? 'Calendrier ré-autorisé !' : 'Calendar re-authorized!', variant: 'success' })
+    if (error === 'access_denied') toast({ title: language === 'fr' ? 'Accès refusé.' : 'Access denied.', variant: 'error' })
+    if (error) toast({ title: `OAuth error: ${error}`, variant: 'error' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const loadAccounts = useCallback(async () => {
     setLoading(true)
@@ -157,6 +428,19 @@ export default function SettingsPage() {
     }
   }
 
+  const handleEditAccount = async (id: string, name: string, color: string) => {
+    const res = await fetch('/api/calendar/accounts', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, name, color }),
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setCalendarAccounts(calendarAccounts.map((a) => a.id === id ? { ...a, ...updated } : a))
+      toast({ title: language === 'fr' ? 'Calendrier modifié !' : 'Calendar updated!', variant: 'success' })
+    }
+  }
+
   const handleDeleteCalendar = async (id: string) => {
     await fetch('/api/calendar/accounts', {
       method: 'DELETE',
@@ -176,6 +460,8 @@ export default function SettingsPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 max-w-2xl flex flex-col gap-8">
+
+        {/* Language */}
         <section>
           <h2 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
             <Globe className="h-4 w-4 text-indigo-500" />
@@ -197,6 +483,7 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        {/* Connected calendars */}
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
@@ -226,38 +513,20 @@ export default function SettingsPage() {
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {calendarAccounts.map((account) => {
-                const config = PROVIDER_CONFIG[account.provider as CalendarProvider]
-                return (
-                  <div key={account.id} className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-xl flex items-center justify-center text-lg" style={{ backgroundColor: config?.color + '15' }}>
-                        {config?.icon ?? '📅'}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{account.name}</p>
-                        <p className="text-xs text-gray-500">{config?.label ?? account.provider}</p>
-                      </div>
-                      <div className="h-3 w-3 rounded-full border border-white shadow" style={{ backgroundColor: account.color }} />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="success" className="text-xs">
-                        {language === 'fr' ? 'Connecté' : 'Connected'}
-                      </Badge>
-                      <button
-                        onClick={() => setDeleteConfirm(account.id)}
-                        className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
+              {calendarAccounts.map((account) => (
+                <CalendarAccountRow
+                  key={account.id}
+                  account={account}
+                  lang={language}
+                  onDelete={() => setDeleteConfirm(account.id)}
+                  onEdit={() => setEditAccount(account)}
+                />
+              ))}
             </div>
           )}
         </section>
 
+        {/* App info */}
         <section>
           <h2 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
             <MonitorSmartphone className="h-4 w-4 text-indigo-500" />
@@ -274,6 +543,7 @@ export default function SettingsPage() {
         </section>
       </div>
 
+      {/* Delete confirmation dialog */}
       <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -292,7 +562,24 @@ export default function SettingsPage() {
         </DialogContent>
       </Dialog>
 
-      <AddCalendarDialog open={showAddCalendar} onClose={() => setShowAddCalendar(false)} onAdd={handleAddCalendar} lang={language} isDemo={isDemo} />
+      {/* Edit account dialog */}
+      {editAccount && (
+        <EditAccountDialog
+          account={editAccount}
+          open={!!editAccount}
+          onClose={() => setEditAccount(null)}
+          onSave={handleEditAccount}
+          lang={language}
+        />
+      )}
+
+      <AddCalendarDialog
+        open={showAddCalendar}
+        onClose={() => setShowAddCalendar(false)}
+        onAdd={handleAddCalendar}
+        lang={language}
+        isDemo={isDemo}
+      />
     </div>
   )
 }
