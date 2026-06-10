@@ -1,17 +1,15 @@
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
-import { PrismaLibSql } from "@prisma/adapter-libsql";
 
-const url      = process.env["DATABASE_URL"] ?? "file:./dev.db";
-const authToken = process.env["TURSO_AUTH_TOKEN"];
-const isRemote  = url.startsWith("libsql:") || url.startsWith("https:");
+// prisma.config.ts is used by the Prisma CLI for migrations only.
+// The runtime adapter (PrismaLibSql) lives in src/lib/prisma.ts.
+// Prisma 7 reads TURSO_AUTH_TOKEN from env automatically for libsql:// URLs.
+const url = process.env["DATABASE_URL"] ?? "file:./dev.db";
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
   },
-  datasource: isRemote
-    ? { adapter: new PrismaLibSql({ url, ...(authToken ? { authToken } : {}) }) }
-    : { url },
+  datasource: { url },
 });
