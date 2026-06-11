@@ -62,6 +62,18 @@ export default function CalendarPage() {
 
   const scheduledTasks = tasks.filter((task) => task.scheduledStart && task.scheduledEnd)
 
+  // Tasks due on a given day that have no scheduled time — shown in the all-day banner
+  const getDeadlineTasksForDay = (day: Date) =>
+    tasks.filter((task) => {
+      if (!task.deadline) return false
+      if (task.scheduledStart) return false // already in time grid
+      if (task.status === 'COMPLETED' || task.status === 'CANCELLED') return false
+      return isSameDay(new Date(task.deadline), day)
+    })
+
+  const getAllDayEventsForDay = (day: Date) =>
+    externalEvents.filter((ev) => ev.allDay && ev.start && isSameDay(new Date(ev.start), day))
+
   const getTasksForDayHour = (day: Date, hour: number) =>
     scheduledTasks.filter((task) => {
       if (!task.scheduledStart) return false
@@ -193,6 +205,68 @@ export default function CalendarPage() {
                 </p>
               </div>
             ))}
+          </div>
+
+          {/* All-day / deadline row — tasks due on a day with no scheduled time */}
+          <div className="grid grid-cols-8 border-b-2 border-gray-200 bg-gray-50/60">
+            <div className="px-2 py-1.5 text-xs text-gray-400 text-right border-r border-gray-200 flex items-start justify-end pt-2 shrink-0">
+              {language === 'fr' ? 'Dû' : 'Due'}
+            </div>
+            {weekDays.map((day) => {
+              const deadlineTasks = getDeadlineTasksForDay(day)
+              const allDayEvs = getAllDayEventsForDay(day)
+              const total = deadlineTasks.length + allDayEvs.length
+              return (
+                <div
+                  key={day.toISOString()}
+                  className={cn(
+                    'border-r border-gray-200 px-1 py-1 min-h-[32px]',
+                    isToday(day) && 'bg-indigo-50/40'
+                  )}
+                >
+                  {allDayEvs.map((ev) => {
+                    const color = ev.color ?? calendarAccounts.find((a) => a.id === ev.calendarAccountId)?.color ?? '#6366F1'
+                    return (
+                      <div
+                        key={ev.id}
+                        className="rounded px-1.5 py-0.5 text-xs mb-0.5 truncate border border-dashed"
+                        style={{ backgroundColor: color + '15', borderColor: color, color }}
+                        title={ev.title}
+                      >
+                        {ev.title}
+                      </div>
+                    )
+                  })}
+                  {deadlineTasks.slice(0, 3).map((task) => {
+                    const qId = getQuadrant(task.importance, task.urgency)
+                    const q = EISENHOWER_QUADRANTS.find((q) => q.id === qId)
+                    const acc = calendarAccounts.find((a) => a.id === task.calendarAccountId)
+                    return (
+                      <div
+                        key={task.id}
+                        onClick={() => handleTaskClick(task)}
+                        title={task.title}
+                        className={cn(
+                          'rounded px-1.5 py-0.5 text-xs cursor-pointer mb-0.5 truncate border transition-all hover:shadow-sm hover:brightness-95',
+                          q?.bgColor, q?.color
+                        )}
+                        style={acc ? { borderLeftColor: acc.color, borderLeftWidth: 3 } : {}}
+                      >
+                        {task.title}
+                      </div>
+                    )
+                  })}
+                  {deadlineTasks.length > 3 && (
+                    <p className="text-xs text-gray-400 px-1 leading-tight">
+                      +{deadlineTasks.length - 3}
+                    </p>
+                  )}
+                  {total === 0 && (
+                    <div className="h-5" /> // keeps row height consistent when empty
+                  )}
+                </div>
+              )
+            })}
           </div>
 
           <div className="relative">
