@@ -9,9 +9,10 @@ import { Slider } from '@/components/ui/slider'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Task, CalendarAccount, EISENHOWER_QUADRANTS } from '@/types'
-import { t } from '@/lib/i18n'
+import { t, TranslationKey } from '@/lib/i18n'
 import { getQuadrant } from '@/lib/utils'
-import { Sparkles, Calendar, Clock, Target } from 'lucide-react'
+import { Sparkles, Calendar, Clock, Target, GitBranch } from 'lucide-react'
+import { RetroplanDialog } from './RetroplanDialog'
 
 interface TaskFormProps {
   open: boolean
@@ -20,11 +21,28 @@ interface TaskFormProps {
   task?: Task | null
   calendarAccounts?: CalendarAccount[]
   lang?: 'fr' | 'en'
+  onRetroplanCreated?: () => void
 }
 
-export function TaskForm({ open, onClose, onSave, task, calendarAccounts = [], lang = 'fr' }: TaskFormProps) {
+function ScaleHint({ value, type, lang }: { value: number; type: 'importance' | 'urgency'; lang: 'fr' | 'en' }) {
+  let key: TranslationKey
+  let color: string
+  if (type === 'importance') {
+    if (value <= 3) { key = 'importanceHintLow'; color = 'text-gray-400' }
+    else if (value <= 6) { key = 'importanceHintMed'; color = 'text-amber-500' }
+    else { key = 'importanceHintHigh'; color = 'text-red-500' }
+  } else {
+    if (value <= 3) { key = 'urgencyHintLow'; color = 'text-gray-400' }
+    else if (value <= 6) { key = 'urgencyHintMed'; color = 'text-amber-500' }
+    else { key = 'urgencyHintHigh'; color = 'text-red-500' }
+  }
+  return <p className={`text-xs mt-1 ${color}`}>{t(key, lang)}</p>
+}
+
+export function TaskForm({ open, onClose, onSave, task, calendarAccounts = [], lang = 'fr', onRetroplanCreated }: TaskFormProps) {
   const [title, setTitle] = useState(task?.title ?? '')
   const [description, setDescription] = useState(task?.description ?? '')
+  const [retroplanOpen, setRetroplanOpen] = useState(false)
   const [importance, setImportance] = useState(task?.importance ?? 5)
   const [urgency, setUrgency] = useState(task?.urgency ?? 5)
   const [estimatedMinutes, setEstimatedMinutes] = useState(task?.estimatedMinutes ?? 60)
@@ -103,6 +121,7 @@ export function TaskForm({ open, onClose, onSave, task, calendarAccounts = [], l
                 onValueChange={([v]) => setImportance(v)}
                 className="mt-1"
               />
+              <ScaleHint value={importance} type="importance" lang={lang} />
             </div>
 
             <div className="flex flex-col gap-2">
@@ -118,6 +137,7 @@ export function TaskForm({ open, onClose, onSave, task, calendarAccounts = [], l
                 onValueChange={([v]) => setUrgency(v)}
                 className="mt-1"
               />
+              <ScaleHint value={urgency} type="urgency" lang={lang} />
             </div>
           </div>
 
@@ -200,13 +220,33 @@ export function TaskForm({ open, onClose, onSave, task, calendarAccounts = [], l
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-col sm:flex-row gap-2">
+          {/* Retroplan button — only available when editing a task that has a deadline */}
+          {task?.id && deadline && (
+            <Button
+              variant="outline"
+              onClick={() => setRetroplanOpen(true)}
+              className="sm:mr-auto border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+            >
+              <GitBranch className="h-4 w-4" />
+              {t('retroplanSetup', lang)}
+            </Button>
+          )}
           <Button variant="outline" onClick={onClose}>{t('cancel', lang)}</Button>
           <Button onClick={handleSave} disabled={!title.trim() || isSaving}>
             {isSaving ? t('loading', lang) : t('save', lang)}
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <RetroplanDialog
+        open={retroplanOpen}
+        onClose={() => setRetroplanOpen(false)}
+        task={task ?? null}
+        lang={lang}
+        calendarAccounts={calendarAccounts}
+        onCreated={() => { onRetroplanCreated?.(); setRetroplanOpen(false) }}
+      />
     </Dialog>
   )
 }

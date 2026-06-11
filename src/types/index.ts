@@ -146,6 +146,32 @@ export const EISENHOWER_QUADRANTS: EisenhowerQuadrant[] = [
   },
 ]
 
+export interface Goal {
+  id: string
+  userId: string
+  text: string
+  type: 'LONG_TERM' | 'SHORT_TERM'
+  order: number
+  createdAt: Date | string
+  updatedAt: Date | string
+}
+
+export interface RetroStage {
+  name: string
+  daysBeforeDeadline: number
+}
+
+export interface RetroTemplate {
+  id: string
+  userId: string
+  name: string
+  calendarAccountId?: string | null
+  keywords: string[]
+  stages: RetroStage[]
+  createdAt: Date | string
+  updatedAt: Date | string
+}
+
 export interface AIBreakdownResult {
   subTasks: {
     title: string

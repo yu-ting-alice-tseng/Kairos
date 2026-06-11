@@ -5,6 +5,7 @@ import { useAppStore } from '@/stores/useAppStore'
 import { Task } from '@/types'
 import { t } from '@/lib/i18n'
 import { EisenhowerMatrix } from '@/components/matrix/EisenhowerMatrix'
+import { GoalsSection } from '@/components/matrix/GoalsSection'
 import { TaskForm } from '@/components/tasks/TaskForm'
 import { BreakdownDialog } from '@/components/ai/BreakdownDialog'
 import { Button } from '@/components/ui/button'
@@ -95,6 +96,7 @@ export default function MatrixPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-6">
+        <GoalsSection lang={language} />
         <EisenhowerMatrix
           tasks={tasks}
           onTaskUpdate={handleTaskUpdate}
@@ -110,6 +112,7 @@ export default function MatrixPage() {
         task={editingTask}
         calendarAccounts={calendarAccounts}
         lang={language}
+        onRetroplanCreated={loadTasks}
       />
 
       {AI_ENABLED && (

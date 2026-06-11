@@ -142,6 +142,27 @@ const statements = [
     FOREIGN KEY ("calendarAccountId") REFERENCES "CalendarAccount" ("id") ON DELETE CASCADE ON UPDATE CASCADE
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "SubCalendar_calendarAccountId_externalId_key" ON "SubCalendar"("calendarAccountId", "externalId")`,
+  `CREATE TABLE IF NOT EXISTS "Goal" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT NOT NULL,
+    "text" TEXT NOT NULL,
+    "type" TEXT NOT NULL DEFAULT 'LONG_TERM',
+    "order" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE TABLE IF NOT EXISTS "RetroTemplate" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "calendarAccountId" TEXT,
+    "keywords" TEXT NOT NULL DEFAULT '[]',
+    "stages" TEXT NOT NULL DEFAULT '[]',
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email")`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "Account_provider_providerAccountId_key" ON "Account"("provider", "providerAccountId")`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "Session_sessionToken_key" ON "Session"("sessionToken")`,
