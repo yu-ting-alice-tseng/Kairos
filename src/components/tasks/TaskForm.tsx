@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -53,6 +53,17 @@ export function TaskForm({ open, onClose, onSave, task, calendarAccounts = [], l
   const [notes, setNotes] = useState(task?.notes ?? '')
   const [isSaving, setIsSaving] = useState(false)
 
+  useEffect(() => {
+    setTitle(task?.title ?? '')
+    setDescription(task?.description ?? '')
+    setImportance(task?.importance ?? 5)
+    setUrgency(task?.urgency ?? 5)
+    setEstimatedMinutes(task?.estimatedMinutes ?? 60)
+    setDeadline(task?.deadline ? new Date(task.deadline).toISOString().split('T')[0] : '')
+    setCalendarAccountId(task?.calendarAccountId ?? '')
+    setNotes(task?.notes ?? '')
+  }, [task?.id])
+
   const quadrantId = getQuadrant(importance, urgency)
   const quadrant = EISENHOWER_QUADRANTS.find((q) => q.id === quadrantId)
 
@@ -66,7 +77,7 @@ export function TaskForm({ open, onClose, onSave, task, calendarAccounts = [], l
         importance,
         urgency,
         estimatedMinutes,
-        deadline: deadline ? new Date(deadline) : undefined,
+        deadline: deadline ? new Date(deadline) : null,
         calendarAccountId: calendarAccountId || undefined,
         notes: notes || undefined,
       })

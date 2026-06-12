@@ -1,6 +1,6 @@
 import NextAuth from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
-import MicrosoftEntraID from 'next-auth/providers/microsoft-entra-id'
+import NotionProvider from 'next-auth/providers/notion'
 import { PrismaAdapter } from '@auth/prisma-adapter'
 import { prisma } from './prisma'
 
@@ -35,7 +35,7 @@ const adapter = {
 
 const PROVIDER_MAP: Record<string, { provider: string; name: string; color: string }> = {
   'google': { provider: 'GOOGLE', name: 'Google Calendar', color: '#4285F4' },
-  'microsoft-entra-id': { provider: 'OUTLOOK', name: 'Outlook Calendar', color: '#0078D4' },
+  'notion': { provider: 'NOTION', name: 'Notion', color: '#000000' },
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
@@ -44,28 +44,32 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? 'flowplan-demo-secret-replace-in-prod',
   adapter: adapter as never,
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID ?? '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
-      authorization: {
-        params: {
-          scope: 'openid email profile https://www.googleapis.com/auth/calendar',
-          access_type: 'offline',
-          prompt: 'consent',
-        },
-      },
-    }),
-    MicrosoftEntraID({
-      clientId: process.env.MICROSOFT_CLIENT_ID ?? '',
-      clientSecret: process.env.MICROSOFT_CLIENT_SECRET ?? '',
-      authorization: {
-        params: {
-          scope: 'openid email profile offline_access Calendars.ReadWrite',
-        },
-      },
-    }),
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+      ? [GoogleProvider({
+          clientId: process.env.GOOGLE_CLIENT_ID,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          authorization: {
+            params: {
+              scope: 'openid email profile https://www.googleapis.com/auth/calendar',
+              access_type: 'offline',
+              prompt: 'consent',
+            },
+          },
+        })]
+      : []),
+    ...(process.env.NOTION_CLIENT_ID && process.env.NOTION_CLIENT_SECRET
+      ? [NotionProvider({
+          clientId: process.env.NOTION_CLIENT_ID,
+          clientSecret: process.env.NOTION_CLIENT_SECRET,
+          redirectUri: `${process.env.AUTH_URL ?? process.env.NEXTAUTH_URL ?? 'http://localhost:3000'}/api/auth/callback/notion`,
+        })]
+      : []),
   ],
-  session: { strategy: 'database' },
+  session: {
+    strategy: 'database',
+    maxAge: 365 * 24 * 60 * 60,    // 1 year — stay logged in
+    updateAge: 24 * 60 * 60,        // only update session DB record once per day
+  },
   pages: {
     signIn: '/auth/signin',
     error: '/auth/error',

@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
       response_type: 'code',
       scope: 'https://www.googleapis.com/auth/calendar email profile',
       access_type: 'offline',
-      prompt: 'consent',
+      prompt: 'select_account consent',
       state: nonce,
     })
     return NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`)

@@ -24,9 +24,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       importance,
       urgency,
       priority,
-      deadline: body.deadline ? new Date(body.deadline) : undefined,
-      scheduledStart: body.scheduledStart ? new Date(body.scheduledStart) : undefined,
-      scheduledEnd: body.scheduledEnd ? new Date(body.scheduledEnd) : undefined,
+      // null explicitly clears the field; undefined means not sent (leave as-is)
+      deadline: 'deadline' in body ? (body.deadline ? new Date(body.deadline) : null) : undefined,
+      scheduledStart: 'scheduledStart' in body ? (body.scheduledStart ? new Date(body.scheduledStart) : null) : undefined,
+      scheduledEnd: 'scheduledEnd' in body ? (body.scheduledEnd ? new Date(body.scheduledEnd) : null) : undefined,
       completedAt: body.status === 'COMPLETED' ? new Date() : undefined,
     },
     include: { subTasks: true, calendarAccount: true },

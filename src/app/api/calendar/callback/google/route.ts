@@ -68,7 +68,25 @@ export async function GET(req: NextRequest) {
   const profile = profileRes.ok ? await profileRes.json() : null
   const accountName = profile?.email ?? 'Google Calendar'
 
-  // Create a new CalendarAccount for this Google connection
+  // If this Google email is already connected, update its tokens instead of creating a duplicate
+  const existing = profile?.email
+    ? await prisma.calendarAccount.findFirst({
+        where: { userId: session.user.id, provider: 'GOOGLE', name: profile.email },
+      })
+    : null
+
+  if (existing) {
+    await prisma.calendarAccount.update({
+      where: { id: existing.id },
+      data: {
+        accessToken: tokens.access_token,
+        ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
+        ...(expiresAt ? { expiresAt } : {}),
+      },
+    })
+    return NextResponse.redirect(`${settingsUrl}?cal_success=reauthorized`)
+  }
+
   await prisma.calendarAccount.create({
     data: {
       userId: session.user.id,

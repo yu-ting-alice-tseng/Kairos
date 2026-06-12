@@ -8,7 +8,7 @@ import { t } from '@/lib/i18n'
 import { formatDate, formatDuration, getQuadrant, EISENHOWER_QUADRANTS, isOverdue } from '@/lib/utils'
 import {
   CheckCircle2, Circle, Clock, Calendar, Sparkles, ChevronDown, ChevronRight,
-  MoreHorizontal, RefreshCw, Scissors, Edit2, Trash2, AlertTriangle
+  MoreHorizontal, RefreshCw, Scissors, Edit2, Trash2, AlertTriangle, Loader2
 } from 'lucide-react'
 
 interface TaskCardProps {
@@ -36,6 +36,7 @@ export function TaskCard({
 }: TaskCardProps) {
   const [showActions, setShowActions] = useState(false)
   const [showSubtasks, setShowSubtasks] = useState(false)
+  const [completing, setCompleting] = useState(false)
   const isCompleted = task.status === 'COMPLETED'
   const isMissed = task.status === 'MISSED'
   const overdue = isOverdue(task.scheduledEnd)
@@ -58,12 +59,19 @@ export function TaskCard({
     >
       <div className={`flex items-start gap-3 p-4 ${compact ? 'py-3' : ''}`}>
         <button
-          onClick={() => !isCompleted && onComplete(task.id)}
+          onClick={async () => {
+            if (isCompleted || completing) return
+            setCompleting(true)
+            await onComplete(task.id)
+            setCompleting(false)
+          }}
           className="mt-0.5 shrink-0 transition-transform hover:scale-110"
-          disabled={isCompleted}
+          disabled={isCompleted || completing}
         >
           {isCompleted ? (
             <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+          ) : completing ? (
+            <Loader2 className="h-5 w-5 text-indigo-400 animate-spin" />
           ) : (
             <Circle className="h-5 w-5 text-gray-300 group-hover:text-indigo-400" />
           )}
