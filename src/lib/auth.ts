@@ -29,7 +29,14 @@ const adapter = {
         },
       }
     }
-    return officialAdapter.getSessionAndUser!(sessionToken)
+    try {
+      const result = await officialAdapter.getSessionAndUser!(sessionToken)
+      console.log('[auth] getSessionAndUser result:', result ? 'found' : 'null')
+      return result
+    } catch (err) {
+      console.error('[auth] getSessionAndUser error:', err)
+      return null
+    }
   },
 }
 
@@ -48,6 +55,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       ? [GoogleProvider({
           clientId: process.env.GOOGLE_CLIENT_ID,
           clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          allowDangerousEmailAccountLinking: true,
           authorization: {
             params: {
               scope: 'openid email profile https://www.googleapis.com/auth/calendar',
