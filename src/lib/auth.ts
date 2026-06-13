@@ -4,41 +4,9 @@ import NotionProvider from 'next-auth/providers/notion'
 import { PrismaAdapter } from '@auth/prisma-adapter'
 import { prisma } from './prisma'
 
-const DEMO_USER_ID = 'demo-user-flowplan'
+export const DEMO_USER_ID = 'demo-user-flowplan'
 
-const officialAdapter = PrismaAdapter(prisma)
-
-// Demo sessions bypass the database so the demo works even without a cloud DB configured
-const adapter = {
-  ...officialAdapter,
-  getSessionAndUser: async (sessionToken: string) => {
-    if (sessionToken.startsWith('demo-session-')) {
-      return {
-        session: {
-          id: 'demo',
-          sessionToken,
-          userId: DEMO_USER_ID,
-          expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-        },
-        user: {
-          id: DEMO_USER_ID,
-          name: 'Demo User',
-          email: 'demo@flowplan.app',
-          emailVerified: new Date(),
-          image: null as string | null,
-        },
-      }
-    }
-    try {
-      const result = await officialAdapter.getSessionAndUser!(sessionToken)
-      console.log('[auth] getSessionAndUser result:', result ? 'found' : 'null')
-      return result
-    } catch (err) {
-      console.error('[auth] getSessionAndUser error:', err)
-      return null
-    }
-  },
-}
+const adapter = PrismaAdapter(prisma)
 
 const PROVIDER_MAP: Record<string, { provider: string; name: string; color: string }> = {
   'google': { provider: 'GOOGLE', name: 'Google Calendar', color: '#4285F4' },
@@ -74,9 +42,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       : []),
   ],
   session: {
-    strategy: 'database',
+    strategy: 'jwt',
     maxAge: 365 * 24 * 60 * 60,    // 1 year — stay logged in
-    updateAge: 24 * 60 * 60,        // only update session DB record once per day
   },
   pages: {
     signIn: '/auth/signin',
@@ -125,9 +92,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
       return true
     },
-    session({ session, user }) {
-      if (session.user && user?.id) {
-        session.user.id = user.id
+    jwt({ token, user }) {
+      if (user?.id) token.sub = user.id
+      return token
+    },
+    session({ session, token }) {
+      if (session.user && token.sub) {
+        session.user.id = token.sub
       }
       return session
     },

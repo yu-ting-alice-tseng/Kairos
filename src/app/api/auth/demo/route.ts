@@ -1,15 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { DEMO_USER_ID } from '@/lib/auth'
+import { encode } from '@auth/core/jwt'
 import { addDays } from 'date-fns'
-
-const DEMO_USER = {
-  id: 'demo-user-flowplan',
-  name: 'Demo User',
-  email: 'demo@flowplan.app',
-  image: null,
-  language: 'fr',
-  timezone: 'Europe/Paris',
-}
 
 async function seedDemoData(userId: string) {
   const count = await prisma.task.count({ where: { userId } })
@@ -40,28 +33,40 @@ async function seedDemoData(userId: string) {
 
 export async function POST(req: NextRequest) {
   try {
-    let user = await prisma.user.findUnique({ where: { id: DEMO_USER.id } })
+    let user = await prisma.user.findUnique({ where: { id: DEMO_USER_ID } })
     if (!user) {
-      user = await prisma.user.create({ data: { ...DEMO_USER, emailVerified: new Date() } })
+      user = await prisma.user.create({
+        data: { id: DEMO_USER_ID, name: 'Demo User', email: 'demo@flowplan.app', emailVerified: new Date(), language: 'fr', timezone: 'Europe/Paris' },
+      })
     }
-
     await seedDemoData(user.id)
 
-    const expires = addDays(new Date(), 30)
-    const sessionToken = `demo-session-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? 'flowplan-demo-secret-replace-in-prod'
+    const now = Math.floor(Date.now() / 1000)
+    const maxAge = 365 * 24 * 60 * 60
 
-    await prisma.session.create({
-      data: { sessionToken, userId: user.id, expires },
+    // Create a properly signed JWT that NextAuth JWT strategy will accept
+    const token = await encode({
+      token: {
+        sub: DEMO_USER_ID,
+        name: 'Demo User',
+        email: 'demo@flowplan.app',
+        picture: null,
+        iat: now,
+        exp: now + maxAge,
+        jti: crypto.randomUUID(),
+      },
+      secret,
+      salt: '',
     })
 
-    // Match the cookie name Auth.js uses: __Secure- prefix on HTTPS, plain on HTTP
     const proto = req.headers.get('x-forwarded-proto') ?? req.nextUrl.protocol.replace(':', '')
     const isHttps = proto === 'https'
     const cookieName = isHttps ? '__Secure-authjs.session-token' : 'authjs.session-token'
 
     const response = NextResponse.json({ ok: true })
-    response.cookies.set(cookieName, sessionToken, {
-      expires,
+    response.cookies.set(cookieName, token, {
+      expires: new Date((now + maxAge) * 1000),
       httpOnly: true,
       sameSite: 'lax',
       path: '/',
