@@ -6,8 +6,6 @@ import { prisma } from './prisma'
 
 export const DEMO_USER_ID = 'demo-user-flowplan'
 
-const adapter = PrismaAdapter(prisma)
-
 const PROVIDER_MAP: Record<string, { provider: string; name: string; color: string }> = {
   'google': { provider: 'GOOGLE', name: 'Google Calendar', color: '#4285F4' },
   'notion': { provider: 'NOTION', name: 'Notion', color: '#000000' },
@@ -15,15 +13,13 @@ const PROVIDER_MAP: Record<string, { provider: string; name: string; color: stri
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
-  // Fallback secret so the app works on Vercel even if AUTH_SECRET env var isn't set yet
   secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? 'flowplan-demo-secret-replace-in-prod',
-  adapter: adapter as never,
+  adapter: PrismaAdapter(prisma) as never,
   providers: [
     ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
       ? [GoogleProvider({
           clientId: process.env.GOOGLE_CLIENT_ID,
           clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-          allowDangerousEmailAccountLinking: true,
           authorization: {
             params: {
               scope: 'openid email profile https://www.googleapis.com/auth/calendar',
