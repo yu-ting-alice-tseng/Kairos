@@ -18,22 +18,35 @@ export async function listNotionEvents(
 ): Promise<CalendarEvent[]> {
   const notion = new Client({ auth: accessToken })
 
+  // Get the DB schema to find the actual date property name
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const res = await (notion as any).databases.query({
-    database_id: databaseId,
-    filter: {
-      and: [
-        { property: 'Date', date: { on_or_after: startDate.toISOString() } },
-        { property: 'Date', date: { on_or_before: endDate.toISOString() } },
-      ],
-    },
-  })
+  const db = await (notion as any).databases.retrieve({ database_id: databaseId })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const datePropName = Object.entries(db.properties ?? {}).find(([, v]: [string, any]) => v.type === 'date')?.[0]
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let res: any
+  if (datePropName) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    res = await (notion as any).databases.query({
+      database_id: databaseId,
+      filter: {
+        and: [
+          { property: datePropName, date: { on_or_after: startDate.toISOString() } },
+          { property: datePropName, date: { on_or_before: endDate.toISOString() } },
+        ],
+      },
+    })
+  } else {
+    // No date property — return empty (calendar view requires a date field)
+    return []
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (res.results ?? []).map((page: any) => {
-    const titleProp = Object.values(page.properties ?? {}).find((v: unknown) => (v as { title?: unknown }).title) as { title?: { plain_text: string }[] } | undefined
+    const titleProp = Object.values(page.properties ?? {}).find((v: unknown) => (v as { type?: string }).type === 'title') as { title?: { plain_text: string }[] } | undefined
     const title = titleProp?.title?.[0]?.plain_text ?? 'Untitled'
-    const dateProp = Object.values(page.properties ?? {}).find((v: unknown) => (v as { date?: unknown }).date) as { date?: { start: string; end?: string } } | undefined
+    const dateProp = page.properties?.[datePropName] as { date?: { start: string; end?: string } } | undefined
     const start = dateProp?.date?.start ?? new Date().toISOString()
     const end = dateProp?.date?.end ?? start
     return { id: page.id, title, start, end } as CalendarEvent

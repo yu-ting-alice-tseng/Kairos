@@ -191,10 +191,13 @@ export interface CalendarEvent {
   start: Date | string
   end: Date | string
   calendarAccountId?: string
+  calendarId?: string   // sub-calendar ID (e.g. Google calendar ID, Notion DB ID)
   color?: string
   taskId?: string
   habitId?: string
   allDay?: boolean
+  description?: string
+  editable?: boolean    // false for read-only calendars
 }
 
 export interface TimeSlotSuggestion {

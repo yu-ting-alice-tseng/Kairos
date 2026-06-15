@@ -8,7 +8,7 @@ import { TaskForm } from '@/components/tasks/TaskForm'
 import { Button } from '@/components/ui/button'
 import { cn, formatTime, getQuadrant, EISENHOWER_QUADRANTS } from '@/lib/utils'
 import {
-  ChevronLeft, ChevronRight, Calendar, Plus, Clock, Loader2,
+  ChevronLeft, ChevronRight, Calendar, Plus, Clock, Loader2, Pencil, Trash2, X,
 } from 'lucide-react'
 import {
   format, startOfWeek, endOfWeek, addDays, isSameDay, addWeeks, subWeeks,
@@ -29,6 +29,8 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true)
   const [externalEvents, setExternalEvents] = useState<CalendarEvent[]>([])
   const [eventsLoading, setEventsLoading] = useState(false)
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
+  const [eventSaving, setEventSaving] = useState(false)
 
   const locale = language === 'fr' ? fr : enUS
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 })
@@ -87,6 +89,39 @@ export default function CalendarPage() {
       const start = new Date(ev.start)
       return isSameDay(start, day) && getHours(start) === hour
     })
+
+  const handleSaveEvent = async (ev: CalendarEvent, title: string, start: string, end: string) => {
+    setEventSaving(true)
+    const res = await fetch('/api/calendar/events', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventId: ev.id, calendarAccountId: ev.calendarAccountId, calendarId: ev.calendarId, title, start, end }),
+    })
+    if (res.ok) {
+      setExternalEvents((prev) => prev.map((e) => e.id === ev.id ? { ...e, title, start, end } : e))
+      toast({ title: language === 'fr' ? 'Événement mis à jour' : 'Event updated', variant: 'success' })
+      setEditingEvent(null)
+    } else {
+      toast({ title: language === 'fr' ? 'Erreur lors de la mise à jour' : 'Failed to update event', variant: 'error' })
+    }
+    setEventSaving(false)
+  }
+
+  const handleDeleteEvent = async (ev: CalendarEvent) => {
+    if (!confirm(language === 'fr' ? 'Supprimer cet événement ?' : 'Delete this event?')) return
+    const res = await fetch('/api/calendar/events', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventId: ev.id, calendarAccountId: ev.calendarAccountId, calendarId: ev.calendarId }),
+    })
+    if (res.ok) {
+      setExternalEvents((prev) => prev.filter((e) => e.id !== ev.id))
+      toast({ title: language === 'fr' ? 'Événement supprimé' : 'Event deleted', variant: 'success' })
+      setEditingEvent(null)
+    } else {
+      toast({ title: language === 'fr' ? 'Erreur lors de la suppression' : 'Failed to delete event', variant: 'error' })
+    }
+  }
 
   const handleSaveTask = async (data: Partial<Task>) => {
     const payload = {
@@ -294,7 +329,11 @@ export default function CalendarPage() {
                         return (
                           <div
                             key={ev.id}
-                            className="rounded-lg px-2 py-1 text-xs mb-0.5 border border-dashed select-none"
+                            onClick={(e) => { e.stopPropagation(); if (ev.editable) setEditingEvent(ev) }}
+                            className={cn(
+                              'rounded-lg px-2 py-1 text-xs mb-0.5 border border-dashed',
+                              ev.editable ? 'cursor-pointer hover:brightness-95' : 'select-none'
+                            )}
                             style={{
                               backgroundColor: evColor + '1a',
                               borderColor: evColor,
@@ -354,6 +393,99 @@ export default function CalendarPage() {
         calendarAccounts={calendarAccounts}
         lang={language}
       />
+
+      {/* Edit Google Calendar event modal */}
+      {editingEvent && (
+        <EditEventModal
+          event={editingEvent}
+          lang={language}
+          saving={eventSaving}
+          onSave={handleSaveEvent}
+          onDelete={handleDeleteEvent}
+          onClose={() => setEditingEvent(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function EditEventModal({
+  event, lang, saving, onSave, onDelete, onClose,
+}: {
+  event: CalendarEvent
+  lang: 'fr' | 'en'
+  saving: boolean
+  onSave: (ev: CalendarEvent, title: string, start: string, end: string) => void
+  onDelete: (ev: CalendarEvent) => void
+  onClose: () => void
+}) {
+  const toLocal = (d: Date | string) => {
+    const dt = new Date(d)
+    const offset = dt.getTimezoneOffset() * 60000
+    return new Date(dt.getTime() - offset).toISOString().slice(0, 16)
+  }
+  const [title, setTitle] = React.useState(event.title)
+  const [start, setStart] = React.useState(toLocal(event.start))
+  const [end, setEnd] = React.useState(toLocal(event.end))
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <Pencil className="h-4 w-4 text-indigo-500" />
+            {lang === 'fr' ? 'Modifier l\'événement' : 'Edit event'}
+          </h2>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex flex-col gap-3">
+          <div>
+            <label className="text-xs font-medium text-gray-500 mb-1 block">{lang === 'fr' ? 'Titre' : 'Title'}</label>
+            <input
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">{lang === 'fr' ? 'Début' : 'Start'}</label>
+              <input
+                type="datetime-local"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                value={start}
+                onChange={(e) => setStart(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">{lang === 'fr' ? 'Fin' : 'End'}</label>
+              <input
+                type="datetime-local"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                value={end}
+                onChange={(e) => setEnd(e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between mt-5">
+          <button
+            onClick={() => onDelete(event)}
+            className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 px-3 py-2 rounded-xl hover:bg-red-50"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            {lang === 'fr' ? 'Supprimer' : 'Delete'}
+          </button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={onClose}>{lang === 'fr' ? 'Annuler' : 'Cancel'}</Button>
+            <Button size="sm" disabled={saving} onClick={() => onSave(event, title, new Date(start).toISOString(), new Date(end).toISOString())}>
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (lang === 'fr' ? 'Enregistrer' : 'Save')}
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

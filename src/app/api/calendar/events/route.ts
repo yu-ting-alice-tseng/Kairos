@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { listGoogleEvents } from '@/lib/calendar/google'
+import { listGoogleEvents, updateGoogleEvent, deleteGoogleEvent } from '@/lib/calendar/google'
 import { listOutlookEvents } from '@/lib/calendar/outlook'
 import { listNotionEvents } from '@/lib/calendar/notion'
 import { CalendarEvent } from '@/types'
@@ -36,8 +36,6 @@ export async function GET(req: NextRequest) {
       const refreshToken = account.refreshToken
       if (!accessToken) return
 
-      // If user has selected specific sub-calendars/databases, use those; otherwise fall back to primary
-      // Notion has no "primary" so it requires at least one database selected
       const calendarIds = account.subCalendars.length > 0
         ? account.subCalendars.map((sc) => ({ id: sc.externalId, color: sc.color }))
         : [{ id: account.provider === 'GOOGLE' ? 'primary' : null, color: account.color }]
@@ -51,6 +49,7 @@ export async function GET(req: NextRequest) {
 
               if (account.provider === 'GOOGLE') {
                 events = await listGoogleEvents(accessToken, id!, timeMin, timeMax, refreshToken ?? undefined)
+                events = events.map((e) => ({ ...e, editable: true }))
               } else if (account.provider === 'OUTLOOK') {
                 events = await listOutlookEvents(accessToken, id!, timeMin, timeMax)
               } else if (account.provider === 'NOTION') {
@@ -61,6 +60,7 @@ export async function GET(req: NextRequest) {
                 allEvents.push({
                   ...e,
                   calendarAccountId: account.id,
+                  calendarId: id!,
                   color,
                 })
               )
@@ -73,4 +73,62 @@ export async function GET(req: NextRequest) {
   )
 
   return NextResponse.json(allEvents)
+}
+
+// PATCH — update a Google Calendar event
+export async function PATCH(req: NextRequest) {
+  const session = await auth()
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { eventId, calendarAccountId, calendarId, title, description, start, end } = await req.json()
+
+  const account = await prisma.calendarAccount.findFirst({
+    where: { id: calendarAccountId, userId },
+  })
+  if (!account?.accessToken) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+
+  if (account.provider === 'GOOGLE') {
+    await updateGoogleEvent(
+      account.accessToken,
+      calendarId ?? 'primary',
+      eventId,
+      {
+        title,
+        description,
+        start: start ? new Date(start) : undefined,
+        end: end ? new Date(end) : undefined,
+      },
+      account.refreshToken ?? undefined
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  return NextResponse.json({ error: 'Provider does not support editing' }, { status: 400 })
+}
+
+// DELETE — delete a Google Calendar event
+export async function DELETE(req: NextRequest) {
+  const session = await auth()
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { eventId, calendarAccountId, calendarId } = await req.json()
+
+  const account = await prisma.calendarAccount.findFirst({
+    where: { id: calendarAccountId, userId },
+  })
+  if (!account?.accessToken) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+
+  if (account.provider === 'GOOGLE') {
+    await deleteGoogleEvent(
+      account.accessToken,
+      calendarId ?? 'primary',
+      eventId,
+      account.refreshToken ?? undefined
+    )
+    return NextResponse.json({ ok: true })
+  }
+
+  return NextResponse.json({ error: 'Provider does not support deletion' }, { status: 400 })
 }
