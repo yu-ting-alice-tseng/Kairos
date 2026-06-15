@@ -47,6 +47,7 @@ function SubCalendarPanel({ account, lang }: { account: CalendarAccount; lang: '
   const [calendars, setCalendars] = useState<ProviderSubCalendar[]>([])
   const [loading, setLoading] = useState(false)
   const [toggling, setToggling] = useState<string | null>(null)
+  const [togglingAll, setTogglingAll] = useState(false)
   const { toast } = useGlobalToast()
 
   const load = useCallback(async () => {
@@ -66,6 +67,17 @@ function SubCalendarPanel({ account, lang }: { account: CalendarAccount; lang: '
   }, [account.id, lang, toast])
 
   useEffect(() => { load() }, [load])
+
+  const toggleAll = async (isActive: boolean) => {
+    setTogglingAll(true)
+    await fetch(`/api/calendar/accounts/${account.id}/calendars`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isActive, calendars: calendars.map((c) => ({ externalId: c.externalId, name: c.name, color: c.color })) }),
+    })
+    setCalendars((prev) => prev.map((c) => ({ ...c, isActive })))
+    setTogglingAll(false)
+  }
 
   const toggle = async (cal: ProviderSubCalendar) => {
     setToggling(cal.externalId)
@@ -105,9 +117,33 @@ function SubCalendarPanel({ account, lang }: { account: CalendarAccount; lang: '
             ? (lang === 'fr' ? 'Bases de données' : 'Databases')
             : (lang === 'fr' ? 'Sous-calendriers' : 'Sub-calendars')}
         </p>
-        <button onClick={load} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
-          <RefreshCw className="h-3 w-3" />
-        </button>
+        <div className="flex items-center gap-1">
+          {togglingAll ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
+          ) : (
+            <>
+              <button
+                onClick={() => toggleAll(true)}
+                disabled={calendars.every((c) => c.isActive)}
+                className="text-xs text-indigo-500 hover:text-indigo-700 disabled:opacity-30 disabled:cursor-not-allowed px-1"
+              >
+                {lang === 'fr' ? 'Tout' : 'All'}
+              </button>
+              <span className="text-gray-300 text-xs">|</span>
+              <button
+                onClick={() => toggleAll(false)}
+                disabled={calendars.every((c) => !c.isActive)}
+                className="text-xs text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed px-1"
+              >
+                {lang === 'fr' ? 'Aucun' : 'None'}
+              </button>
+              <span className="text-gray-200 text-xs">·</span>
+            </>
+          )}
+          <button onClick={load} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+            <RefreshCw className="h-3 w-3" />
+          </button>
+        </div>
       </div>
       {calendars.map((cal) => (
         <div key={cal.externalId} className="flex items-center gap-3 py-2 px-2 rounded-xl hover:bg-gray-50 transition-colors">

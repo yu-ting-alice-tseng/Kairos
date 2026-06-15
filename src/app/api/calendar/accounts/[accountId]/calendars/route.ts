@@ -71,6 +71,33 @@ export async function GET(_req: NextRequest, { params }: Params) {
   }
 }
 
+// PATCH — set all sub-calendars to the same isActive value (bulk toggle)
+export async function PATCH(req: NextRequest, { params }: Params) {
+  const session = await auth()
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { accountId } = await params
+  const account = await prisma.calendarAccount.findFirst({
+    where: { id: accountId, userId: session.user.id },
+    include: { subCalendars: true },
+  })
+  if (!account) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const { isActive, calendars } = await req.json() as { isActive: boolean; calendars: { externalId: string; name: string; color?: string }[] }
+
+  await Promise.all(
+    calendars.map((cal) =>
+      prisma.subCalendar.upsert({
+        where: { calendarAccountId_externalId: { calendarAccountId: accountId, externalId: cal.externalId } },
+        create: { calendarAccountId: accountId, externalId: cal.externalId, name: cal.name, color: cal.color ?? account.color, isActive },
+        update: { isActive },
+      })
+    )
+  )
+
+  return NextResponse.json({ ok: true })
+}
+
 // PUT — toggle a sub-calendar on/off
 export async function PUT(req: NextRequest, { params }: Params) {
   const session = await auth()
