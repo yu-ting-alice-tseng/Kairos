@@ -12,8 +12,8 @@ export async function GET() {
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const userId = session.user.id
 
-  // Auto-create CalendarAccounts from NextAuth OAuth accounts so the user
-  // always sees their calendar(s) connected without a separate "Connect" step.
+  // Auto-create CalendarAccounts from NextAuth OAuth accounts (sign-in provider only).
+  // Each OAuth account (identified by providerAccountId) gets its own CalendarAccount.
   try {
     const oauthAccounts = await prisma.account.findMany({
       where: { userId, provider: { in: ['google', 'microsoft-entra-id'] } },
@@ -21,15 +21,18 @@ export async function GET() {
     for (const oauth of oauthAccounts) {
       const config = OAUTH_PROVIDER_MAP[oauth.provider]
       if (!config || !oauth.access_token) continue
+      // Match by providerAccountId stored in name field, or fall back to generic name check
       const existing = await prisma.calendarAccount.findFirst({
-        where: { userId, provider: config.provider, isActive: true },
+        where: { userId, provider: config.provider, isActive: true, name: oauth.providerAccountId },
+      }) ?? await prisma.calendarAccount.findFirst({
+        where: { userId, provider: config.provider, isActive: true, name: config.name },
       })
       if (!existing) {
         await prisma.calendarAccount.create({
           data: {
             userId,
             provider: config.provider,
-            name: config.name,
+            name: oauth.providerAccountId, // use providerAccountId to uniquely identify
             color: config.color,
             accessToken: oauth.access_token,
             refreshToken: oauth.refresh_token ?? null,
@@ -37,7 +40,6 @@ export async function GET() {
           },
         })
       } else if (!existing.accessToken && oauth.access_token) {
-        // Backfill missing token
         await prisma.calendarAccount.update({
           where: { id: existing.id },
           data: {
