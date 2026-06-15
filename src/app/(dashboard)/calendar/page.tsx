@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useAppStore } from '@/stores/useAppStore'
 import { Task, CalendarEvent } from '@/types'
 import { t } from '@/lib/i18n'
@@ -19,6 +19,13 @@ import { useGlobalToast } from '@/components/providers/ToastProvider'
 
 const HOURS = Array.from({ length: 14 }, (_, i) => i + 7)
 
+interface DragState {
+  event: CalendarEvent
+  startMouseY: number
+  startMouseX: number
+  eventDurationMs: number
+}
+
 export default function CalendarPage() {
   const { language, tasks, setTasks, calendarAccounts } = useAppStore()
   const { toast } = useGlobalToast()
@@ -32,10 +39,22 @@ export default function CalendarPage() {
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
   const [eventSaving, setEventSaving] = useState(false)
 
+  // Drag state — use refs for drag internals to avoid re-renders during drag
+  const dragRef = useRef<DragState | null>(null)
+  const [draggingEventId, setDraggingEventId] = useState<string | null>(null)
+  const [dragPreview, setDragPreview] = useState<{ dayIdx: number; hour: number } | null>(null)
+  const gridRef = useRef<HTMLDivElement>(null)
+
+  // Stable refs so closures inside event listeners always read the latest values
+  const weekDaysRef = useRef<Date[]>([])
+  const dragPreviewRef = useRef<{ dayIdx: number; hour: number } | null>(null)
+  dragPreviewRef.current = dragPreview
+
   const locale = language === 'fr' ? fr : enUS
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 })
   const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 })
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  weekDaysRef.current = weekDays
 
   const loadTasks = useCallback(async () => {
     setLoading(true)
@@ -64,11 +83,10 @@ export default function CalendarPage() {
 
   const scheduledTasks = tasks.filter((task) => task.scheduledStart && task.scheduledEnd)
 
-  // Tasks due on a given day that have no scheduled time — shown in the all-day banner
   const getDeadlineTasksForDay = (day: Date) =>
     tasks.filter((task) => {
       if (!task.deadline) return false
-      if (task.scheduledStart) return false // already in time grid
+      if (task.scheduledStart) return false
       if (task.status === 'COMPLETED' || task.status === 'CANCELLED') return false
       return isSameDay(new Date(task.deadline), day)
     })
@@ -90,22 +108,48 @@ export default function CalendarPage() {
       return isSameDay(start, day) && getHours(start) === hour
     })
 
-  const handleSaveEvent = async (ev: CalendarEvent, title: string, start: string, end: string) => {
+  const handleSaveEvent = useCallback(async (
+    ev: CalendarEvent,
+    title: string,
+    start: string,
+    end: string,
+    allDay?: boolean,
+  ) => {
     setEventSaving(true)
+    const body: Record<string, unknown> = {
+      eventId: ev.id,
+      calendarAccountId: ev.calendarAccountId,
+      calendarId: ev.calendarId,
+      title,
+      start,
+      end,
+    }
+    if (allDay !== undefined) body.allDay = allDay
     const res = await fetch('/api/calendar/events', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventId: ev.id, calendarAccountId: ev.calendarAccountId, calendarId: ev.calendarId, title, start, end }),
+      body: JSON.stringify(body),
     })
     if (res.ok) {
-      setExternalEvents((prev) => prev.map((e) => e.id === ev.id ? { ...e, title, start, end } : e))
+      setExternalEvents((prev) =>
+        prev.map((e) =>
+          e.id === ev.id
+            ? { ...e, title, start, end, ...(allDay !== undefined ? { allDay } : {}) }
+            : e
+        )
+      )
       toast({ title: language === 'fr' ? 'Événement mis à jour' : 'Event updated', variant: 'success' })
       setEditingEvent(null)
     } else {
       toast({ title: language === 'fr' ? 'Erreur lors de la mise à jour' : 'Failed to update event', variant: 'error' })
     }
     setEventSaving(false)
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [language])
+
+  // Stable ref so drag mouseup closures can always call the latest handleSaveEvent
+  const handleSaveEventRef = useRef(handleSaveEvent)
+  handleSaveEventRef.current = handleSaveEvent
 
   const handleDeleteEvent = async (ev: CalendarEvent) => {
     if (!confirm(language === 'fr' ? 'Supprimer cet événement ?' : 'Delete this event?')) return
@@ -170,6 +214,88 @@ export default function CalendarPage() {
     setShowTaskForm(true)
   }
 
+  // --- Drag helpers ---
+
+  const finalizeDrop = useCallback((drag: DragState, preview: { dayIdx: number; hour: number } | null) => {
+    if (!preview) return
+    const targetDay = weekDaysRef.current[preview.dayIdx]
+    if (!targetDay) return
+
+    if (preview.hour < 7) {
+      // Dropped into all-day row
+      const newStart = new Date(targetDay)
+      newStart.setHours(0, 0, 0, 0)
+      const newEnd = new Date(newStart)
+      newEnd.setHours(23, 59, 59, 999)
+      handleSaveEventRef.current(drag.event, drag.event.title, newStart.toISOString(), newEnd.toISOString(), true)
+    } else {
+      const newStart = new Date(targetDay)
+      newStart.setHours(preview.hour, 0, 0, 0)
+      const newEnd = new Date(newStart.getTime() + drag.eventDurationMs)
+      handleSaveEventRef.current(drag.event, drag.event.title, newStart.toISOString(), newEnd.toISOString(), false)
+    }
+  }, [])
+
+  const startDrag = useCallback((e: React.MouseEvent, ev: CalendarEvent) => {
+    if (!ev.editable) return
+    e.preventDefault()
+    e.stopPropagation()
+    const durationMs = ev.start && ev.end
+      ? new Date(ev.end as string).getTime() - new Date(ev.start as string).getTime()
+      : 60 * 60 * 1000
+    dragRef.current = {
+      event: ev,
+      startMouseY: e.clientY,
+      startMouseX: e.clientX,
+      eventDurationMs: durationMs,
+    }
+    setDraggingEventId(ev.id)
+
+    const onMouseUp = () => {
+      document.removeEventListener('mouseup', onMouseUp)
+      const drag = dragRef.current
+      const preview = dragPreviewRef.current
+      dragRef.current = null
+      setDraggingEventId(null)
+      setDragPreview(null)
+      if (drag) finalizeDrop(drag, preview)
+    }
+    document.addEventListener('mouseup', onMouseUp)
+  }, [finalizeDrop])
+
+  const startAllDayDrag = useCallback((e: React.MouseEvent, ev: CalendarEvent) => {
+    if (!ev.editable) return
+    e.preventDefault()
+    e.stopPropagation()
+    dragRef.current = {
+      event: ev,
+      startMouseY: e.clientY,
+      startMouseX: e.clientX,
+      eventDurationMs: 60 * 60 * 1000,
+    }
+    setDraggingEventId(ev.id)
+
+    const onMouseUp = () => {
+      document.removeEventListener('mouseup', onMouseUp)
+      const drag = dragRef.current
+      const preview = dragPreviewRef.current
+      dragRef.current = null
+      setDraggingEventId(null)
+      setDragPreview(null)
+      // Only drop if user dragged into time grid (hour >= 7)
+      if (drag && preview && preview.hour >= 7) finalizeDrop(drag, preview)
+    }
+    document.addEventListener('mouseup', onMouseUp)
+  }, [finalizeDrop])
+
+  const handleCellMouseMove = useCallback((dayIdx: number, hour: number) => {
+    if (dragRef.current) setDragPreview({ dayIdx, hour })
+  }, [])
+
+  const handleAllDayCellMouseMove = useCallback((dayIdx: number) => {
+    if (dragRef.current) setDragPreview({ dayIdx, hour: 0 }) // hour < 7 → all-day
+  }, [])
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -177,6 +303,8 @@ export default function CalendarPage() {
       </div>
     )
   }
+
+  const isDragging = draggingEventId !== null
 
   return (
     <div className="flex flex-col h-full">
@@ -222,8 +350,9 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto">
+      <div className={cn('flex-1 overflow-auto', isDragging && 'cursor-grabbing select-none')}>
         <div className="min-w-[700px]">
+          {/* Day headers */}
           <div className="grid grid-cols-8 border-b border-gray-100 bg-white sticky top-0 z-10">
             <div className="py-3 px-2 text-xs text-gray-400 border-r border-gray-100" />
             {weekDays.map((day) => (
@@ -242,31 +371,40 @@ export default function CalendarPage() {
             ))}
           </div>
 
-          {/* All-day / deadline row — tasks due on a day with no scheduled time */}
+          {/* All-day / deadline row */}
           <div className="grid grid-cols-8 border-b-2 border-gray-200 bg-gray-50/60">
             <div className="px-2 py-1.5 text-xs text-gray-400 text-right border-r border-gray-200 flex items-start justify-end pt-2 shrink-0">
               {language === 'fr' ? 'Dû' : 'Due'}
             </div>
-            {weekDays.map((day) => {
+            {weekDays.map((day, dayIdx) => {
               const deadlineTasks = getDeadlineTasksForDay(day)
               const allDayEvs = getAllDayEventsForDay(day)
               const total = deadlineTasks.length + allDayEvs.length
+              const isPreviewHere = isDragging && dragPreview?.dayIdx === dayIdx && (dragPreview?.hour ?? 7) < 7
               return (
                 <div
                   key={day.toISOString()}
                   className={cn(
                     'border-r border-gray-200 px-1 py-1 min-h-[32px]',
-                    isToday(day) && 'bg-indigo-50/40'
+                    isToday(day) && 'bg-indigo-50/40',
+                    isPreviewHere && 'bg-indigo-100/60'
                   )}
+                  onMouseMove={() => handleAllDayCellMouseMove(dayIdx)}
                 >
                   {allDayEvs.map((ev) => {
                     const color = ev.color ?? calendarAccounts.find((a) => a.id === ev.calendarAccountId)?.color ?? '#6366F1'
+                    const isDraggingThis = draggingEventId === ev.id
                     return (
                       <div
                         key={ev.id}
-                        className="rounded px-1.5 py-0.5 text-xs mb-0.5 truncate border border-dashed"
+                        className={cn(
+                          'rounded px-1.5 py-0.5 text-xs mb-0.5 truncate border border-dashed',
+                          ev.editable && !isDragging ? 'cursor-grab' : '',
+                          isDraggingThis && 'opacity-40'
+                        )}
                         style={{ backgroundColor: color + '15', borderColor: color, color }}
                         title={ev.title}
+                        onMouseDown={(e) => { if (ev.editable) startAllDayDrag(e, ev) }}
                       >
                         {ev.title}
                       </div>
@@ -296,43 +434,63 @@ export default function CalendarPage() {
                       +{deadlineTasks.length - 3}
                     </p>
                   )}
-                  {total === 0 && (
-                    <div className="h-5" /> // keeps row height consistent when empty
+                  {total === 0 && !isPreviewHere && (
+                    <div className="h-5" />
                   )}
+                  {/* Ghost preview in all-day row */}
+                  {isPreviewHere && dragRef.current && (() => {
+                    const drag = dragRef.current!
+                    const evColor = drag.event.color ?? calendarAccounts.find((a) => a.id === drag.event.calendarAccountId)?.color ?? '#6366F1'
+                    return (
+                      <div
+                        className="rounded px-1.5 py-0.5 text-xs mb-0.5 truncate border-2 border-dashed pointer-events-none"
+                        style={{ backgroundColor: evColor + '30', borderColor: evColor, color: evColor }}
+                      >
+                        {drag.event.title}
+                      </div>
+                    )
+                  })()}
                 </div>
               )
             })}
           </div>
 
-          <div className="relative">
+          {/* Time grid */}
+          <div className="relative" ref={gridRef}>
             {HOURS.map((hour) => (
               <div key={hour} className="grid grid-cols-8 border-b border-gray-50 min-h-[56px]">
                 <div className="px-2 py-1 text-xs text-gray-400 text-right border-r border-gray-100 w-12 shrink-0">
                   {hour}:00
                 </div>
-                {weekDays.map((day) => {
+                {weekDays.map((day, dayIdx) => {
                   const cellTasks = getTasksForDayHour(day, hour)
                   const cellEvents = getEventsForDayHour(day, hour)
                   const isEmpty = cellTasks.length === 0 && cellEvents.length === 0
+                  const isPreviewHere = isDragging && dragPreview?.dayIdx === dayIdx && dragPreview?.hour === hour
                   return (
                     <div
                       key={day.toISOString()}
                       className={cn(
                         'border-r border-gray-100 px-1 py-0.5 cursor-pointer hover:bg-gray-50 transition-colors min-h-[56px]',
-                        isToday(day) && 'bg-indigo-50/30'
+                        isToday(day) && 'bg-indigo-50/30',
+                        isPreviewHere && 'bg-indigo-100/40'
                       )}
-                      onClick={() => isEmpty && handleCellClick(day, hour)}
+                      onClick={() => isEmpty && !isDragging && handleCellClick(day, hour)}
+                      onMouseMove={() => handleCellMouseMove(dayIdx, hour)}
                     >
                       {/* External calendar events — dashed border to distinguish from tasks */}
                       {cellEvents.map((ev) => {
                         const evColor = ev.color ?? calendarAccounts.find((a) => a.id === ev.calendarAccountId)?.color ?? '#6366F1'
+                        const isDraggingThis = draggingEventId === ev.id
                         return (
                           <div
                             key={ev.id}
-                            onClick={(e) => { e.stopPropagation(); if (ev.editable) setEditingEvent(ev) }}
+                            onClick={(e) => { e.stopPropagation(); if (ev.editable && !isDragging) setEditingEvent(ev) }}
+                            onMouseDown={(e) => { if (ev.editable) startDrag(e, ev) }}
                             className={cn(
                               'rounded-lg px-2 py-1 text-xs mb-0.5 border border-dashed',
-                              ev.editable ? 'cursor-pointer hover:brightness-95' : 'select-none'
+                              ev.editable ? 'cursor-grab hover:brightness-95' : 'select-none',
+                              isDraggingThis && 'opacity-40'
                             )}
                             style={{
                               backgroundColor: evColor + '1a',
@@ -350,6 +508,24 @@ export default function CalendarPage() {
                           </div>
                         )
                       })}
+
+                      {/* Ghost/preview for dragged event in this cell */}
+                      {isPreviewHere && dragRef.current && (() => {
+                        const drag = dragRef.current!
+                        const evColor = drag.event.color ?? calendarAccounts.find((a) => a.id === drag.event.calendarAccountId)?.color ?? '#6366F1'
+                        return (
+                          <div
+                            className="rounded-lg px-2 py-1 text-xs mb-0.5 border-2 border-dashed pointer-events-none"
+                            style={{
+                              backgroundColor: evColor + '30',
+                              borderColor: evColor,
+                              color: evColor,
+                            }}
+                          >
+                            <p className="font-medium truncate">{drag.event.title}</p>
+                          </div>
+                        )
+                      })()}
 
                       {/* FlowPlan tasks */}
                       {cellTasks.map((task) => {
