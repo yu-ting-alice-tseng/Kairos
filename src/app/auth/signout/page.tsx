@@ -1,7 +1,12 @@
-import { signOut } from '@/lib/auth'
+'use client'
 
-export const dynamic = 'force-dynamic'
+import { useEffect } from 'react'
+import { signOut } from 'next-auth/react'
 
-export default async function SignOutPage() {
-  await signOut({ redirectTo: '/auth/signin' })
+export default function SignOutPage() {
+  useEffect(() => {
+    signOut({ callbackUrl: '/auth/signin' })
+  }, [])
+
+  return null
 }
