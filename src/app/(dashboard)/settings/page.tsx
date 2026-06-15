@@ -48,19 +48,23 @@ function SubCalendarPanel({ account, lang }: { account: CalendarAccount; lang: '
   const [loading, setLoading] = useState(false)
   const [toggling, setToggling] = useState<string | null>(null)
   const [togglingAll, setTogglingAll] = useState(false)
+  const [needsReauth, setNeedsReauth] = useState(false)
   const { toast } = useGlobalToast()
 
   const load = useCallback(async () => {
     setLoading(true)
+    setNeedsReauth(false)
     const res = await fetch(`/api/calendar/accounts/${account.id}/calendars`)
     if (res.ok) {
       setCalendars(await res.json())
     } else {
-      const err = await res.json()
-      if (err.code === 'NO_TOKEN') {
-        toast({ title: lang === 'fr' ? 'Ré-autorisez ce calendrier pour voir les sous-calendriers.' : 'Re-authorize this calendar to view sub-calendars.', variant: 'error' })
+      const err = await res.json().catch(() => ({}))
+      if (err.code === 'NO_TOKEN' || res.status === 403 || res.status === 401) {
+        setNeedsReauth(true)
       } else {
-        toast({ title: err.error ?? 'Failed to load calendars', variant: 'error' })
+        // Token likely expired — show reauth prompt
+        setNeedsReauth(true)
+        console.error('Failed to load calendars:', err)
       }
     }
     setLoading(false)
@@ -97,6 +101,23 @@ function SubCalendarPanel({ account, lang }: { account: CalendarAccount; lang: '
       <div className="flex items-center gap-2 py-3 px-4 text-sm text-gray-400">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
         {lang === 'fr' ? 'Chargement…' : 'Loading…'}
+      </div>
+    )
+  }
+
+  if (needsReauth) {
+    const base = window.location.origin
+    return (
+      <div className="py-3 px-4 flex items-center gap-3">
+        <p className="text-xs text-amber-600 flex-1">
+          {lang === 'fr' ? 'Token expiré. Ré-autorisez pour voir les calendriers.' : 'Token expired. Re-authorize to see calendars.'}
+        </p>
+        <a
+          href={`/api/calendar/connect?provider=${account.provider.toLowerCase()}&accountId=${account.id}`}
+          className="text-xs text-indigo-500 hover:text-indigo-700 font-medium underline underline-offset-2 whitespace-nowrap"
+        >
+          {lang === 'fr' ? 'Ré-autoriser' : 'Re-authorize'}
+        </a>
       </div>
     )
   }

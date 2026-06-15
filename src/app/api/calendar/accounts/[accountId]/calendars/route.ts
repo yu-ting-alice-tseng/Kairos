@@ -65,7 +65,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
     })
 
     return NextResponse.json(result)
-  } catch (err) {
+  } catch (err: unknown) {
+    const msg = String(err)
+    const isAuthError = msg.includes('401') || msg.includes('403') || msg.includes('invalid_grant') || msg.includes('Token has been expired')
+    if (isAuthError) {
+      return NextResponse.json({ error: 'Token expired. Please re-authorize.', code: 'NO_TOKEN' }, { status: 403 })
+    }
     console.error('Failed to list calendars:', err)
     return NextResponse.json({ error: 'Failed to fetch calendars from provider' }, { status: 500 })
   }
