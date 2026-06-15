@@ -12,34 +12,36 @@ export async function GET() {
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const userId = session.user.id
 
-  // Auto-create CalendarAccounts from NextAuth OAuth accounts (sign-in provider only).
-  // Each OAuth account (identified by providerAccountId) gets its own CalendarAccount.
+  // Auto-backfill missing access tokens for existing CalendarAccounts from the OAuth Account table.
+  // CalendarAccounts are created by the signIn callback (keyed by email). This only backfills tokens
+  // if they went missing (e.g. token expired and wasn't refreshed).
   try {
     const oauthAccounts = await prisma.account.findMany({
       where: { userId, provider: { in: ['google', 'microsoft-entra-id'] } },
+      include: { user: { select: { email: true } } },
     })
     for (const oauth of oauthAccounts) {
       const config = OAUTH_PROVIDER_MAP[oauth.provider]
       if (!config || !oauth.access_token) continue
-      // Match by providerAccountId stored in name field, or fall back to generic name check
+      const email = oauth.user?.email
+      if (!email) continue
       const existing = await prisma.calendarAccount.findFirst({
-        where: { userId, provider: config.provider, isActive: true, name: oauth.providerAccountId },
-      }) ?? await prisma.calendarAccount.findFirst({
-        where: { userId, provider: config.provider, isActive: true, name: config.name },
+        where: { userId, provider: config.provider, name: email },
       })
       if (!existing) {
+        // CalendarAccount missing — create it (fallback if signIn callback didn't run)
         await prisma.calendarAccount.create({
           data: {
             userId,
             provider: config.provider,
-            name: oauth.providerAccountId, // use providerAccountId to uniquely identify
+            name: email,
             color: config.color,
             accessToken: oauth.access_token,
             refreshToken: oauth.refresh_token ?? null,
             expiresAt: oauth.expires_at ? new Date(oauth.expires_at * 1000) : null,
           },
         })
-      } else if (!existing.accessToken && oauth.access_token) {
+      } else if (!existing.accessToken) {
         await prisma.calendarAccount.update({
           where: { id: existing.id },
           data: {

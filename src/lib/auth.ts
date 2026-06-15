@@ -41,6 +41,43 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     error: '/auth/error',
   },
   callbacks: {
+    async signIn({ user, account }) {
+      // On Google/Notion sign-in, upsert a CalendarAccount using email as unique key
+      if (!user?.id || !account?.access_token) return true
+      if (account.provider !== 'google') return true
+      const email = (user as { email?: string }).email
+      if (!email) return true
+      try {
+        const existing = await prisma.calendarAccount.findFirst({
+          where: { userId: user.id, provider: 'GOOGLE', name: email },
+        })
+        if (!existing) {
+          await prisma.calendarAccount.create({
+            data: {
+              userId: user.id,
+              provider: 'GOOGLE',
+              name: email,
+              color: '#4285F4',
+              accessToken: account.access_token,
+              refreshToken: account.refresh_token ?? null,
+              expiresAt: account.expires_at ? new Date(account.expires_at * 1000) : null,
+            },
+          })
+        } else {
+          await prisma.calendarAccount.update({
+            where: { id: existing.id },
+            data: {
+              accessToken: account.access_token,
+              ...(account.refresh_token ? { refreshToken: account.refresh_token } : {}),
+              ...(account.expires_at ? { expiresAt: new Date(account.expires_at * 1000) } : {}),
+            },
+          })
+        }
+      } catch (err) {
+        console.error('[auth] CalendarAccount sync failed:', err)
+      }
+      return true
+    },
     jwt({ token, user }) {
       if (user?.id) token.sub = user.id
       return token
