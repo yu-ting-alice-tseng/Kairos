@@ -18,12 +18,14 @@ export async function GET() {
   try {
     const oauthAccounts = await prisma.account.findMany({
       where: { userId, provider: { in: ['google', 'microsoft-entra-id'] } },
-      include: { user: { select: { email: true } } },
     })
+    const dbUser = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } })
     for (const oauth of oauthAccounts) {
       const config = OAUTH_PROVIDER_MAP[oauth.provider]
       if (!config || !oauth.access_token) continue
-      const email = oauth.user?.email
+      // Use the primary user email as fallback — but this only works for the sign-in account.
+      // Additional Google accounts connected via calendar-connect already have their own CalendarAccount.
+      const email = dbUser?.email
       if (!email) continue
       const existing = await prisma.calendarAccount.findFirst({
         where: { userId, provider: config.provider, name: email },

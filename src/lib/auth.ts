@@ -41,11 +41,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     error: '/auth/error',
   },
   callbacks: {
-    async signIn({ user, account }) {
-      // On Google/Notion sign-in, upsert a CalendarAccount using email as unique key
+    async signIn({ user, account, profile }) {
+      // On Google sign-in, upsert a CalendarAccount using the OAuth profile email as unique key.
+      // Must use profile.email (the actual Google account email), NOT user.email
+      // (which is the DB User's email and may belong to a different linked account).
       if (!user?.id || !account?.access_token) return true
       if (account.provider !== 'google') return true
-      const email = (user as { email?: string }).email
+      const email = (profile as { email?: string } | undefined)?.email ?? (user as { email?: string }).email
       if (!email) return true
       try {
         const existing = await prisma.calendarAccount.findFirst({
