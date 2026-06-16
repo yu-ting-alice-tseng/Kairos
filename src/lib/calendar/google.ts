@@ -56,19 +56,22 @@ export async function createGoogleEvent(
     start: Date
     end: Date
     colorId?: string
+    allDay?: boolean
   },
   refreshToken?: string
 ): Promise<string> {
   const auth = getOAuth2Client(accessToken, refreshToken)
   const calendar = google.calendar({ version: 'v3', auth })
 
+  const toDateStr = (d: Date) => d.toISOString().split('T')[0]
+
   const res = await calendar.events.insert({
     calendarId,
     requestBody: {
       summary: event.title,
       description: event.description,
-      start: { dateTime: event.start.toISOString() },
-      end: { dateTime: event.end.toISOString() },
+      start: event.allDay ? { date: toDateStr(event.start) } : { dateTime: event.start.toISOString() },
+      end: event.allDay ? { date: toDateStr(event.end) } : { dateTime: event.end.toISOString() },
       colorId: event.colorId,
     },
   })

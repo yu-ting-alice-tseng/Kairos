@@ -1,7 +1,9 @@
 import { signIn, auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
-import { Zap, Target, Brain, CalendarDays, Flame } from 'lucide-react'
+import { Target, Brain, CalendarDays, Flame } from 'lucide-react'
 import { DemoLoginButton } from '@/components/auth/DemoLoginButton'
+import { ChiseledWall } from '@/components/ui/ChiseledWall'
+import { InkMountains } from '@/components/ui/InkMountains'
 
 export default async function SignInPage() {
   const session = await auth()
@@ -15,41 +17,51 @@ export default async function SignInPage() {
   ]
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#07050f] flex items-center justify-center p-4">
+    <div className="relative min-h-screen overflow-hidden bg-[#1b1612] flex items-center justify-center p-4">
 
-      {/* ── Animated background orbs ── */}
+      {/* ── Ink-wash background ── */}
       <div className="pointer-events-none absolute inset-0">
-        <div className="orb-1 absolute -top-56 -left-40 h-[520px] w-[520px] rounded-full bg-indigo-600/20 blur-[80px]" />
-        <div className="orb-2 absolute -bottom-56 -right-40 h-[480px] w-[480px] rounded-full bg-violet-600/15 blur-[80px]" />
-        <div className="orb-3 absolute top-1/3 left-1/2 -translate-x-1/2 h-72 w-72 rounded-full bg-purple-500/10 blur-[60px]" />
-        {/* Fine star-dots */}
-        <div className="absolute top-[18%] left-[22%] h-1 w-1 rounded-full bg-white/20" />
-        <div className="absolute top-[35%] right-[28%] h-1.5 w-1.5 rounded-full bg-indigo-300/25" />
-        <div className="absolute bottom-[25%] left-[35%] h-1 w-1 rounded-full bg-violet-300/20" />
-        <div className="absolute top-[72%] right-[18%] h-1 w-1 rounded-full bg-white/15" />
+        <div
+          className="absolute inset-0 opacity-90"
+          style={{
+            backgroundImage:
+              "radial-gradient(ellipse 70% 45% at 12% 0%, rgba(171,51,38,0.14), transparent), radial-gradient(ellipse 60% 40% at 92% 8%, rgba(176,137,72,0.10), transparent), url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+          }}
+        />
+        <div className="absolute bottom-0 left-0 right-0">
+          <InkMountains className="opacity-60" />
+        </div>
+        {/* Drifting ink blooms */}
+        <div className="orb-1 absolute -top-56 -left-40 h-[520px] w-[520px] rounded-full bg-[#ab3326]/[0.10] blur-[90px]" />
+        <div className="orb-2 absolute -bottom-56 -right-40 h-[480px] w-[480px] rounded-full bg-[#b08948]/[0.10] blur-[90px]" />
+        {/* Fine gold dust */}
+        <div className="absolute top-[18%] left-[22%] h-1 w-1 rounded-full bg-[#e8d9b8]/25" />
+        <div className="absolute top-[35%] right-[28%] h-1.5 w-1.5 rounded-full bg-[#cba968]/30" />
+        <div className="absolute bottom-[38%] left-[35%] h-1 w-1 rounded-full bg-[#e8d9b8]/20" />
+        <div className="absolute top-[72%] right-[18%] h-1 w-1 rounded-full bg-[#cba968]/20" />
       </div>
 
       {/* ── Card ── */}
       <div className="relative z-10 w-full max-w-[420px] animate-fade-in-scale">
 
-        {/* Logo */}
+        {/* Hero — 鑿壁偷光 */}
         <div className="text-center mb-9">
           <div className="inline-flex items-center justify-center mb-5">
-            <div className="relative h-[72px] w-[72px] rounded-[22px] bg-gradient-to-br from-indigo-400 via-violet-500 to-purple-700 shadow-2xl shadow-indigo-500/40 flex items-center justify-center animate-float">
-              <Zap className="h-9 w-9 text-white drop-shadow" />
-              <div className="absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/20 to-transparent pointer-events-none" />
+            <div className="relative h-[88px] w-[88px] rounded-[22px] overflow-hidden shadow-2xl shadow-black/40 animate-float ring-1 ring-[rgba(225,200,150,0.14)]">
+              <ChiseledWall className="h-full w-full" />
             </div>
           </div>
-          <h1 className="text-[34px] font-bold text-white tracking-tight mb-1.5">FlowPlan</h1>
-          <p className="text-indigo-300/80 text-sm font-medium tracking-wide">
-            Planifiez intelligent. Vivez mieux.
+          <h1 className="text-[36px] font-brush text-[#e8d9b8] tracking-tight mb-1 leading-none">流光計劃</h1>
+          <p className="text-[#8a7a5e] text-sm font-medium tracking-wide mb-2">FlowPlan</p>
+          <p className="text-[#cba968]/80 text-[13px] font-medium tracking-wide">
+            鑿壁偷光 · 篤志而行 — Planifiez intelligent. Vivez mieux.
           </p>
         </div>
 
         {/* Main card */}
-        <div className="rounded-[28px] border border-white/[0.09] bg-white/[0.05] backdrop-blur-xl shadow-2xl p-8">
-          <h2 className="text-lg font-semibold text-white text-center mb-1.5">Connexion</h2>
-          <p className="text-[13px] text-white/40 text-center mb-7 leading-relaxed">
+        <div className="rounded-[28px] border border-[rgba(225,200,150,0.12)] bg-[#241d17]/70 backdrop-blur-xl shadow-2xl p-8">
+          <h2 className="text-lg font-semibold text-[#e8d9b8] text-center mb-1.5">Connexion</h2>
+          <p className="text-[13px] text-[#8a7a5e] text-center mb-7 leading-relaxed">
             Connectez-vous avec votre compte Google ou Notion
           </p>
 
@@ -61,7 +73,7 @@ export default async function SignInPage() {
             }}>
               <button
                 type="submit"
-                className="group w-full flex items-center justify-center gap-3 rounded-2xl bg-white px-4 py-3.5 text-sm font-semibold text-gray-800 shadow-lg shadow-black/20 hover:bg-gray-50 transition-all duration-200 hover:scale-[1.015] active:scale-[0.99]"
+                className="group w-full flex items-center justify-center gap-3 rounded-2xl bg-[#fbf7ee] px-4 py-3.5 text-sm font-semibold text-[#3a3326] shadow-lg shadow-black/20 hover:bg-[#f3ecdd] transition-all duration-200 hover:scale-[1.015] active:scale-[0.99]"
               >
                 <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
@@ -79,7 +91,7 @@ export default async function SignInPage() {
             }}>
               <button
                 type="submit"
-                className="w-full flex items-center justify-center gap-3 rounded-2xl bg-white/[0.08] border border-white/[0.12] px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-black/20 hover:bg-white/[0.13] transition-all duration-200 hover:scale-[1.015] active:scale-[0.99]"
+                className="w-full flex items-center justify-center gap-3 rounded-2xl bg-[#fbf7ee]/[0.06] border border-[rgba(225,200,150,0.14)] px-4 py-3.5 text-sm font-semibold text-[#e8d9b8] shadow-lg shadow-black/20 hover:bg-[#fbf7ee]/[0.10] transition-all duration-200 hover:scale-[1.015] active:scale-[0.99]"
               >
                 <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L17.86 1.968c-.42-.326-.981-.7-2.055-.607L3.01 2.295c-.466.046-.56.28-.374.466zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.841-.046.935-.56.935-1.167V6.354c0-.606-.233-.933-.748-.887l-15.177.887c-.56.047-.747.327-.747.934zm14.337.745c.093.42 0 .84-.42.888l-.7.14v10.264c-.608.327-1.168.514-1.635.514-.748 0-.935-.234-1.495-.933l-4.577-7.186v6.952L12.21 19s0 .84-1.168.84l-3.222.186c-.093-.186 0-.653.327-.746l.84-.233V9.854L7.822 9.76c-.094-.42.14-1.026.793-1.073l3.456-.233 4.764 7.279v-6.44l-1.215-.139c-.093-.514.28-.887.747-.933zM1.936 1.035l13.31-.98c1.634-.14 2.055-.047 3.082.7l4.249 2.986c.7.513.934.653.934 1.213v16.378c0 1.026-.373 1.634-1.68 1.726l-15.458.934c-.98.047-1.448-.093-1.962-.747l-3.129-4.06c-.56-.747-.793-1.306-.793-1.96V2.667c0-.839.374-1.54 1.447-1.632z" />
@@ -90,8 +102,8 @@ export default async function SignInPage() {
           </div>
 
           {/* Remember me — session lasts 1 year by default */}
-          <p className="flex items-center gap-2 text-[12px] text-white/30 px-1 mt-1">
-            <svg className="h-3.5 w-3.5 text-indigo-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <p className="flex items-center gap-2 text-[12px] text-[#6e6147] px-1 mt-1">
+            <svg className="h-3.5 w-3.5 text-[#c44a3a] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
             Vous resterez connecté(e) pendant 1 an
@@ -101,9 +113,9 @@ export default async function SignInPage() {
 
           {/* Divider */}
           <div className="flex items-center gap-3 my-6">
-            <div className="flex-1 h-px bg-white/[0.07]" />
-            <span className="text-[11px] text-white/25 uppercase tracking-widest">Fonctionnalités</span>
-            <div className="flex-1 h-px bg-white/[0.07]" />
+            <div className="flex-1 h-px bg-[rgba(225,200,150,0.10)]" />
+            <span className="text-[11px] text-[#6e6147] uppercase tracking-widest">Fonctionnalités</span>
+            <div className="flex-1 h-px bg-[rgba(225,200,150,0.10)]" />
           </div>
 
           {/* Feature pills */}
@@ -111,16 +123,16 @@ export default async function SignInPage() {
             {features.map(({ icon: Icon, label }) => (
               <div
                 key={label}
-                className="flex items-center gap-2 rounded-xl bg-white/[0.04] border border-white/[0.06] px-3 py-2"
+                className="flex items-center gap-2 rounded-xl bg-[#fbf7ee]/[0.03] border border-[rgba(225,200,150,0.08)] px-3 py-2"
               >
-                <Icon className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
-                <span className="text-[11px] text-white/45 leading-snug">{label}</span>
+                <Icon className="h-3.5 w-3.5 text-[#c44a3a] shrink-0" />
+                <span className="text-[11px] text-[#a99873] leading-snug">{label}</span>
               </div>
             ))}
           </div>
         </div>
 
-        <p className="text-center text-[11.5px] text-white/25 mt-5">
+        <p className="text-center text-[11.5px] text-[#6e6147] mt-5">
           Vos données restent privées et sécurisées.
         </p>
       </div>

@@ -10,13 +10,15 @@ import { BreakdownDialog } from '@/components/ai/BreakdownDialog'
 import { AIChat } from '@/components/ai/AIChat'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Sundial } from '@/components/ui/Sundial'
+import { Candle } from '@/components/ui/Candle'
 import { generatePriorityList, formatDate, formatTime } from '@/lib/utils'
 import {
   Plus, Sparkles, Sun, Flame, RefreshCw, MessageSquare, ChevronRight,
   CheckCircle2, Clock, Loader2, X, AlarmCheck, Zap,
 } from 'lucide-react'
 import { format } from 'date-fns'
-import { fr, enUS } from 'date-fns/locale'
+import { fr, enUS, zhTW } from 'date-fns/locale'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
 
 const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === 'true'
@@ -36,7 +38,7 @@ export default function TodayPage() {
   const [rescheduleSuggestion, setRescheduleSuggestion] = useState<{ start: string; end: string; reason: string } | null>(null)
   const [rescheduleLoading, setRescheduleLoading] = useState(false)
 
-  const today = format(new Date(), 'PPPP', { locale: language === 'fr' ? fr : enUS })
+  const today = format(new Date(), 'PPPP', { locale: language === 'fr' ? fr : language === 'zh' ? zhTW : enUS })
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -64,14 +66,26 @@ export default function TodayPage() {
   )
 
   const handleComplete = async (id: string) => {
+    const task = tasks.find((t) => t.id === id)
+    if (!task) return
+    const isCompleted = task.status === 'COMPLETED'
+    const newStatus = isCompleted ? 'PENDING' : 'COMPLETED'
+    const nowStr = new Date().toISOString()
+
+    // Optimistic update — UI responds immediately
+    setTasks(tasks.map((t) => t.id === id ? { ...t, status: newStatus, completedAt: isCompleted ? null : nowStr } : t))
+
     const res = await fetch(`/api/tasks/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'COMPLETED' }),
+      body: JSON.stringify({ status: newStatus }),
     })
-    if (res.ok) {
-      setTasks(tasks.map((t) => t.id === id ? { ...t, status: 'COMPLETED', completedAt: new Date().toISOString() } : t))
-      toast({ title: language === 'fr' ? 'Tâche terminée !' : 'Task completed!', variant: 'success' })
+    if (!res.ok) {
+      // Revert on error
+      setTasks(tasks.map((t) => t.id === id ? task : t))
+      toast({ title: language === 'fr' ? 'Erreur de mise à jour' : language === 'zh' ? '更新失敗' : 'Update failed', variant: 'error' })
+    } else if (!isCompleted) {
+      toast({ title: language === 'fr' ? 'Tâche terminée !' : language === 'zh' ? '任務已完成！' : 'Task completed!', variant: 'success' })
     }
   }
 
@@ -95,7 +109,7 @@ export default function TodayPage() {
       if (res.ok) {
         const created = await res.json()
         setTasks([...tasks, created])
-        toast({ title: language === 'fr' ? 'Tâche créée !' : 'Task created!', variant: 'success' })
+        toast({ title: language === 'fr' ? 'Tâche créée !' : language === 'zh' ? '任務已建立！' : 'Task created!', variant: 'success' })
       }
     }
     setEditingTask(null)
@@ -108,7 +122,7 @@ export default function TodayPage() {
 
   const handleBreakdownAccept = async (task: Task, subTasks: { title: string; description: string; estimatedMinutes: number; importance: number; urgency: number }[]) => {
     await loadData()
-    toast({ title: language === 'fr' ? 'Sous-tâches créées !' : 'Subtasks created!', variant: 'success' })
+    toast({ title: language === 'fr' ? 'Sous-tâches créées !' : language === 'zh' ? '子任務已建立！' : 'Subtasks created!', variant: 'success' })
   }
 
   const handleGenerateRecap = async () => {
@@ -156,7 +170,7 @@ export default function TodayPage() {
     await loadData()
     setRescheduleTask(null)
     setRescheduleSuggestion(null)
-    toast({ title: language === 'fr' ? 'Tâche reprogrammée !' : 'Task rescheduled!', variant: 'success' })
+    toast({ title: language === 'fr' ? 'Tâche reprogrammée !' : language === 'zh' ? '任務已重新排程！' : 'Task rescheduled!', variant: 'success' })
   }
 
   const todayHabits = habits.filter((h) => {
@@ -175,8 +189,24 @@ export default function TodayPage() {
     })
     if (res.ok) {
       const { streak } = await res.json()
-      setHabits(habits.map((h) => h.id === habitId ? { ...h, streak } : h))
-      toast({ title: language === 'fr' ? `Habitude accomplie ! 🔥 Série: ${streak}` : `Habit done! 🔥 Streak: ${streak}`, variant: 'success' })
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+      setHabits(habits.map((h) => h.id === habitId
+        ? { ...h, streak, completions: [{ id: 'tmp', habitId, completedAt: new Date().toISOString() }] }
+        : h
+      ))
+      toast({ title: language === 'fr' ? `Habitude accomplie ! 🔥 Série: ${streak}` : language === 'zh' ? `習慣已完成！🔥 連續天數：${streak}` : `Habit done! 🔥 Streak: ${streak}`, variant: 'success' })
+    }
+  }
+
+  const handleUncompleteHabit = async (habitId: string) => {
+    const res = await fetch('/api/habits/complete', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ habitId }),
+    })
+    if (res.ok) {
+      const { streak } = await res.json()
+      setHabits(habits.map((h) => h.id === habitId ? { ...h, streak, completions: [] } : h))
     }
   }
 
@@ -184,10 +214,10 @@ export default function TodayPage() {
     return (
       <div className="flex h-full items-center justify-center bg-[#f7f6ff]">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30 animate-float">
+          <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-red-500 to-amber-700 flex items-center justify-center shadow-lg shadow-red-500/30 animate-float">
             <Zap className="h-5 w-5 text-white" />
           </div>
-          <Loader2 className="h-5 w-5 animate-spin text-indigo-400" />
+          <Loader2 className="h-5 w-5 animate-spin text-red-400" />
         </div>
       </div>
     )
@@ -195,32 +225,30 @@ export default function TodayPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[#ebe8f8] bg-white/80 backdrop-blur-sm sticky top-0 z-10">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e2d6bc] bg-[#fbf7ee]/85 backdrop-blur-sm sticky top-0 z-10">
         <div>
-          <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-sm shadow-amber-500/30">
-              <Sun className="h-3.5 w-3.5 text-white" />
-            </div>
-            <h1 className="text-xl font-bold text-[#0f0d1e] tracking-tight">{t('today', language)}</h1>
+          <div className="flex items-center gap-2.5">
+            <Sundial className="h-8 w-8" />
+            <h1 className="text-2xl font-brush text-[#2a2420] tracking-tight leading-none">{t('today', language)}</h1>
           </div>
-          <p className="text-[13px] text-[#9896a8] mt-0.5 capitalize pl-9">{today}</p>
+          <p className="text-[13px] text-[#8a7a5e] mt-1 capitalize pl-[42px]">{today}</p>
         </div>
         <div className="flex items-center gap-2">
           {AI_ENABLED && (
             <Button variant="outline" size="sm" onClick={handleGenerateRecap} disabled={recapLoading}
-              className="border-[#ebe8f8] text-[#4a4866] hover:bg-[#f7f6ff] hover:border-indigo-200 transition-all">
+              className="border-[#e2d6bc] text-[#5c5347] hover:bg-[#f3ecdd] hover:border-[#cba968] transition-all">
               {recapLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               {t('morningRecap', language)}
             </Button>
           )}
           {AI_ENABLED && (
             <Button variant="ghost" size="icon" onClick={() => setShowChat(!showChat)}
-              className="text-[#9896a8] hover:text-indigo-600 hover:bg-[#f7f6ff]">
+              className="text-[#8a7a5e] hover:text-[#ab3326] hover:bg-[#f3ecdd]">
               <MessageSquare className="h-4 w-4" />
             </Button>
           )}
           <Button size="sm" onClick={() => setShowTaskForm(true)}
-            className="bg-gradient-to-br from-indigo-500 to-violet-600 hover:from-indigo-400 hover:to-violet-500 text-white border-0 shadow-md shadow-indigo-500/25 transition-all hover:scale-[1.02] active:scale-[0.98]">
+            className="bg-gradient-to-br from-[#c44a3a] to-[#861f17] hover:from-[#ab3326] hover:to-[#6e190f] text-[#f3ecdd] border-0 shadow-md shadow-[#ab3326]/25 transition-all hover:scale-[1.02] active:scale-[0.98]">
             <Plus className="h-4 w-4" />
             {t('addTask', language)}
           </Button>
@@ -230,15 +258,15 @@ export default function TodayPage() {
       <div className="flex-1 flex min-h-0 overflow-hidden">
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 animate-fade-in">
           {AI_ENABLED && recap && (
-            <div className="relative rounded-2xl bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 p-5">
-              <button onClick={() => setRecap(null)} className="absolute right-3 top-3 p-1 rounded-lg hover:bg-white/50 text-gray-400">
+            <div className="relative rounded-2xl bg-gradient-to-br from-red-50 to-amber-50 border border-red-100 p-5">
+              <button onClick={() => setRecap(null)} className="absolute right-3 top-3 p-1 rounded-lg hover:bg-[#fbf7ee]/50 text-[#a99873]">
                 <X className="h-4 w-4" />
               </button>
               <div className="flex items-center gap-2 mb-3">
-                <Sparkles className="h-4 w-4 text-indigo-600" />
-                <span className="text-sm font-semibold text-indigo-700">{t('morningRecap', language)}</span>
+                <Sparkles className="h-4 w-4 text-red-800" />
+                <span className="text-sm font-semibold text-red-900">{t('morningRecap', language)}</span>
               </div>
-              <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">{recap}</p>
+              <p className="text-sm text-[#5c5347] whitespace-pre-line leading-relaxed">{recap}</p>
             </div>
           )}
 
@@ -257,12 +285,12 @@ export default function TodayPage() {
               {rescheduleLoading && <Loader2 className="h-5 w-5 animate-spin text-amber-600" />}
               {rescheduleSuggestion && (
                 <div className="flex flex-col gap-3">
-                  <div className="rounded-xl bg-white border border-amber-200 p-3">
-                    <p className="text-xs font-semibold text-gray-600 mb-1">{language === 'fr' ? 'Créneau suggéré' : 'Suggested slot'}</p>
-                    <p className="text-sm font-medium text-gray-900">
+                  <div className="rounded-xl bg-[#fbf7ee] border border-amber-200 p-3">
+                    <p className="text-xs font-semibold text-[#6e6147] mb-1">{language === 'fr' ? 'Créneau suggéré' : language === 'zh' ? '建議時段' : 'Suggested slot'}</p>
+                    <p className="text-sm font-medium text-[#2a2420]">
                       {formatDate(rescheduleSuggestion.start, language)} · {formatTime(rescheduleSuggestion.start)} – {formatTime(rescheduleSuggestion.end)}
                     </p>
-                    <p className="text-xs text-gray-500 mt-1">{rescheduleSuggestion.reason}</p>
+                    <p className="text-xs text-[#8a7a5e] mt-1">{rescheduleSuggestion.reason}</p>
                   </div>
                   <div className="flex gap-2">
                     <Button size="sm" onClick={handleConfirmReschedule}>{t('confirm', language)}</Button>
@@ -276,42 +304,42 @@ export default function TodayPage() {
           <div className="grid grid-cols-3 gap-4 stagger">
             {[
               {
-                label: language === 'fr' ? 'À faire' : 'To do',
+                label: language === 'fr' ? 'À faire' : language === 'zh' ? '待辦' : 'To do',
                 value: prioritizedTasks.length,
                 icon: AlarmCheck,
-                gradient: 'from-indigo-500 to-violet-600',
-                shadow: 'shadow-indigo-500/20',
-                textColor: 'text-indigo-700',
-                bg: 'bg-gradient-to-br from-indigo-50 to-violet-50',
-                border: 'border-indigo-100',
+                gradient: 'from-[#c44a3a] to-[#861f17]',
+                shadow: 'shadow-[#ab3326]/20',
+                textColor: 'text-[#861f17]',
+                bg: 'bg-gradient-to-br from-[#ab3326]/[0.06] to-[#b08948]/[0.06]',
+                border: 'border-[#e2d6bc]',
               },
               {
-                label: language === 'fr' ? 'Terminées' : 'Completed',
+                label: language === 'fr' ? 'Terminées' : language === 'zh' ? '已完成' : 'Completed',
                 value: completedToday.length,
                 icon: CheckCircle2,
-                gradient: 'from-emerald-400 to-teal-500',
-                shadow: 'shadow-emerald-500/20',
-                textColor: 'text-emerald-700',
-                bg: 'bg-gradient-to-br from-emerald-50 to-teal-50',
-                border: 'border-emerald-100',
+                gradient: 'from-[#4f6f5e] to-[#3d5a4b]',
+                shadow: 'shadow-[#4f6f5e]/20',
+                textColor: 'text-[#3d5a4b]',
+                bg: 'bg-gradient-to-br from-[#4f6f5e]/[0.07] to-[#4f6f5e]/[0.03]',
+                border: 'border-[#e2d6bc]',
               },
               {
-                label: language === 'fr' ? 'Habitudes' : 'Habits',
+                label: language === 'fr' ? 'Habitudes' : language === 'zh' ? '習慣' : 'Habits',
                 value: todayHabits.length,
                 icon: Flame,
-                gradient: 'from-amber-400 to-orange-500',
-                shadow: 'shadow-amber-500/20',
-                textColor: 'text-amber-700',
-                bg: 'bg-gradient-to-br from-amber-50 to-orange-50',
-                border: 'border-amber-100',
+                gradient: 'from-[#cba968] to-[#b08948]',
+                shadow: 'shadow-[#b08948]/20',
+                textColor: 'text-[#8a6a32]',
+                bg: 'bg-gradient-to-br from-[#b08948]/[0.08] to-[#b08948]/[0.03]',
+                border: 'border-[#e2d6bc]',
               },
             ].map(({ label, value, icon: Icon, gradient, shadow, textColor, bg, border }) => (
-              <div key={label} className={`card-lift rounded-2xl border ${border} ${bg} p-4 flex items-center gap-3.5`}>
+              <div key={label} className={`card-lift rounded-2xl border ${border} ${bg} paper-surface p-4 flex items-center gap-3.5`}>
                 <div className={`h-9 w-9 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md ${shadow} shrink-0`}>
-                  <Icon className="h-4.5 w-4.5 text-white h-[18px] w-[18px]" />
+                  <Icon className="h-4.5 w-4.5 text-[#f3ecdd] h-[18px] w-[18px]" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-[#0f0d1e] leading-none mb-0.5">{value}</p>
+                  <p className="text-2xl font-bold text-[#2a2420] leading-none mb-0.5">{value}</p>
                   <p className={`text-xs font-medium ${textColor}`}>{label}</p>
                 </div>
               </div>
@@ -320,8 +348,8 @@ export default function TodayPage() {
 
           {todayHabits.length > 0 && (
             <div>
-              <h2 className="text-sm font-semibold text-[#4a4866] mb-3 flex items-center gap-2">
-                <Flame className="h-4 w-4 text-amber-500" />
+              <h2 className="text-sm font-semibold text-[#5c5347] mb-3 flex items-center gap-2">
+                <Candle className="h-4 w-3.5" />
                 {t('habits', language)}
               </h2>
               <div className="flex flex-wrap gap-2">
@@ -330,22 +358,23 @@ export default function TodayPage() {
                   return (
                     <button
                       key={habit.id}
-                      onClick={() => doneToday === 0 && handleCompleteHabit(habit.id)}
+                      onClick={() => doneToday > 0 ? handleUncompleteHabit(habit.id) : handleCompleteHabit(habit.id)}
                       className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm border transition-all ${
                         doneToday > 0
-                          ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                          : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                          ? 'bg-[#4f6f5e]/10 border-[#4f6f5e]/30 text-[#3d5a4b] hover:bg-[#ab3326]/10 hover:border-[#ab3326]/30 hover:text-[#861f17]'
+                          : 'bg-[#fbf7ee] border-[#e2d6bc] text-[#5c5347] hover:border-[#cba968] hover:bg-[#f3ecdd]'
                       }`}
+                      title={doneToday > 0 ? (language === 'fr' ? 'Annuler' : language === 'zh' ? '取消' : 'Undo') : undefined}
                     >
                       <span className="h-2 w-2 rounded-full" style={{ backgroundColor: habit.color }} />
                       {habit.title}
                       {habit.streak > 0 && (
-                        <span className="flex items-center gap-0.5 text-xs text-amber-600">
+                        <span className="flex items-center gap-0.5 text-xs text-[#8a6a32]">
                           <Flame className="h-3 w-3" />
                           {habit.streak}
                         </span>
                       )}
-                      {doneToday > 0 && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
+                      {doneToday > 0 && <CheckCircle2 className="h-3.5 w-3.5 text-[#4f6f5e]" />}
                     </button>
                   )
                 })}
@@ -356,20 +385,20 @@ export default function TodayPage() {
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-[#4a4866] flex items-center gap-2">
-                <Clock className="h-4 w-4 text-indigo-500" />
-                {language === 'fr' ? 'Tâches prioritaires' : 'Priority tasks'}
-                <Badge variant="default" className="text-xs bg-indigo-100 text-indigo-700 border-0">{prioritizedTasks.length}</Badge>
+                <Clock className="h-4 w-4 text-red-500" />
+                {language === 'fr' ? 'Tâches prioritaires' : language === 'zh' ? '優先任務' : 'Priority tasks'}
+                <Badge variant="default" className="text-xs bg-red-100 text-red-900 border-0">{prioritizedTasks.length}</Badge>
               </h2>
             </div>
 
             {prioritizedTasks.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#ebe8f8] py-12 text-center bg-white/60">
+              <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#ebe8f8] py-12 text-center bg-[#fbf7ee]/60">
                 <div className="h-14 w-14 rounded-2xl bg-[#f7f6ff] border border-[#ebe8f8] flex items-center justify-center mb-4">
-                  <CheckCircle2 className="h-7 w-7 text-indigo-300" />
+                  <CheckCircle2 className="h-7 w-7 text-red-300" />
                 </div>
                 <p className="text-sm font-medium text-[#9896a8]">{t('noTasks', language)}</p>
                 <Button variant="outline" size="sm"
-                  className="mt-4 border-[#ebe8f8] text-[#4a4866] hover:bg-[#f7f6ff] hover:border-indigo-200"
+                  className="mt-4 border-[#ebe8f8] text-[#4a4866] hover:bg-[#f7f6ff] hover:border-red-200"
                   onClick={() => setShowTaskForm(true)}>
                   <Plus className="h-4 w-4" />
                   {t('addTask', language)}
@@ -379,7 +408,7 @@ export default function TodayPage() {
               <div className="flex flex-col gap-2.5 stagger">
                 {prioritizedTasks.map((task, index) => (
                   <div key={task.id} className="flex items-start gap-3">
-                    <span className="h-6 w-6 flex items-center justify-center rounded-full bg-indigo-50 text-xs font-bold text-indigo-400 shrink-0 mt-3 border border-indigo-100">
+                    <span className="h-6 w-6 flex items-center justify-center rounded-full bg-red-50 text-xs font-bold text-red-400 shrink-0 mt-3 border border-red-100">
                       {index + 1}
                     </span>
                     <div className="flex-1">
@@ -403,7 +432,7 @@ export default function TodayPage() {
             <div>
               <h2 className="text-sm font-semibold text-[#b8b4cc] mb-3 flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4" />
-                {language === 'fr' ? `Terminées aujourd'hui (${completedToday.length})` : `Completed today (${completedToday.length})`}
+                {language === 'fr' ? `Terminées aujourd'hui (${completedToday.length})` : language === 'zh' ? `今日已完成 (${completedToday.length})` : `Completed today (${completedToday.length})`}
               </h2>
               <div className="flex flex-col gap-2">
                 {completedToday.slice(0, 5).map((task) => (
@@ -425,7 +454,7 @@ export default function TodayPage() {
         </div>
 
         {AI_ENABLED && showChat && (
-          <div className="w-80 shrink-0 border-l border-gray-100 overflow-hidden flex flex-col">
+          <div className="w-80 shrink-0 border-l border-[#ece2cb] overflow-hidden flex flex-col">
             <AIChat lang={language} onClose={() => setShowChat(false)} />
           </div>
         )}
@@ -435,6 +464,7 @@ export default function TodayPage() {
         open={showTaskForm}
         onClose={() => { setShowTaskForm(false); setEditingTask(null) }}
         onSave={handleSaveTask}
+        onDelete={handleDelete}
         task={editingTask}
         calendarAccounts={calendarAccounts}
         lang={language}

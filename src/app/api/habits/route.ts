@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isDemoUser, getDemoHabits } from '@/lib/demo-data'
+import { createGoogleEvent } from '@/lib/calendar/google'
 import { z } from 'zod'
 
 const createHabitSchema = z.object({
@@ -13,6 +14,8 @@ const createHabitSchema = z.object({
   targetDays: z.string().optional(),
   scheduledTime: z.string().optional(),
   durationMinutes: z.number().optional(),
+  calendarAccountId: z.string().optional(),
+  calendarId: z.string().optional(),
 })
 
 export async function GET() {
@@ -47,8 +50,32 @@ export async function POST(req: NextRequest) {
   const parsed = createHabitSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 })
 
+  let calendarEventId: string | undefined
+
+  if (parsed.data.calendarAccountId && parsed.data.calendarId) {
+    try {
+      const account = await prisma.calendarAccount.findFirst({
+        where: { id: parsed.data.calendarAccountId, userId: session.user.id },
+      })
+      if (account?.accessToken) {
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const tomorrow = new Date(today)
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        calendarEventId = await createGoogleEvent(
+          account.accessToken,
+          parsed.data.calendarId,
+          { title: parsed.data.title, allDay: true, start: today, end: tomorrow },
+          account.refreshToken ?? undefined
+        )
+      }
+    } catch (err) {
+      console.error('Failed to create habit calendar event:', err)
+    }
+  }
+
   const habit = await prisma.habit.create({
-    data: { userId: session.user.id, ...parsed.data },
+    data: { userId: session.user.id, ...parsed.data, ...(calendarEventId ? { calendarEventId } : {}) },
   })
 
   return NextResponse.json(habit, { status: 201 })

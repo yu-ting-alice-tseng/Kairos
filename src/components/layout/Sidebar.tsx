@@ -9,15 +9,18 @@ import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import {
   Zap, LayoutGrid, Calendar, Repeat2, Settings, LogOut,
-  ChevronLeft, ChevronRight, Globe,
+  ChevronLeft, ChevronRight, Globe, GitBranch,
 } from 'lucide-react'
 
+const LANG_LABEL: Record<'fr' | 'en' | 'zh', string> = { fr: 'EN', en: '中', zh: 'FR' }
+
 const navItems = [
-  { href: '/today',    icon: Zap,        key: 'today'    as const },
-  { href: '/matrix',   icon: LayoutGrid, key: 'matrix'   as const },
-  { href: '/calendar', icon: Calendar,   key: 'calendar' as const },
-  { href: '/habits',   icon: Repeat2,    key: 'habits'   as const },
-  { href: '/settings', icon: Settings,   key: 'settings' as const },
+  { href: '/today',          icon: Zap,        key: 'today'        as const },
+  { href: '/matrix',         icon: LayoutGrid, key: 'matrix'       as const },
+  { href: '/calendar',       icon: Calendar,   key: 'calendar'     as const },
+  { href: '/habits',         icon: Repeat2,    key: 'habits'       as const },
+  { href: '/retroplanning',  icon: GitBranch,  key: 'retroplanning' as const },
+  { href: '/settings',       icon: Settings,   key: 'settings'     as const },
 ]
 
 export function Sidebar() {
@@ -30,30 +33,36 @@ export function Sidebar() {
     <aside
       className={cn(
         'relative flex flex-col h-full transition-all duration-300 ease-in-out shrink-0',
-        'bg-[#0c0a17] border-r border-white/[0.06]',
-        collapsed ? 'w-[68px]' : 'w-[220px]'
+        'bg-[#1b1612] border-r border-[rgba(225,200,150,0.10)]',
+        collapsed ? 'w-[68px]' : 'w-[224px]'
       )}
+      style={{
+        backgroundImage:
+          "radial-gradient(ellipse 80% 40% at 50% 0%, rgba(171,51,38,0.10), transparent), url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+      }}
     >
       {/* ── Logo header ── */}
       <div className={cn(
-        'flex items-center border-b border-white/[0.06] px-4 h-[64px]',
+        'flex items-center border-b border-[rgba(225,200,150,0.10)] px-4 h-[68px]',
         collapsed ? 'justify-center' : 'justify-between'
       )}>
         <div className="flex items-center gap-2.5">
-          <div className="relative h-8 w-8 rounded-xl bg-gradient-to-br from-indigo-400 via-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/25 shrink-0">
-            <Zap className="h-4 w-4 text-white" />
-            {/* inner shine */}
-            <div className="absolute inset-0 rounded-xl bg-gradient-to-b from-white/20 to-transparent pointer-events-none" />
+          {/* 印章 Seal-stamp logo mark */}
+          <div className="seal-stamp h-9 w-9 text-[17px] shrink-0">
+            流
           </div>
           {!collapsed && (
-            <span className="font-bold text-white tracking-tight text-[15px]">FlowPlan</span>
+            <div className="flex flex-col leading-none">
+              <span className="font-brush text-[22px] text-[#e8d9b8] leading-none">流光計劃</span>
+              <span className="text-[9px] uppercase tracking-[0.18em] text-[#8a7a5e] mt-0.5">FlowPlan</span>
+            </div>
           )}
         </div>
 
         {!collapsed && (
           <button
             onClick={() => setCollapsed(true)}
-            className="p-1.5 rounded-lg text-white/25 hover:text-white/60 hover:bg-white/[0.06] transition-all"
+            className="p-1.5 rounded-lg text-[#7a6c54] hover:text-[#d9c79f] hover:bg-[#fbf7ee]/[0.06] transition-all"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -64,7 +73,7 @@ export function Sidebar() {
       {collapsed && (
         <button
           onClick={() => setCollapsed(false)}
-          className="absolute -right-[13px] top-[72px] z-10 h-6 w-6 rounded-full bg-[#1a1730] border border-white/10 shadow-lg flex items-center justify-center text-white/35 hover:text-white/70 transition-all"
+          className="absolute -right-[13px] top-[76px] z-10 h-6 w-6 rounded-full bg-[#241d17] border border-[rgba(225,200,150,0.14)] shadow-lg flex items-center justify-center text-[#8a7a5e] hover:text-[#d9c79f] transition-all"
         >
           <ChevronRight className="h-3 w-3" />
         </button>
@@ -74,40 +83,52 @@ export function Sidebar() {
       <nav className="flex-1 flex flex-col gap-0.5 p-3 pt-4 overflow-y-auto">
         {navItems.map(({ href, icon: Icon, key }) => {
           const active = pathname === href || (href !== '/today' && pathname.startsWith(href))
+          const isRetro = href === '/retroplanning'
           return (
-            <Link
-              key={href}
-              href={href}
-              title={collapsed ? t(key, language) : undefined}
-              className={cn(
-                'relative flex items-center gap-3 rounded-xl text-sm font-medium transition-all duration-200',
-                collapsed ? 'justify-center h-10 w-10 mx-auto' : 'px-3 py-2.5',
-                active
-                  ? 'bg-indigo-500/[0.18] text-indigo-300'
-                  : 'text-white/35 hover:bg-white/[0.06] hover:text-white/75'
+            <React.Fragment key={href}>
+              {isRetro && (
+                <div className={cn('my-1.5', collapsed ? 'px-1' : 'px-0')}>
+                  <div className="h-px bg-[rgba(225,200,150,0.10)]" />
+                  {!collapsed && (
+                    <span className="block text-[10px] font-semibold tracking-widest text-[#6e6147] uppercase mt-2 mb-0.5 px-3">
+                      Planning
+                    </span>
+                  )}
+                </div>
               )}
-            >
-              {active && <span className="nav-active-bar" />}
-              <Icon className="h-4 w-4 shrink-0" />
-              {!collapsed && <span>{t(key, language)}</span>}
-            </Link>
+              <Link
+                href={href}
+                title={collapsed ? t(key, language) : undefined}
+                className={cn(
+                  'relative flex items-center gap-3 rounded-xl text-sm font-medium transition-all duration-200',
+                  collapsed ? 'justify-center h-10 w-10 mx-auto' : 'px-3 py-2.5',
+                  active
+                    ? 'bg-[#ab3326]/[0.16] text-[#e2a08f]'
+                    : 'text-[#7a6c54] hover:bg-[#fbf7ee]/[0.05] hover:text-[#d9c79f]'
+                )}
+              >
+                {active && <span className="nav-active-bar" />}
+                <Icon className="h-4 w-4 shrink-0" />
+                {!collapsed && <span>{t(key, language)}</span>}
+              </Link>
+            </React.Fragment>
           )
         })}
       </nav>
 
       {/* ── Footer ── */}
-      <div className="p-3 border-t border-white/[0.06] flex flex-col gap-0.5">
-        {/* Language toggle */}
+      <div className="p-3 border-t border-[rgba(225,200,150,0.10)] flex flex-col gap-0.5">
+        {/* Language toggle — cycles FR → EN → 中 → FR */}
         <button
-          onClick={() => setLanguage(language === 'fr' ? 'en' : 'fr')}
-          title={collapsed ? (language === 'fr' ? 'EN' : 'FR') : undefined}
+          onClick={() => setLanguage(language === 'fr' ? 'en' : language === 'en' ? 'zh' : 'fr')}
+          title={collapsed ? LANG_LABEL[language] : undefined}
           className={cn(
-            'flex items-center gap-3 rounded-xl text-white/30 hover:bg-white/[0.06] hover:text-white/65 transition-all text-xs font-medium',
+            'flex items-center gap-3 rounded-xl text-[#6e6147] hover:bg-[#fbf7ee]/[0.05] hover:text-[#d9c79f] transition-all text-xs font-medium',
             collapsed ? 'justify-center h-10 w-10 mx-auto' : 'px-3 py-2'
           )}
         >
           <Globe className="h-4 w-4 shrink-0" />
-          {!collapsed && <span>{language === 'fr' ? 'EN' : 'FR'}</span>}
+          {!collapsed && <span>{LANG_LABEL[language]}</span>}
         </button>
 
         {/* User profile */}
@@ -120,18 +141,18 @@ export function Sidebar() {
               <img
                 src={session.user.image}
                 alt={session.user.name ?? ''}
-                className="h-7 w-7 rounded-full object-cover ring-2 ring-white/10 shrink-0"
+                className="h-7 w-7 rounded-full object-cover ring-2 ring-[rgba(225,200,150,0.14)] shrink-0"
               />
             ) : (
-              <div className="h-7 w-7 rounded-full bg-gradient-to-br from-indigo-400 to-violet-600 flex items-center justify-center shrink-0">
-                <span className="text-[11px] font-bold text-white">
+              <div className="h-7 w-7 rounded-full bg-gradient-to-br from-[#c44a3a] to-[#861f17] flex items-center justify-center shrink-0">
+                <span className="text-[11px] font-bold text-[#f3ecdd]">
                   {session.user.name?.[0]?.toUpperCase() ?? '?'}
                 </span>
               </div>
             )}
 
             {!collapsed && (
-              <p className="flex-1 min-w-0 text-xs font-medium text-white/55 truncate">
+              <p className="flex-1 min-w-0 text-xs font-medium text-[#a99873] truncate">
                 {session.user.name}
               </p>
             )}
@@ -139,7 +160,7 @@ export function Sidebar() {
             <Link
               href="/auth/signout"
               title={t('signOut', language)}
-              className="p-1.5 rounded-lg text-white/40 hover:text-red-400 hover:bg-red-500/10 transition-all shrink-0 flex items-center justify-center"
+              className="p-1.5 rounded-lg text-[#7a6c54] hover:text-[#c44a3a] hover:bg-[#ab3326]/10 transition-all shrink-0 flex items-center justify-center"
             >
               <LogOut className="h-3.5 w-3.5" />
             </Link>

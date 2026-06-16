@@ -1,7 +1,7 @@
 export type CalendarProvider = 'GOOGLE' | 'OUTLOOK' | 'APPLE' | 'NOTION' | 'LOCAL'
 export type TaskStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'MISSED' | 'RESCHEDULED' | 'CANCELLED'
 export type HabitFrequency = 'DAILY' | 'WEEKLY' | 'WEEKDAYS' | 'WEEKENDS' | 'CUSTOM'
-export type Language = 'fr' | 'en'
+export type Language = 'fr' | 'en' | 'zh'
 
 export interface Task {
   id: string
@@ -43,6 +43,8 @@ export interface Habit {
   scheduledTime?: string | null
   durationMinutes?: number | null
   calendarEventId?: string | null
+  calendarAccountId?: string | null
+  calendarId?: string | null
   isActive: boolean
   streak: number
   longestStreak: number
@@ -145,6 +147,13 @@ export const EISENHOWER_QUADRANTS: EisenhowerQuadrant[] = [
     bgColor: 'bg-gray-50 border-gray-200',
   },
 ]
+
+export const QUADRANT_LABEL_ZH: Record<EisenhowerQuadrant['id'], string> = {
+  'do-first': '優先處理',
+  schedule: '排程規劃',
+  delegate: '委派他人',
+  eliminate: '刪除捨棄',
+}
 
 export interface Goal {
   id: string

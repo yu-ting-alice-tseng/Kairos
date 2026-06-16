@@ -22,15 +22,15 @@ export function DemoLoginButton() {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-3 my-1">
-        <div className="flex-1 h-px bg-white/10" />
-        <span className="text-xs text-indigo-400">ou</span>
-        <div className="flex-1 h-px bg-white/10" />
+        <div className="flex-1 h-px bg-[rgba(225,200,150,0.10)]" />
+        <span className="text-xs text-[#8a6a32]">ou</span>
+        <div className="flex-1 h-px bg-[rgba(225,200,150,0.10)]" />
       </div>
 
       <button
         onClick={handleDemo}
         disabled={loading}
-        className="w-full flex items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 px-4 py-3.5 text-sm font-semibold text-white shadow-lg hover:from-indigo-600 hover:to-purple-700 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-70 disabled:cursor-not-allowed"
+        className="w-full flex items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-[#c44a3a] to-[#b08948] px-4 py-3.5 text-sm font-semibold text-[#f3ecdd] shadow-lg hover:from-[#ab3326] hover:to-[#8a6a32] transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-70 disabled:cursor-not-allowed"
       >
         {loading ? (
           <>
@@ -48,9 +48,9 @@ export function DemoLoginButton() {
         )}
       </button>
 
-      {error && <p className="text-xs text-red-400 text-center">{error}</p>}
+      {error && <p className="text-xs text-[#c44a3a] text-center">{error}</p>}
 
-      <p className="text-xs text-indigo-500 text-center">
+      <p className="text-xs text-[#6e6147] text-center">
         Données fictives préconfigurées · Aucune inscription requise
       </p>
     </div>

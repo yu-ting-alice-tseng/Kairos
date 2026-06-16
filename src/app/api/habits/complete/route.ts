@@ -2,6 +2,27 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
+// DELETE — remove today's completion for a habit
+export async function DELETE(req: NextRequest) {
+  const session = await auth()
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { habitId } = await req.json()
+  const habit = await prisma.habit.findFirst({ where: { id: habitId, userId: session.user.id } })
+  if (!habit) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+  const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999)
+  await prisma.habitCompletion.deleteMany({
+    where: { habitId, completedAt: { gte: todayStart, lte: todayEnd } },
+  })
+
+  const newStreak = Math.max(0, habit.streak - 1)
+  await prisma.habit.update({ where: { id: habitId }, data: { streak: newStreak } })
+
+  return NextResponse.json({ success: true, streak: newStreak })
+}
+
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

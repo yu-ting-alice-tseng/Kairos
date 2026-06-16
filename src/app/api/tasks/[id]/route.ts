@@ -17,19 +17,24 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const urgency = body.urgency ?? existing.urgency
   const priority = calculatePriority(importance, urgency)
 
+  // Build update explicitly — avoid spreading unknown body fields into Prisma
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updateData: Record<string, any> = { importance, urgency, priority }
+  const strFields = ['title', 'description', 'notes', 'tags', 'status', 'calendarAccountId', 'calendarEventId', 'parentTaskId']
+  const numFields = ['estimatedMinutes', 'actualMinutes']
+  const boolFields = ['isRecurring', 'aiSuggested']
+  for (const f of strFields) if (f in body) updateData[f] = body[f] ?? null
+  for (const f of numFields) if (f in body) updateData[f] = body[f] ?? null
+  for (const f of boolFields) if (f in body) updateData[f] = body[f]
+  if ('deadline' in body) updateData.deadline = body.deadline ? new Date(body.deadline) : null
+  if ('scheduledStart' in body) updateData.scheduledStart = body.scheduledStart ? new Date(body.scheduledStart) : null
+  if ('scheduledEnd' in body) updateData.scheduledEnd = body.scheduledEnd ? new Date(body.scheduledEnd) : null
+  if (body.status === 'COMPLETED') updateData.completedAt = new Date()
+  else if (body.status === 'PENDING') updateData.completedAt = null
+
   const task = await prisma.task.update({
     where: { id },
-    data: {
-      ...body,
-      importance,
-      urgency,
-      priority,
-      // null explicitly clears the field; undefined means not sent (leave as-is)
-      deadline: 'deadline' in body ? (body.deadline ? new Date(body.deadline) : null) : undefined,
-      scheduledStart: 'scheduledStart' in body ? (body.scheduledStart ? new Date(body.scheduledStart) : null) : undefined,
-      scheduledEnd: 'scheduledEnd' in body ? (body.scheduledEnd ? new Date(body.scheduledEnd) : null) : undefined,
-      completedAt: body.status === 'COMPLETED' ? new Date() : undefined,
-    },
+    data: updateData,
     include: { subTasks: true, calendarAccount: true },
   })
 

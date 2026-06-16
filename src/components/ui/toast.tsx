@@ -19,7 +19,7 @@ const ToastViewport = React.forwardRef<
 ToastViewport.displayName = ToastPrimitive.Viewport.displayName
 
 const toastVariants = {
-  default: 'bg-white border-gray-200',
+  default: 'bg-[#fbf7ee] border-[#e2d6bc]',
   success: 'bg-emerald-50 border-emerald-200',
   error: 'bg-red-50 border-red-200',
   info: 'bg-blue-50 border-blue-200',
@@ -36,7 +36,7 @@ interface ToastProps extends React.ComponentPropsWithoutRef<typeof ToastPrimitiv
 const Toast = React.forwardRef<React.ComponentRef<typeof ToastPrimitive.Root>, ToastProps>(
   ({ className, variant = 'default', title, description, children, ...props }, ref) => {
     const icons: Record<ToastVariant, React.ReactNode> = {
-      default: <Info className="h-4 w-4 text-gray-500" />,
+      default: <Info className="h-4 w-4 text-[#8a7a5e]" />,
       success: <CheckCircle className="h-4 w-4 text-emerald-600" />,
       error: <AlertCircle className="h-4 w-4 text-red-600" />,
       info: <Info className="h-4 w-4 text-blue-600" />,
@@ -53,11 +53,11 @@ const Toast = React.forwardRef<React.ComponentRef<typeof ToastPrimitive.Root>, T
       >
         <span className="mt-0.5 shrink-0">{icons[variant]}</span>
         <div className="flex-1 gap-1">
-          {title && <ToastPrimitive.Title className="text-sm font-semibold text-gray-900">{title}</ToastPrimitive.Title>}
-          {description && <ToastPrimitive.Description className="text-xs text-gray-600">{description}</ToastPrimitive.Description>}
+          {title && <ToastPrimitive.Title className="text-sm font-semibold text-[#2a2420]">{title}</ToastPrimitive.Title>}
+          {description && <ToastPrimitive.Description className="text-xs text-[#6e6147]">{description}</ToastPrimitive.Description>}
           {children}
         </div>
-        <ToastPrimitive.Close className="absolute right-2 top-2 rounded-lg p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+        <ToastPrimitive.Close className="absolute right-2 top-2 rounded-lg p-1 text-[#a99873] hover:text-[#6e6147] hover:bg-[#ece2cb] transition-colors">
           <X className="h-3.5 w-3.5" />
         </ToastPrimitive.Close>
       </ToastPrimitive.Root>

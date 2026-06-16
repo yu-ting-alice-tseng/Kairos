@@ -1,7 +1,7 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { format, isToday, isTomorrow, isPast, addMinutes } from 'date-fns'
-import { fr, enUS } from 'date-fns/locale'
+import { fr, enUS, zhTW } from 'date-fns/locale'
 export { EISENHOWER_QUADRANTS } from '@/types'
 
 export function cn(...inputs: ClassValue[]) {
@@ -9,14 +9,14 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function getLocale(lang: string) {
-  return lang === 'fr' ? fr : enUS
+  return lang === 'fr' ? fr : lang === 'zh' ? zhTW : enUS
 }
 
 export function formatDate(date: Date | string, lang = 'fr') {
   const d = new Date(date)
   const locale = getLocale(lang)
-  if (isToday(d)) return lang === 'fr' ? "Aujourd'hui" : 'Today'
-  if (isTomorrow(d)) return lang === 'fr' ? 'Demain' : 'Tomorrow'
+  if (isToday(d)) return lang === 'fr' ? "Aujourd'hui" : lang === 'zh' ? '今天' : 'Today'
+  if (isTomorrow(d)) return lang === 'fr' ? 'Demain' : lang === 'zh' ? '明天' : 'Tomorrow'
   return format(d, 'PPP', { locale })
 }
 
@@ -27,14 +27,14 @@ export function formatTime(date: Date | string, lang = 'fr') {
 
 export function formatDuration(minutes: number, lang = 'fr') {
   if (minutes < 60) {
-    return lang === 'fr' ? `${minutes} min` : `${minutes} min`
+    return lang === 'fr' ? `${minutes} min` : lang === 'zh' ? `${minutes} 分鐘` : `${minutes} min`
   }
   const hours = Math.floor(minutes / 60)
   const mins = minutes % 60
   if (mins === 0) {
-    return lang === 'fr' ? `${hours}h` : `${hours}h`
+    return lang === 'fr' ? `${hours}h` : lang === 'zh' ? `${hours} 小時` : `${hours}h`
   }
-  return lang === 'fr' ? `${hours}h${mins}` : `${hours}h ${mins}m`
+  return lang === 'fr' ? `${hours}h${mins}` : lang === 'zh' ? `${hours} 小時 ${mins} 分鐘` : `${hours}h ${mins}m`
 }
 
 export function calculatePriority(importance: number, urgency: number): number {

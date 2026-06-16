@@ -18,8 +18,9 @@ interface BuiltinTemplate {
   id: string
   name: string
   nameFr: string
+  nameZh: string
   keywords: string[]
-  stages: { name: string; nameFr: string; daysBeforeDeadline: number }[]
+  stages: { name: string; nameFr: string; nameZh: string; daysBeforeDeadline: number }[]
 }
 
 const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
@@ -27,23 +28,25 @@ const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
     id: '__study',
     name: 'Study / Exam',
     nameFr: 'Étude / Examen',
+    nameZh: '考試 / 學習',
     keywords: ['exam', 'examen', 'test', 'study', 'étude', 'quiz', '考試', '考古', 'final', 'midterm', 'homework', 'devoir', '作業'],
     stages: [
-      { name: 'Course review', nameFr: 'Révision du cours', daysBeforeDeadline: 7 },
-      { name: 'Practice problems', nameFr: 'Exercices pratiques', daysBeforeDeadline: 3 },
-      { name: '考古題 – Past exam papers', nameFr: '考古題 – Annales', daysBeforeDeadline: 1 },
+      { name: 'Course review', nameFr: 'Révision du cours', nameZh: '複習課程內容', daysBeforeDeadline: 7 },
+      { name: 'Practice problems', nameFr: 'Exercices pratiques', nameZh: '練習題', daysBeforeDeadline: 3 },
+      { name: '考古題 – Past exam papers', nameFr: '考古題 – Annales', nameZh: '考古題 – 歷年試題', daysBeforeDeadline: 1 },
     ],
   },
   {
     id: '__project',
     name: 'Project / Report',
     nameFr: 'Projet / Rapport',
+    nameZh: '專案 / 報告',
     keywords: ['project', 'projet', 'report', 'rapport', 'essay', 'dissertation', 'presentation', 'présentation'],
     stages: [
-      { name: 'Research', nameFr: 'Recherche', daysBeforeDeadline: 14 },
-      { name: 'Outline & structure', nameFr: 'Plan & structure', daysBeforeDeadline: 10 },
-      { name: 'First draft', nameFr: 'Première ébauche', daysBeforeDeadline: 5 },
-      { name: 'Review & polish', nameFr: 'Révision finale', daysBeforeDeadline: 1 },
+      { name: 'Research', nameFr: 'Recherche', nameZh: '資料蒐集', daysBeforeDeadline: 14 },
+      { name: 'Outline & structure', nameFr: 'Plan & structure', nameZh: '大綱與架構', daysBeforeDeadline: 10 },
+      { name: 'First draft', nameFr: 'Première ébauche', nameZh: '初稿', daysBeforeDeadline: 5 },
+      { name: 'Review & polish', nameFr: 'Révision finale', nameZh: '最終審閱與潤飾', daysBeforeDeadline: 1 },
     ],
   },
 ]
@@ -60,8 +63,8 @@ function stageDate(deadline: Date, daysBeforeDeadline: number): Date {
   return addDays(deadline, -daysBeforeDeadline)
 }
 
-function formatDate(date: Date, lang: 'fr' | 'en'): string {
-  return date.toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US', {
+function formatDate(date: Date, lang: 'fr' | 'en' | 'zh'): string {
+  return date.toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-US', {
     weekday: 'short', month: 'short', day: 'numeric',
   })
 }
@@ -93,7 +96,7 @@ interface StageRowProps {
   stage: RetroStage
   deadline: Date
   index: number
-  lang: 'fr' | 'en'
+  lang: 'fr' | 'en' | 'zh'
   onChange: (index: number, stage: RetroStage) => void
   onRemove: (index: number) => void
 }
@@ -105,17 +108,17 @@ function StageRow({ stage, deadline, index, lang, onChange, onRemove }: StageRow
   return (
     <div className={cn(
       'flex items-center gap-2 rounded-xl px-3 py-2.5 border transition-colors',
-      isPast ? 'border-amber-200 bg-amber-50' : 'border-gray-100 bg-white'
+      isPast ? 'border-amber-200 bg-amber-50' : 'border-[#ece2cb] bg-[#fbf7ee]'
     )}>
-      <span className="h-6 w-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
+      <span className="h-6 w-6 rounded-full bg-red-100 text-red-900 text-xs font-bold flex items-center justify-center flex-shrink-0">
         {index + 1}
       </span>
 
       <input
         value={stage.name}
         onChange={(e) => onChange(index, { ...stage, name: e.target.value })}
-        className="flex-1 bg-transparent text-sm text-gray-800 outline-none min-w-0"
-        placeholder={lang === 'fr' ? 'Nom de l\'étape' : 'Stage name'}
+        className="flex-1 bg-transparent text-sm text-[#3a3326] outline-none min-w-0"
+        placeholder={lang === 'fr' ? 'Nom de l\'étape' : lang === 'zh' ? '階段名稱' : 'Stage name'}
       />
 
       <div className="flex items-center gap-1 flex-shrink-0">
@@ -125,9 +128,9 @@ function StageRow({ stage, deadline, index, lang, onChange, onRemove }: StageRow
           max={365}
           value={stage.daysBeforeDeadline}
           onChange={(e) => onChange(index, { ...stage, daysBeforeDeadline: Math.max(1, Number(e.target.value)) })}
-          className="w-12 text-center text-sm border border-gray-200 rounded-lg px-1 py-0.5 bg-white"
+          className="w-12 text-center text-sm border border-[#e2d6bc] rounded-lg px-1 py-0.5 bg-[#fbf7ee]"
         />
-        <span className="text-xs text-gray-500">{t('retroplanDaysBefore', lang)}</span>
+        <span className="text-xs text-[#8a7a5e]">{t('retroplanDaysBefore', lang)}</span>
       </div>
 
       <div className="flex items-center gap-1 flex-shrink-0">
@@ -141,7 +144,7 @@ function StageRow({ stage, deadline, index, lang, onChange, onRemove }: StageRow
         </Badge>
         <button
           onClick={() => onRemove(index)}
-          className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+          className="p-1 rounded hover:bg-red-50 text-[#a99873] hover:text-red-500 transition-colors"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -156,7 +159,7 @@ interface RetroplanDialogProps {
   open: boolean
   onClose: () => void
   task: Task | null
-  lang: 'fr' | 'en'
+  lang: 'fr' | 'en' | 'zh'
   calendarAccounts?: CalendarAccount[]
   onCreated: () => void
 }
@@ -191,11 +194,11 @@ export function RetroplanDialog({ open, onClose, task, lang, calendarAccounts = 
   }, [open, task])
 
   const loadStagesForTemplate = useCallback(
-    (id: string, userTmpls: RetroTemplate[], l: 'fr' | 'en') => {
+    (id: string, userTmpls: RetroTemplate[], l: 'fr' | 'en' | 'zh') => {
       if (id.startsWith('__')) {
         const builtin = BUILTIN_TEMPLATES.find((t) => t.id === id)
         if (builtin) {
-          setStages(builtin.stages.map((s) => ({ name: l === 'fr' ? s.nameFr : s.name, daysBeforeDeadline: s.daysBeforeDeadline })))
+          setStages(builtin.stages.map((s) => ({ name: l === 'fr' ? s.nameFr : l === 'zh' ? s.nameZh : s.name, daysBeforeDeadline: s.daysBeforeDeadline })))
         }
       } else {
         const userTmpl = userTmpls.find((t) => t.id === id)
@@ -244,11 +247,11 @@ export function RetroplanDialog({ open, onClose, task, lang, calendarAccounts = 
             }),
           ),
       )
-      toast({ title: lang === 'fr' ? `${stages.length} étapes créées !` : `${stages.length} stages created!`, variant: 'success' })
+      toast({ title: lang === 'fr' ? `${stages.length} étapes créées !` : lang === 'zh' ? `已建立 ${stages.length} 個階段！` : `${stages.length} stages created!`, variant: 'success' })
       onCreated()
       onClose()
     } catch {
-      toast({ title: lang === 'fr' ? 'Erreur lors de la création' : 'Failed to create stages', variant: 'error' })
+      toast({ title: lang === 'fr' ? 'Erreur lors de la création' : lang === 'zh' ? '建立階段失敗' : 'Failed to create stages', variant: 'error' })
     } finally {
       setSaving(false)
     }
@@ -274,7 +277,7 @@ export function RetroplanDialog({ open, onClose, task, lang, calendarAccounts = 
         setSelectedTemplateId(created.id)
         setShowSaveTemplate(false)
         setNewTemplateName('')
-        toast({ title: lang === 'fr' ? 'Modèle sauvegardé !' : 'Template saved!', variant: 'success' })
+        toast({ title: lang === 'fr' ? 'Modèle sauvegardé !' : lang === 'zh' ? '範本已儲存！' : 'Template saved!', variant: 'success' })
       }
     } finally {
       setSavingTemplate(false)
@@ -300,20 +303,20 @@ export function RetroplanDialog({ open, onClose, task, lang, calendarAccounts = 
       <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <GitBranch className="h-5 w-5 text-indigo-600" />
+            <GitBranch className="h-5 w-5 text-red-800" />
             {t('retroplanTitle', lang)}
           </DialogTitle>
           <DialogDescription className="text-sm">
-            <span className="font-medium text-gray-700">{task.title}</span>
+            <span className="font-medium text-[#5c5347]">{task.title}</span>
             {' — '}
-            {lang === 'fr' ? 'Échéance' : 'Deadline'}:{' '}
-            <span className="font-medium text-indigo-600">{formatDate(deadline, lang)}</span>
+            {lang === 'fr' ? 'Échéance' : lang === 'zh' ? '截止日期' : 'Deadline'}:{' '}
+            <span className="font-medium text-red-800">{formatDate(deadline, lang)}</span>
           </DialogDescription>
         </DialogHeader>
 
         {/* Template selector */}
         <div className="flex flex-col gap-2">
-          <Label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+          <Label className="text-xs font-semibold uppercase tracking-wide text-[#8a7a5e]">
             {t('retroplanTemplate', lang)}
           </Label>
           <div className="flex gap-2 flex-wrap">
@@ -324,12 +327,12 @@ export function RetroplanDialog({ open, onClose, task, lang, calendarAccounts = 
                 className={cn(
                   'flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm border transition-all',
                   selectedTemplateId === tmpl.id
-                    ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-medium'
-                    : 'border-gray-200 text-gray-600 hover:bg-gray-50',
+                    ? 'bg-red-50 border-red-300 text-red-900 font-medium'
+                    : 'border-[#e2d6bc] text-[#6e6147] hover:bg-[#f3ecdd]',
                 )}
               >
                 {selectedTemplateId === tmpl.id && <Check className="h-3 w-3" />}
-                {lang === 'fr' ? tmpl.nameFr : tmpl.name}
+                {lang === 'fr' ? tmpl.nameFr : lang === 'zh' ? tmpl.nameZh : tmpl.name}
               </button>
             ))}
             {userTemplates.map((tmpl) => (
@@ -339,15 +342,15 @@ export function RetroplanDialog({ open, onClose, task, lang, calendarAccounts = 
                 className={cn(
                   'group flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm border transition-all',
                   selectedTemplateId === tmpl.id
-                    ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-medium'
-                    : 'border-gray-200 text-gray-600 hover:bg-gray-50',
+                    ? 'bg-red-50 border-red-300 text-red-900 font-medium'
+                    : 'border-[#e2d6bc] text-[#6e6147] hover:bg-[#f3ecdd]',
                 )}
               >
                 {selectedTemplateId === tmpl.id && <Check className="h-3 w-3" />}
                 {tmpl.name}
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDeleteUserTemplate(tmpl.id) }}
-                  className="opacity-0 group-hover:opacity-100 ml-1 p-0.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-500 transition-all"
+                  className="opacity-0 group-hover:opacity-100 ml-1 p-0.5 rounded hover:bg-red-100 text-[#a99873] hover:text-red-500 transition-all"
                 >
                   <Trash2 className="h-3 w-3" />
                 </button>
@@ -358,7 +361,7 @@ export function RetroplanDialog({ open, onClose, task, lang, calendarAccounts = 
 
         {/* Stages */}
         <div className="flex flex-col gap-2">
-          <Label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+          <Label className="text-xs font-semibold uppercase tracking-wide text-[#8a7a5e]">
             {t('retroplanStages', lang)}
           </Label>
           <div className="flex flex-col gap-1.5">
@@ -376,7 +379,7 @@ export function RetroplanDialog({ open, onClose, task, lang, calendarAccounts = 
           </div>
           <button
             onClick={handleAddStage}
-            className="flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 px-2 py-1.5 rounded-xl hover:bg-indigo-50 transition-colors border border-dashed border-indigo-200 mt-1"
+            className="flex items-center gap-1.5 text-sm text-red-800 hover:text-red-950 px-2 py-1.5 rounded-xl hover:bg-red-50 transition-colors border border-dashed border-red-200 mt-1"
           >
             <Plus className="h-3.5 w-3.5" />
             {t('retroplanAddStage', lang)}
@@ -385,11 +388,11 @@ export function RetroplanDialog({ open, onClose, task, lang, calendarAccounts = 
 
         {/* Save as template */}
         {showSaveTemplate ? (
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-gray-50 border border-gray-200">
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-[#f3ecdd] border border-[#e2d6bc]">
             <Input
               value={newTemplateName}
               onChange={(e) => setNewTemplateName(e.target.value)}
-              placeholder={lang === 'fr' ? 'Nom du modèle…' : 'Template name…'}
+              placeholder={lang === 'fr' ? 'Nom du modèle…' : lang === 'zh' ? '範本名稱…' : 'Template name…'}
               className="h-8 text-sm"
               onKeyDown={(e) => { if (e.key === 'Enter') handleSaveAsTemplate() }}
               autoFocus
@@ -402,7 +405,7 @@ export function RetroplanDialog({ open, onClose, task, lang, calendarAccounts = 
         ) : (
           <button
             onClick={() => setShowSaveTemplate(true)}
-            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors self-start"
+            className="flex items-center gap-1.5 text-xs text-[#8a7a5e] hover:text-[#5c5347] px-2 py-1 rounded-lg hover:bg-[#ece2cb] transition-colors self-start"
           >
             <Save className="h-3 w-3" />
             {t('retroplanSaveTemplate', lang)}

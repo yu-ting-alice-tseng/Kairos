@@ -42,28 +42,29 @@ interface ProviderSubCalendar {
 
 // ── Sub-calendar panel ────────────────────────────────────────────────────────
 
-function SubCalendarPanel({ account, lang }: { account: CalendarAccount; lang: 'fr' | 'en'; }) {
+function SubCalendarPanel({ account, lang }: { account: CalendarAccount; lang: 'fr' | 'en' | 'zh'; }) {
   const isNotion = account.provider === 'NOTION'
   const [calendars, setCalendars] = useState<ProviderSubCalendar[]>([])
   const [loading, setLoading] = useState(false)
   const [toggling, setToggling] = useState<string | null>(null)
   const [togglingAll, setTogglingAll] = useState(false)
-  const [needsReauth, setNeedsReauth] = useState(false)
+  const [errorState, setErrorState] = useState<'reauth' | 'access' | 'generic' | null>(null)
   const { toast } = useGlobalToast()
 
   const load = useCallback(async () => {
     setLoading(true)
-    setNeedsReauth(false)
+    setErrorState(null)
     const res = await fetch(`/api/calendar/accounts/${account.id}/calendars`)
     if (res.ok) {
       setCalendars(await res.json())
     } else {
       const err = await res.json().catch(() => ({}))
-      if (err.code === 'NO_TOKEN' || res.status === 403 || res.status === 401) {
-        setNeedsReauth(true)
+      if (err.code === 'NO_TOKEN') {
+        setErrorState('reauth')
+      } else if (err.code === 'NO_ACCESS') {
+        setErrorState('access')
       } else {
-        // Token likely expired — show reauth prompt
-        setNeedsReauth(true)
+        setErrorState('generic')
         console.error('Failed to load calendars:', err)
       }
     }
@@ -98,34 +99,60 @@ function SubCalendarPanel({ account, lang }: { account: CalendarAccount; lang: '
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 py-3 px-4 text-sm text-gray-400">
+      <div className="flex items-center gap-2 py-3 px-4 text-sm text-[#a99873]">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        {lang === 'fr' ? 'Chargement…' : 'Loading…'}
+        {lang === 'fr' ? 'Chargement…' : lang === 'zh' ? '載入中…' : 'Loading…'}
       </div>
     )
   }
 
-  if (needsReauth) {
-    const base = window.location.origin
+  if (errorState === 'reauth') {
     return (
       <div className="py-3 px-4 flex items-center gap-3">
         <p className="text-xs text-amber-600 flex-1">
-          {lang === 'fr' ? 'Token expiré. Ré-autorisez pour voir les calendriers.' : 'Token expired. Re-authorize to see calendars.'}
+          {lang === 'fr' ? 'Token expiré. Ré-autorisez pour voir les calendriers.' : lang === 'zh' ? '授權已過期，請重新授權以查看日曆。' : 'Token expired. Re-authorize to see calendars.'}
         </p>
         <a
           href={`/api/calendar/connect?provider=${account.provider.toLowerCase()}&accountId=${account.id}`}
-          className="text-xs text-indigo-500 hover:text-indigo-700 font-medium underline underline-offset-2 whitespace-nowrap"
+          className="text-xs text-red-500 hover:text-red-900 font-medium underline underline-offset-2 whitespace-nowrap"
         >
-          {lang === 'fr' ? 'Ré-autoriser' : 'Re-authorize'}
+          {lang === 'fr' ? 'Ré-autoriser' : lang === 'zh' ? '重新授權' : 'Re-authorize'}
         </a>
+      </div>
+    )
+  }
+
+  if (errorState === 'access') {
+    return (
+      <div className="py-3 px-4">
+        <p className="text-xs text-amber-600">
+          {lang === 'fr'
+            ? 'Aucune base partagée avec l\'intégration. Ouvrez Notion, ouvrez une base de données, puis partagez-la avec l\'intégration FlowPlan (••• → Connexions).'
+            : lang === 'zh'
+            ? '尚未與此整合分享任何資料庫。請開啟 Notion，打開一個資料庫，然後將它分享給 FlowPlan 整合（••• → 連結）。'
+            : 'No databases shared with the integration. Open Notion, open a database, then share it with the FlowPlan integration (••• → Connections).'}
+        </p>
+      </div>
+    )
+  }
+
+  if (errorState === 'generic') {
+    return (
+      <div className="py-3 px-4 flex items-center gap-3">
+        <p className="text-xs text-red-500 flex-1">
+          {lang === 'fr' ? 'Erreur lors du chargement des calendriers.' : lang === 'zh' ? '載入日曆時發生錯誤。' : 'Failed to load calendars.'}
+        </p>
+        <button onClick={load} className="text-xs text-[#8a7a5e] hover:text-[#3a3326] font-medium underline underline-offset-2 whitespace-nowrap">
+          {lang === 'fr' ? 'Réessayer' : lang === 'zh' ? '重試' : 'Retry'}
+        </button>
       </div>
     )
   }
 
   if (calendars.length === 0) {
     return (
-      <p className="py-3 px-4 text-xs text-gray-400">
-        {lang === 'fr' ? 'Aucun calendrier trouvé.' : 'No calendars found.'}
+      <p className="py-3 px-4 text-xs text-[#a99873]">
+        {lang === 'fr' ? 'Aucun calendrier trouvé.' : lang === 'zh' ? '找不到任何日曆。' : 'No calendars found.'}
       </p>
     )
   }
@@ -133,56 +160,56 @@ function SubCalendarPanel({ account, lang }: { account: CalendarAccount; lang: '
   return (
     <div className="flex flex-col gap-1 py-2 px-4">
       <div className="flex items-center justify-between mb-1">
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+        <p className="text-xs font-medium text-[#8a7a5e] uppercase tracking-wide">
           {isNotion
-            ? (lang === 'fr' ? 'Bases de données' : 'Databases')
-            : (lang === 'fr' ? 'Sous-calendriers' : 'Sub-calendars')}
+            ? (lang === 'fr' ? 'Bases de données' : lang === 'zh' ? '資料庫' : 'Databases')
+            : (lang === 'fr' ? 'Sous-calendriers' : lang === 'zh' ? '子日曆' : 'Sub-calendars')}
         </p>
         <div className="flex items-center gap-1">
           {togglingAll ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-[#a99873]" />
           ) : (
             <>
               <button
                 onClick={() => toggleAll(true)}
                 disabled={calendars.every((c) => c.isActive)}
-                className="text-xs text-indigo-500 hover:text-indigo-700 disabled:opacity-30 disabled:cursor-not-allowed px-1"
+                className="text-xs text-red-500 hover:text-red-900 disabled:opacity-30 disabled:cursor-not-allowed px-1"
               >
-                {lang === 'fr' ? 'Tout' : 'All'}
+                {lang === 'fr' ? 'Tout' : lang === 'zh' ? '全部' : 'All'}
               </button>
-              <span className="text-gray-300 text-xs">|</span>
+              <span className="text-[#cbb98e] text-xs">|</span>
               <button
                 onClick={() => toggleAll(false)}
                 disabled={calendars.every((c) => !c.isActive)}
-                className="text-xs text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed px-1"
+                className="text-xs text-[#a99873] hover:text-[#6e6147] disabled:opacity-30 disabled:cursor-not-allowed px-1"
               >
-                {lang === 'fr' ? 'Aucun' : 'None'}
+                {lang === 'fr' ? 'Aucun' : lang === 'zh' ? '全不選' : 'None'}
               </button>
-              <span className="text-gray-200 text-xs">·</span>
+              <span className="text-[#e2d6bc] text-xs">·</span>
             </>
           )}
-          <button onClick={load} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+          <button onClick={load} className="p-1 rounded-lg hover:bg-[#ece2cb] text-[#a99873] hover:text-[#6e6147] transition-colors">
             <RefreshCw className="h-3 w-3" />
           </button>
         </div>
       </div>
       {calendars.map((cal) => (
-        <div key={cal.externalId} className="flex items-center gap-3 py-2 px-2 rounded-xl hover:bg-gray-50 transition-colors">
+        <div key={cal.externalId} className="flex items-center gap-3 py-2 px-2 rounded-xl hover:bg-[#f3ecdd] transition-colors">
           <div className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: cal.color }} />
-          <span className="text-sm text-gray-700 flex-1 truncate">{cal.name}</span>
+          <span className="text-sm text-[#5c5347] flex-1 truncate">{cal.name}</span>
           {toggling === cal.externalId ? (
-            <Loader2 className="h-4 w-4 animate-spin text-gray-400 flex-shrink-0" />
+            <Loader2 className="h-4 w-4 animate-spin text-[#a99873] flex-shrink-0" />
           ) : (
             <button
               onClick={() => toggle(cal)}
               className={cn(
                 'relative w-9 h-5 rounded-full transition-colors flex-shrink-0',
-                cal.isActive ? 'bg-indigo-500' : 'bg-gray-200'
+                cal.isActive ? 'bg-red-500' : 'bg-[#e2d6bc]'
               )}
               aria-label={cal.isActive ? 'Disable' : 'Enable'}
             >
               <span className={cn(
-                'absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform',
+                'absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-[#fbf7ee] shadow transition-transform',
                 cal.isActive && 'translate-x-4'
               )} />
             </button>
@@ -202,7 +229,7 @@ function EditAccountDialog({
   open: boolean
   onClose: () => void
   onSave: (id: string, name: string, color: string) => Promise<void>
-  lang: 'fr' | 'en'
+  lang: 'fr' | 'en' | 'zh'
 }) {
   const [name, setName] = useState(account.name)
   const [color, setColor] = useState(account.color)
@@ -221,21 +248,21 @@ function EditAccountDialog({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>{lang === 'fr' ? 'Modifier le calendrier' : 'Edit calendar'}</DialogTitle>
+          <DialogTitle>{lang === 'fr' ? 'Modifier le calendrier' : lang === 'zh' ? '編輯日曆' : 'Edit calendar'}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label>{lang === 'fr' ? 'Nom affiché' : 'Display name'}</Label>
+            <Label>{lang === 'fr' ? 'Nom affiché' : lang === 'zh' ? '顯示名稱' : 'Display name'}</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="flex flex-col gap-2">
-            <Label>{lang === 'fr' ? 'Couleur' : 'Color'}</Label>
+            <Label>{lang === 'fr' ? 'Couleur' : lang === 'zh' ? '顏色' : 'Color'}</Label>
             <div className="flex gap-2 flex-wrap">
               {COLORS.map((c) => (
                 <button
                   key={c}
                   onClick={() => setColor(c)}
-                  className={`h-6 w-6 rounded-full border-2 transition-all ${color === c ? 'border-gray-900 scale-110' : 'border-transparent'}`}
+                  className={`h-6 w-6 rounded-full border-2 transition-all ${color === c ? 'border-[#2a2420] scale-110' : 'border-transparent'}`}
                   style={{ backgroundColor: c }}
                 />
               ))}
@@ -260,7 +287,7 @@ function CalendarAccountRow({
   account, lang, onDelete, onEdit,
 }: {
   account: CalendarAccount
-  lang: 'fr' | 'en'
+  lang: 'fr' | 'en' | 'zh'
   onDelete: () => void
   onEdit: () => void
 }) {
@@ -283,40 +310,40 @@ function CalendarAccountRow({
   }
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white overflow-hidden">
+    <div className="rounded-2xl border border-[#ece2cb] bg-[#fbf7ee] overflow-hidden">
       <div className="flex items-center justify-between p-4">
         <div className="flex items-center gap-3">
           <div className="h-9 w-9 rounded-xl flex items-center justify-center text-lg" style={{ backgroundColor: (config?.color ?? '#6366F1') + '15' }}>
             {config?.icon ?? '📅'}
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-900">{account.name}</p>
-            <p className="text-xs text-gray-500">{config?.label ?? account.provider}</p>
+            <p className="text-sm font-medium text-[#2a2420]">{account.name}</p>
+            <p className="text-xs text-[#8a7a5e]">{config?.label ?? account.provider}</p>
           </div>
           <div className="h-3 w-3 rounded-full border border-white shadow" style={{ backgroundColor: account.color }} />
         </div>
 
         <div className="flex items-center gap-1">
           <Badge variant="success" className="text-xs mr-1">
-            {lang === 'fr' ? 'Connecté' : 'Connected'}
+            {lang === 'fr' ? 'Connecté' : lang === 'zh' ? '已連接' : 'Connected'}
           </Badge>
 
           {supportsSubCalendars && (
             <button
               onClick={() => setExpanded((e) => !e)}
-              className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded-lg hover:bg-indigo-50 transition-colors"
+              className="flex items-center gap-1 text-xs text-red-800 hover:text-red-950 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors"
             >
               {account.provider === 'NOTION'
-                ? (lang === 'fr' ? 'Bases' : 'Databases')
-                : (lang === 'fr' ? 'Calendriers' : 'Calendars')}
+                ? (lang === 'fr' ? 'Bases' : lang === 'zh' ? '資料庫' : 'Databases')
+                : (lang === 'fr' ? 'Calendriers' : lang === 'zh' ? '日曆' : 'Calendars')}
               {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
             </button>
           )}
 
           <button
             onClick={onEdit}
-            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
-            title={lang === 'fr' ? 'Modifier' : 'Edit'}
+            className="p-1.5 rounded-lg hover:bg-[#ece2cb] text-[#a99873] hover:text-[#5c5347] transition-colors"
+            title={lang === 'fr' ? 'Modifier' : lang === 'zh' ? '編輯' : 'Edit'}
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>
@@ -324,8 +351,8 @@ function CalendarAccountRow({
           {canReauthorize && (
             <button
               onClick={handleReauthorize}
-              className="p-1.5 rounded-lg hover:bg-amber-50 text-gray-400 hover:text-amber-600 transition-colors"
-              title={lang === 'fr' ? 'Ré-autoriser' : 'Re-authorize'}
+              className="p-1.5 rounded-lg hover:bg-amber-50 text-[#a99873] hover:text-amber-600 transition-colors"
+              title={lang === 'fr' ? 'Ré-autoriser' : lang === 'zh' ? '重新授權' : 'Re-authorize'}
             >
               <KeyRound className="h-3.5 w-3.5" />
             </button>
@@ -333,8 +360,8 @@ function CalendarAccountRow({
 
           <button
             onClick={onDelete}
-            className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
-            title={lang === 'fr' ? 'Supprimer' : 'Remove'}
+            className="p-1.5 rounded-lg hover:bg-red-50 text-[#a99873] hover:text-red-500 transition-colors"
+            title={lang === 'fr' ? 'Supprimer' : lang === 'zh' ? '移除' : 'Remove'}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -342,7 +369,7 @@ function CalendarAccountRow({
       </div>
 
       {expanded && supportsSubCalendars && (
-        <div className="border-t border-gray-50">
+        <div className="border-t border-[#f3ecdd]">
           <SubCalendarPanel account={account} lang={lang} />
         </div>
       )}
@@ -356,7 +383,7 @@ function AddCalendarDialog({ open, onClose, onAdd, lang, isDemo }: {
   open: boolean
   onClose: () => void
   onAdd: (data: { provider: CalendarProvider; name: string; color: string }) => Promise<void>
-  lang: 'fr' | 'en'
+  lang: 'fr' | 'en' | 'zh'
   isDemo?: boolean
 }) {
   const [provider, setProvider] = useState<CalendarProvider>('GOOGLE')
@@ -396,19 +423,19 @@ function AddCalendarDialog({ open, onClose, onAdd, lang, isDemo }: {
         <DialogHeader>
           <DialogTitle>{t('connectCalendar', lang)}</DialogTitle>
           <DialogDescription>
-            {lang === 'fr' ? 'Connectez un calendrier pour synchroniser vos tâches.' : 'Connect a calendar to sync your tasks.'}
+            {lang === 'fr' ? 'Connectez un calendrier pour synchroniser vos tâches.' : lang === 'zh' ? '連結一個日曆來同步你的任務。' : 'Connect a calendar to sync your tasks.'}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
-            <Label>{lang === 'fr' ? 'Service' : 'Service'}</Label>
+            <Label>{lang === 'fr' ? 'Service' : lang === 'zh' ? '服務' : 'Service'}</Label>
             <div className="grid grid-cols-2 gap-2">
               {(Object.keys(PROVIDER_CONFIG) as CalendarProvider[]).filter(p => p !== 'LOCAL').map((p) => (
                 <button
                   key={p}
                   onClick={() => setProvider(p)}
                   className={`flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm border transition-all text-left ${
-                    provider === p ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-gray-200 hover:bg-gray-50'
+                    provider === p ? 'border-red-300 bg-red-50 text-red-900' : 'border-[#e2d6bc] hover:bg-[#f3ecdd]'
                   }`}
                 >
                   <span>{PROVIDER_CONFIG[p].icon}</span>
@@ -422,14 +449,14 @@ function AddCalendarDialog({ open, onClose, onAdd, lang, isDemo }: {
           {!config.connectProvider && !config.oauthKey && (
             <>
               <div className="flex flex-col gap-1.5">
-                <Label>{lang === 'fr' ? 'Nom affiché' : 'Display name'}</Label>
+                <Label>{lang === 'fr' ? 'Nom affiché' : lang === 'zh' ? '顯示名稱' : 'Display name'}</Label>
                 <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={config.label} />
               </div>
               <div className="flex flex-col gap-2">
-                <Label>{lang === 'fr' ? 'Couleur' : 'Color'}</Label>
+                <Label>{lang === 'fr' ? 'Couleur' : lang === 'zh' ? '顏色' : 'Color'}</Label>
                 <div className="flex gap-2 flex-wrap">
                   {COLORS.map((c) => (
-                    <button key={c} onClick={() => setColor(c)} className={`h-6 w-6 rounded-full border-2 transition-all ${color === c ? 'border-gray-900 scale-110' : 'border-transparent'}`} style={{ backgroundColor: c }} />
+                    <button key={c} onClick={() => setColor(c)} className={`h-6 w-6 rounded-full border-2 transition-all ${color === c ? 'border-[#2a2420] scale-110' : 'border-transparent'}`} style={{ backgroundColor: c }} />
                   ))}
                 </div>
               </div>
@@ -440,6 +467,8 @@ function AddCalendarDialog({ open, onClose, onAdd, lang, isDemo }: {
             <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">
               {lang === 'fr'
                 ? 'La synchronisation calendrier n\'est pas disponible en mode démo.'
+                : lang === 'zh'
+                ? '示範模式下無法使用日曆同步功能。'
                 : 'Calendar sync is not available in demo mode.'}
             </div>
           )}
@@ -448,6 +477,8 @@ function AddCalendarDialog({ open, onClose, onAdd, lang, isDemo }: {
             <div className="rounded-xl bg-blue-50 border border-blue-100 p-3 text-sm text-blue-700">
               {lang === 'fr'
                 ? `Vous serez redirigé vers ${config.label} pour autoriser l'accès. Votre session restera active.`
+                : lang === 'zh'
+                ? `你將被導向至 ${config.label} 以授權存取，目前的登入狀態會保持有效。`
                 : `You'll be redirected to ${config.label} to authorize access. Your current session will stay active.`}
             </div>
           )}
@@ -456,7 +487,7 @@ function AddCalendarDialog({ open, onClose, onAdd, lang, isDemo }: {
           <Button variant="outline" onClick={onClose}>{t('cancel', lang)}</Button>
           <Button onClick={handleAdd} disabled={saving || (!config.connectProvider && !config.oauthKey && !name.trim())}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            {(config.connectProvider || config.oauthKey) ? (lang === 'fr' ? 'Connecter' : 'Connect') : t('save', lang)}
+            {(config.connectProvider || config.oauthKey) ? (lang === 'fr' ? 'Connecter' : lang === 'zh' ? '連結' : 'Connect') : t('save', lang)}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -482,11 +513,11 @@ export default function SettingsPage() {
     const success = params.get('cal_success')
     const error = params.get('cal_error')
     if (success === 'connected') {
-      toast({ title: language === 'fr' ? 'Calendrier connecté !' : 'Calendar connected!', variant: 'success' })
+      toast({ title: language === 'fr' ? 'Calendrier connecté !' : language === 'zh' ? '日曆已連結！' : 'Calendar connected!', variant: 'success' })
       loadAccounts()
     }
-    if (success === 'reauthorized') toast({ title: language === 'fr' ? 'Calendrier ré-autorisé !' : 'Calendar re-authorized!', variant: 'success' })
-    if (error === 'access_denied') toast({ title: language === 'fr' ? 'Accès refusé.' : 'Access denied.', variant: 'error' })
+    if (success === 'reauthorized') toast({ title: language === 'fr' ? 'Calendrier ré-autorisé !' : language === 'zh' ? '日曆已重新授權！' : 'Calendar re-authorized!', variant: 'success' })
+    if (error === 'access_denied') toast({ title: language === 'fr' ? 'Accès refusé.' : language === 'zh' ? '存取被拒絕。' : 'Access denied.', variant: 'error' })
     else if (error) toast({ title: `OAuth error: ${error}`, variant: 'error' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -514,7 +545,7 @@ export default function SettingsPage() {
     if (res.ok) {
       const created = await res.json()
       setCalendarAccounts([...calendarAccounts, created])
-      toast({ title: language === 'fr' ? 'Calendrier ajouté !' : 'Calendar added!', variant: 'success' })
+      toast({ title: language === 'fr' ? 'Calendrier ajouté !' : language === 'zh' ? '日曆已新增！' : 'Calendar added!', variant: 'success' })
     }
   }
 
@@ -527,7 +558,7 @@ export default function SettingsPage() {
     if (res.ok) {
       const updated = await res.json()
       setCalendarAccounts(calendarAccounts.map((a) => a.id === id ? { ...a, ...updated } : a))
-      toast({ title: language === 'fr' ? 'Calendrier modifié !' : 'Calendar updated!', variant: 'success' })
+      toast({ title: language === 'fr' ? 'Calendrier modifié !' : language === 'zh' ? '日曆已更新！' : 'Calendar updated!', variant: 'success' })
     }
   }
 
@@ -539,35 +570,35 @@ export default function SettingsPage() {
     })
     setCalendarAccounts(calendarAccounts.filter((a) => a.id !== id))
     setDeleteConfirm(null)
-    toast({ title: language === 'fr' ? 'Calendrier supprimé' : 'Calendar removed', variant: 'info' })
+    toast({ title: language === 'fr' ? 'Calendrier supprimé' : language === 'zh' ? '日曆已移除' : 'Calendar removed', variant: 'info' })
   }
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center px-6 py-5 border-b border-gray-100 bg-white">
-        <Settings className="h-5 w-5 text-indigo-600 mr-2" />
-        <h1 className="text-xl font-bold text-gray-900">{t('settings', language)}</h1>
+      <div className="flex items-center px-6 py-5 border-b border-[#ece2cb] bg-[#fbf7ee]">
+        <Settings className="h-5 w-5 text-red-800 mr-2" />
+        <h1 className="text-xl font-bold text-[#2a2420]">{t('settings', language)}</h1>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 max-w-2xl flex flex-col gap-8">
 
         {/* Language */}
         <section>
-          <h2 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
-            <Globe className="h-4 w-4 text-indigo-500" />
+          <h2 className="text-sm font-semibold text-[#5c5347] mb-4 flex items-center gap-2">
+            <Globe className="h-4 w-4 text-red-500" />
             {t('language', language)}
           </h2>
           <div className="flex gap-3">
-            {(['fr', 'en'] as const).map((lang) => (
+            {(['fr', 'en', 'zh'] as const).map((lang) => (
               <button
                 key={lang}
                 onClick={() => setLanguage(lang)}
                 className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium border transition-all ${
-                  language === lang ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                  language === lang ? 'bg-red-50 border-red-300 text-red-900' : 'border-[#e2d6bc] text-[#6e6147] hover:bg-[#f3ecdd]'
                 }`}
               >
                 {language === lang && <Check className="h-3.5 w-3.5" />}
-                {lang === 'fr' ? '🇫🇷 Français' : '🇬🇧 English'}
+                {lang === 'fr' ? '🇫🇷 Français' : lang === 'zh' ? '🇹🇼 繁體中文' : '🇬🇧 English'}
               </button>
             ))}
           </div>
@@ -576,8 +607,8 @@ export default function SettingsPage() {
         {/* Connected calendars */}
         <section>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-indigo-500" />
+            <h2 className="text-sm font-semibold text-[#5c5347] flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-red-500" />
               {t('connectedAccounts', language)}
               <Badge variant="secondary">{calendarAccounts.length}</Badge>
             </h2>
@@ -588,13 +619,13 @@ export default function SettingsPage() {
           </div>
 
           {loading ? (
-            <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+            <Loader2 className="h-5 w-5 animate-spin text-[#a99873]" />
           ) : calendarAccounts.length === 0 ? (
-            <div className="rounded-2xl border-2 border-dashed border-gray-200 p-8 text-center">
-              <Calendar className="h-8 w-8 text-gray-300 mx-auto mb-3" />
-              <p className="text-sm text-gray-500">{language === 'fr' ? 'Aucun calendrier connecté' : 'No calendar connected'}</p>
-              <p className="text-xs text-gray-400 mt-1">
-                {language === 'fr' ? 'Connectez Google, Outlook, Apple ou Notion' : 'Connect Google, Outlook, Apple, or Notion'}
+            <div className="rounded-2xl border-2 border-dashed border-[#e2d6bc] p-8 text-center">
+              <Calendar className="h-8 w-8 text-[#cbb98e] mx-auto mb-3" />
+              <p className="text-sm text-[#8a7a5e]">{language === 'fr' ? 'Aucun calendrier connecté' : language === 'zh' ? '尚未連結任何日曆' : 'No calendar connected'}</p>
+              <p className="text-xs text-[#a99873] mt-1">
+                {language === 'fr' ? 'Connectez Google, Outlook, Apple ou Notion' : language === 'zh' ? '連結 Google、Outlook、Apple 或 Notion' : 'Connect Google, Outlook, Apple, or Notion'}
               </p>
               <Button variant="outline" size="sm" className="mt-4" onClick={() => setShowAddCalendar(true)}>
                 <Plus className="h-4 w-4" />
@@ -618,32 +649,32 @@ export default function SettingsPage() {
 
         {/* App info */}
         <section>
-          <h2 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
-            <MonitorSmartphone className="h-4 w-4 text-indigo-500" />
-            {language === 'fr' ? 'Application' : 'Application'}
+          <h2 className="text-sm font-semibold text-[#5c5347] mb-4 flex items-center gap-2">
+            <MonitorSmartphone className="h-4 w-4 text-red-500" />
+            {language === 'fr' ? 'Application' : language === 'zh' ? '應用程式' : 'Application'}
           </h2>
-          <div className="rounded-2xl border border-gray-100 bg-white p-4">
-            <p className="text-sm font-medium text-gray-900">FlowPlan</p>
-            <p className="text-xs text-gray-500 mt-0.5">v0.1.0 — {language === 'fr' ? 'Planification intelligente' : 'Smart planning'}</p>
-            <div className="mt-3 flex items-center gap-2 text-xs text-indigo-600">
+          <div className="rounded-2xl border border-[#ece2cb] bg-[#fbf7ee] p-4">
+            <p className="text-sm font-medium text-[#2a2420]">FlowPlan</p>
+            <p className="text-xs text-[#8a7a5e] mt-0.5">v0.1.0 — {language === 'fr' ? 'Planification intelligente' : language === 'zh' ? '智能規劃' : 'Smart planning'}</p>
+            <div className="mt-3 flex items-center gap-2 text-xs text-red-800">
               <Check className="h-3.5 w-3.5" />
-              {language === 'fr' ? 'PWA — Installable sur mobile' : 'PWA — Installable on mobile'}
+              {language === 'fr' ? 'PWA — Installable sur mobile' : language === 'zh' ? 'PWA — 可安裝至手機' : 'PWA — Installable on mobile'}
             </div>
           </div>
         </section>
 
         {/* Sign out */}
         <section>
-          <h2 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-[#5c5347] mb-4 flex items-center gap-2">
             <LogOut className="h-4 w-4 text-red-400" />
-            {language === 'fr' ? 'Session' : 'Session'}
+            {language === 'fr' ? 'Session' : language === 'zh' ? '登入狀態' : 'Session'}
           </h2>
           <a
             href="/auth/signout"
             className="inline-flex items-center gap-2 rounded-xl border border-red-100 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors"
           >
             <LogOut className="h-4 w-4" />
-            {language === 'fr' ? 'Se déconnecter' : 'Sign out'}
+            {language === 'fr' ? 'Se déconnecter' : language === 'zh' ? '登出' : 'Sign out'}
           </a>
         </section>
 
@@ -655,10 +686,10 @@ export default function SettingsPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-500" />
-              {language === 'fr' ? 'Supprimer ce calendrier ?' : 'Remove this calendar?'}
+              {language === 'fr' ? 'Supprimer ce calendrier ?' : language === 'zh' ? '確定移除此日曆？' : 'Remove this calendar?'}
             </DialogTitle>
             <DialogDescription>
-              {language === 'fr' ? 'Les tâches associées ne seront pas supprimées.' : 'Associated tasks will not be deleted.'}
+              {language === 'fr' ? 'Les tâches associées ne seront pas supprimées.' : language === 'zh' ? '相關的任務不會被刪除。' : 'Associated tasks will not be deleted.'}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

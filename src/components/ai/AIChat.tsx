@@ -12,7 +12,7 @@ interface Message {
 }
 
 interface AIChatProps {
-  lang?: 'fr' | 'en'
+  lang?: 'fr' | 'en' | 'zh'
   onClose?: () => void
 }
 
@@ -22,6 +22,8 @@ export function AIChat({ lang = 'fr', onClose }: AIChatProps) {
       role: 'assistant',
       content: lang === 'fr'
         ? 'Bonjour ! Je suis FlowPlan, votre assistant de planification. Comment puis-je vous aider à organiser vos tâches ?'
+        : lang === 'zh'
+        ? '你好！我是流光計劃的規劃助手，有什麼可以幫你安排任務的嗎？'
         : "Hello! I'm FlowPlan, your planning assistant. How can I help you organize your tasks?",
     },
   ])
@@ -51,7 +53,7 @@ export function AIChat({ lang = 'fr', onClose }: AIChatProps) {
     } catch {
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: lang === 'fr' ? 'Désolé, une erreur est survenue.' : 'Sorry, an error occurred.' },
+        { role: 'assistant', content: lang === 'fr' ? 'Désolé, une erreur est survenue.' : lang === 'zh' ? '抱歉，發生錯誤。' : 'Sorry, an error occurred.' },
       ])
     } finally {
       setLoading(false)
@@ -59,17 +61,17 @@ export function AIChat({ lang = 'fr', onClose }: AIChatProps) {
   }
 
   return (
-    <div className="flex flex-col h-full bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-indigo-50 to-purple-50">
+    <div className="flex flex-col h-full bg-[#fbf7ee] rounded-2xl border border-[#ece2cb] shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[#ece2cb] bg-gradient-to-r from-red-50 to-amber-50">
         <div className="flex items-center gap-2">
-          <div className="h-7 w-7 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+          <div className="h-7 w-7 rounded-xl bg-gradient-to-br from-red-500 to-amber-700 flex items-center justify-center">
             <Sparkles className="h-3.5 w-3.5 text-white" />
           </div>
-          <span className="font-semibold text-sm text-gray-900">{t('aiAssistant', lang)}</span>
+          <span className="font-semibold text-sm text-[#2a2420]">{t('aiAssistant', lang)}</span>
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
         </div>
         {onClose && (
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-[#ece2cb] text-[#a99873]">
             <X className="h-4 w-4" />
           </button>
         )}
@@ -79,15 +81,15 @@ export function AIChat({ lang = 'fr', onClose }: AIChatProps) {
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             {msg.role === 'assistant' && (
-              <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mr-2 mt-0.5 shrink-0">
+              <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-red-500 to-amber-700 flex items-center justify-center mr-2 mt-0.5 shrink-0">
                 <Sparkles className="h-3 w-3 text-white" />
               </div>
             )}
             <div
               className={`rounded-2xl px-3.5 py-2.5 max-w-[80%] text-sm ${
                 msg.role === 'user'
-                  ? 'bg-indigo-600 text-white rounded-tr-sm'
-                  : 'bg-gray-100 text-gray-800 rounded-tl-sm'
+                  ? 'bg-red-800 text-white rounded-tr-sm'
+                  : 'bg-[#ece2cb] text-[#3a3326] rounded-tl-sm'
               }`}
             >
               <p className="whitespace-pre-line leading-relaxed">{msg.content}</p>
@@ -96,14 +98,14 @@ export function AIChat({ lang = 'fr', onClose }: AIChatProps) {
         ))}
         {loading && (
           <div className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0">
+            <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-red-500 to-amber-700 flex items-center justify-center shrink-0">
               <Sparkles className="h-3 w-3 text-white" />
             </div>
-            <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-3.5 py-2.5">
+            <div className="bg-[#ece2cb] rounded-2xl rounded-tl-sm px-3.5 py-2.5">
               <div className="flex gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:0ms]" />
-                <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:150ms]" />
-                <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:300ms]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-[#a99873] animate-bounce [animation-delay:0ms]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-[#a99873] animate-bounce [animation-delay:150ms]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-[#a99873] animate-bounce [animation-delay:300ms]" />
               </div>
             </div>
           </div>
@@ -111,7 +113,7 @@ export function AIChat({ lang = 'fr', onClose }: AIChatProps) {
         <div ref={bottomRef} />
       </div>
 
-      <div className="p-3 border-t border-gray-100">
+      <div className="p-3 border-t border-[#ece2cb]">
         <div className="flex gap-2">
           <Input
             value={input}

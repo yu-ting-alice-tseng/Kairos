@@ -2,14 +2,15 @@
 
 import React, { useEffect, useState, useCallback } from 'react'
 import { useAppStore } from '@/stores/useAppStore'
-import { Task, CalendarEvent } from '@/types'
+import { Task, CalendarEvent, Habit } from '@/types'
 import { t } from '@/lib/i18n'
 import { EisenhowerMatrix } from '@/components/matrix/EisenhowerMatrix'
 import { GoalsSection } from '@/components/matrix/GoalsSection'
 import { TaskForm } from '@/components/tasks/TaskForm'
 import { BreakdownDialog } from '@/components/ai/BreakdownDialog'
 import { Button } from '@/components/ui/button'
-import { Plus, LayoutGrid, Loader2, CalendarDays, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, LayoutGrid, Loader2, CalendarDays, ChevronDown, ChevronUp, Repeat2, CheckCircle2, Circle } from 'lucide-react'
+import { Candle } from '@/components/ui/Candle'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
 import { cn, formatTime } from '@/lib/utils'
 import { startOfDay, endOfDay } from 'date-fns'
@@ -17,7 +18,7 @@ import { startOfDay, endOfDay } from 'date-fns'
 const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === 'true'
 
 export default function MatrixPage() {
-  const { language, tasks, setTasks, calendarAccounts } = useAppStore()
+  const { language, tasks, setTasks, calendarAccounts, habits, setHabits } = useAppStore()
   const { toast } = useGlobalToast()
   const [loading, setLoading] = useState(true)
   const [showTaskForm, setShowTaskForm] = useState(false)
@@ -27,10 +28,14 @@ export default function MatrixPage() {
   // Feature 3: sub-calendar filter
   const [filterAccountId, setFilterAccountId] = useState<string | 'all'>('all')
 
+  // Habits panel
+  const [habitPanelOpen, setHabitPanelOpen] = useState(true)
+
   // Feature 2: calendar import panel
   const [todayEvents, setTodayEvents] = useState<CalendarEvent[]>([])
   const [todayEventsLoading, setTodayEventsLoading] = useState(false)
   const [importedEventIds, setImportedEventIds] = useState<Set<string>>(new Set())
+  const [importedHabitEventIds, setImportedHabitEventIds] = useState<Set<string>>(new Set())
   const [calendarPanelOpen, setCalendarPanelOpen] = useState(false)
 
   const loadTasks = useCallback(async () => {
@@ -62,6 +67,12 @@ export default function MatrixPage() {
 
   useEffect(() => { loadTasks() }, [loadTasks])
   useEffect(() => { loadTodayEvents() }, [loadTodayEvents])
+  useEffect(() => {
+    if (habits.length === 0) {
+      fetch('/api/habits').then((r) => r.json()).then(setHabits).catch(() => {})
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleImportEvent = async (ev: CalendarEvent) => {
     const res = await fetch('/api/tasks', {
@@ -80,9 +91,39 @@ export default function MatrixPage() {
       const created = await res.json()
       setTasks([...tasks, created])
       setImportedEventIds((prev) => new Set([...prev, ev.id]))
-      toast({ title: language === 'fr' ? 'Tâche créée depuis l\'événement' : 'Task created from event', variant: 'success' })
+      toast({ title: language === 'fr' ? 'Tâche créée depuis l\'événement' : language === 'zh' ? '已從活動建立任務' : 'Task created from event', variant: 'success' })
     } else {
-      toast({ title: language === 'fr' ? 'Erreur lors de l\'import' : 'Failed to import event', variant: 'error' })
+      toast({ title: language === 'fr' ? 'Erreur lors de l\'import' : language === 'zh' ? '匯入活動失敗' : 'Failed to import event', variant: 'error' })
+    }
+  }
+
+  const handleImportEventAsHabit = async (ev: CalendarEvent) => {
+    const acc = calendarAccounts.find((a) => a.id === ev.calendarAccountId)
+    const color = ev.color ?? acc?.color ?? '#10B981'
+    const scheduledTime = ev.start
+      ? `${String(new Date(ev.start).getHours()).padStart(2, '0')}:${String(new Date(ev.start).getMinutes()).padStart(2, '0')}`
+      : undefined
+    const durationMinutes = ev.start && ev.end
+      ? Math.max(5, Math.round((new Date(ev.end).getTime() - new Date(ev.start).getTime()) / 60000))
+      : undefined
+    const res = await fetch('/api/habits', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: ev.title,
+        color,
+        frequency: 'DAILY',
+        scheduledTime,
+        durationMinutes,
+      }),
+    })
+    if (res.ok) {
+      const created = await res.json()
+      setHabits([...habits, created])
+      setImportedHabitEventIds((prev) => new Set([...prev, ev.id]))
+      toast({ title: language === 'fr' ? 'Habitude créée depuis l\'événement' : language === 'zh' ? '已從活動建立習慣' : 'Habit created from event', variant: 'success' })
+    } else {
+      toast({ title: language === 'fr' ? 'Erreur lors de l\'import' : language === 'zh' ? '匯入活動失敗' : 'Failed to import event', variant: 'error' })
     }
   }
 
@@ -95,7 +136,7 @@ export default function MatrixPage() {
     if (res.ok) {
       const updated = await res.json()
       setTasks(tasks.map((t) => t.id === id ? updated : t))
-      toast({ title: language === 'fr' ? 'Tâche déplacée' : 'Task moved', variant: 'info' })
+      toast({ title: language === 'fr' ? 'Tâche déplacée' : language === 'zh' ? '任務已移動' : 'Task moved', variant: 'info' })
     }
   }
 
@@ -121,10 +162,43 @@ export default function MatrixPage() {
     setEditingTask(null)
   }
 
+  const handleDeleteTask = async (id: string) => {
+    await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
+    setTasks(tasks.filter((t) => t.id !== id))
+    setEditingTask(null)
+  }
+
   const handleTaskClick = (task: Task) => {
     setEditingTask(task)
     setShowTaskForm(true)
   }
+
+  const handleCompleteHabit = async (habitId: string) => {
+    const res = await fetch('/api/habits/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ habitId }) })
+    if (res.ok) {
+      const { streak } = await res.json()
+      setHabits(habits.map((h) => h.id === habitId ? { ...h, streak, completions: [{ id: 'tmp', habitId, completedAt: new Date().toISOString() }] } : h))
+    }
+  }
+
+  const handleUncompleteHabit = async (habitId: string) => {
+    const res = await fetch('/api/habits/complete', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ habitId }) })
+    if (res.ok) {
+      const { streak } = await res.json()
+      setHabits(habits.map((h) => h.id === habitId ? { ...h, streak, completions: [] } : h))
+    }
+  }
+
+  const todayHabits = (() => {
+    const dow = new Date().getDay()
+    return habits.filter((h) => {
+      if (!h.isActive) return false
+      if (h.frequency === 'DAILY') return true
+      if (h.frequency === 'WEEKDAYS') return dow >= 1 && dow <= 5
+      if (h.frequency === 'WEEKENDS') return dow === 0 || dow === 6
+      return false
+    })
+  })()
 
   // Feature 3: filter tasks by calendar account
   const filteredTasks = filterAccountId === 'all'
@@ -134,30 +208,30 @@ export default function MatrixPage() {
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-red-800" />
       </div>
     )
   }
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 bg-white sticky top-0 z-10">
+      <div className="flex items-center justify-between px-6 py-5 border-b border-[#ece2cb] bg-[#fbf7ee] sticky top-0 z-10">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2">
-            <LayoutGrid className="h-5 w-5 text-indigo-600" />
-            <h1 className="text-xl font-bold text-gray-900">{t('matrix', language)}</h1>
+            <LayoutGrid className="h-5 w-5 text-red-800" />
+            <h1 className="text-xl font-bold text-[#2a2420]">{t('matrix', language)}</h1>
           </div>
-          <span className="text-sm text-gray-500">
-            {language === 'fr' ? 'Glissez les tâches pour les prioriser' : 'Drag tasks to prioritize'}
+          <span className="text-sm text-[#8a7a5e]">
+            {language === 'fr' ? 'Glissez les tâches pour les prioriser' : language === 'zh' ? '拖曳任務以排定優先順序' : 'Drag tasks to prioritize'}
           </span>
           {/* Feature 3: calendar filter dropdown */}
           {calendarAccounts.length > 0 && (
             <select
               value={filterAccountId}
               onChange={(e) => setFilterAccountId(e.target.value)}
-              className="text-sm border border-gray-200 rounded-lg px-2 py-1 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
+              className="text-sm border border-[#e2d6bc] rounded-lg px-2 py-1 text-[#5c5347] focus:outline-none focus:ring-2 focus:ring-red-300 bg-[#fbf7ee]"
             >
-              <option value="all">{language === 'fr' ? 'Tous les calendriers' : 'All calendars'}</option>
+              <option value="all">{language === 'fr' ? 'Tous les calendriers' : language === 'zh' ? '所有日曆' : 'All calendars'}</option>
               {calendarAccounts.map((acc) => (
                 <option key={acc.id} value={acc.id}>{acc.name}</option>
               ))}
@@ -175,38 +249,39 @@ export default function MatrixPage() {
 
         {/* Feature 2: CalendarImport panel */}
         {calendarAccounts.length > 0 && (
-          <div className="mb-6 border border-gray-200 rounded-2xl bg-white overflow-hidden">
+          <div className="mb-6 border border-[#e2d6bc] rounded-2xl bg-[#fbf7ee] overflow-hidden">
             <button
               onClick={() => setCalendarPanelOpen((o) => !o)}
-              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#f3ecdd] transition-colors"
             >
-              <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                <CalendarDays className="h-4 w-4 text-indigo-500" />
-                {language === 'fr' ? "Événements d'aujourd'hui" : "Today's events"}
-                {todayEventsLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
+              <div className="flex items-center gap-2 text-sm font-medium text-[#5c5347]">
+                <CalendarDays className="h-4 w-4 text-red-500" />
+                {language === 'fr' ? "Événements d'aujourd'hui" : language === 'zh' ? '今日活動' : "Today's events"}
+                {todayEventsLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-[#a99873]" />}
                 {!todayEventsLoading && (
-                  <span className="text-xs font-normal text-gray-400">
+                  <span className="text-xs font-normal text-[#a99873]">
                     ({todayEvents.length - importedEventIds.size > 0
-                      ? `${todayEvents.length - importedEventIds.size} ${language === 'fr' ? 'à importer' : 'to import'}`
-                      : language === 'fr' ? 'aucun' : 'none'})
+                      ? `${todayEvents.length - importedEventIds.size} ${language === 'fr' ? 'à importer' : language === 'zh' ? '待匯入' : 'to import'}`
+                      : language === 'fr' ? 'aucun' : language === 'zh' ? '無' : 'none'})
                   </span>
                 )}
               </div>
               {calendarPanelOpen
-                ? <ChevronUp className="h-4 w-4 text-gray-400" />
-                : <ChevronDown className="h-4 w-4 text-gray-400" />}
+                ? <ChevronUp className="h-4 w-4 text-[#a99873]" />
+                : <ChevronDown className="h-4 w-4 text-[#a99873]" />}
             </button>
 
             {calendarPanelOpen && (
-              <div className="px-4 pb-4 border-t border-gray-100">
+              <div className="px-4 pb-4 border-t border-[#ece2cb]">
                 {todayEvents.length === 0 && !todayEventsLoading && (
-                  <p className="text-sm text-gray-400 py-3 text-center">
-                    {language === 'fr' ? 'Aucun événement aujourd\'hui' : 'No events today'}
+                  <p className="text-sm text-[#a99873] py-3 text-center">
+                    {language === 'fr' ? 'Aucun événement aujourd\'hui' : language === 'zh' ? '今日沒有活動' : 'No events today'}
                   </p>
                 )}
                 <div className="flex flex-wrap gap-2 pt-3">
                   {todayEvents.map((ev) => {
                     const isImported = importedEventIds.has(ev.id)
+                    const isImportedHabit = importedHabitEventIds.has(ev.id)
                     const acc = calendarAccounts.find((a) => a.id === ev.calendarAccountId)
                     const color = ev.color ?? acc?.color ?? '#6366F1'
                     return (
@@ -214,36 +289,102 @@ export default function MatrixPage() {
                         key={ev.id}
                         className={cn(
                           'flex items-center gap-2 border rounded-xl px-3 py-2 text-xs transition-all',
-                          isImported
-                            ? 'border-gray-100 bg-gray-50 opacity-60'
-                            : 'border-gray-200 bg-white hover:border-indigo-200 hover:shadow-sm'
+                          isImported && isImportedHabit
+                            ? 'border-[#ece2cb] bg-[#f3ecdd] opacity-60'
+                            : 'border-[#e2d6bc] bg-[#fbf7ee] hover:border-red-200 hover:shadow-sm'
                         )}
                       >
                         <span
                           className="h-2 w-2 rounded-full shrink-0"
                           style={{ backgroundColor: color }}
                         />
-                        <span className="font-medium text-gray-800 max-w-[160px] truncate">{ev.title}</span>
+                        <span className="font-medium text-[#3a3326] max-w-[160px] truncate">{ev.title}</span>
                         {ev.start && ev.end && (
-                          <span className="text-gray-400 whitespace-nowrap">
+                          <span className="text-[#a99873] whitespace-nowrap">
                             {formatTime(ev.start)} – {formatTime(ev.end)}
                           </span>
                         )}
+
                         {isImported ? (
                           <span className="text-green-500 font-medium ml-1">
-                            {language === 'fr' ? 'importé' : 'imported'}
+                            {language === 'fr' ? 'importé' : language === 'zh' ? '已匯入' : 'imported'}
                           </span>
                         ) : (
                           <button
                             onClick={() => handleImportEvent(ev)}
-                            className="ml-1 flex items-center gap-1 text-indigo-600 hover:text-indigo-800 font-medium"
-                            title={language === 'fr' ? 'Importer comme tâche' : 'Import as task'}
+                            className="ml-1 flex items-center gap-1 text-red-800 hover:text-red-950 font-medium"
+                            title={language === 'fr' ? 'Importer comme tâche' : language === 'zh' ? '匯入為任務' : 'Import as task'}
                           >
                             <Plus className="h-3 w-3" />
-                            {language === 'fr' ? 'Importer' : 'Import'}
+                            {language === 'fr' ? 'Tâche' : language === 'zh' ? '任務' : 'Task'}
+                          </button>
+                        )}
+
+                        <span className="text-[#e2d6bc]">|</span>
+
+                        {isImportedHabit ? (
+                          <span className="text-green-500 font-medium">
+                            {language === 'fr' ? 'importé' : language === 'zh' ? '已匯入' : 'imported'}
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleImportEventAsHabit(ev)}
+                            className="flex items-center gap-1 text-[#8a6a32] hover:text-[#6e5526] font-medium"
+                            title={language === 'fr' ? 'Importer comme habitude' : language === 'zh' ? '匯入為習慣' : 'Import as habit'}
+                          >
+                            <Candle className="h-3.5 w-3" lit={false} />
+                            {language === 'fr' ? 'Habitude' : language === 'zh' ? '習慣' : 'Habit'}
                           </button>
                         )}
                       </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Habits panel */}
+        {todayHabits.length > 0 && (
+          <div className="mb-6 border border-[#e2d6bc] rounded-2xl bg-[#fbf7ee] overflow-hidden">
+            <button
+              onClick={() => setHabitPanelOpen((o) => !o)}
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#f3ecdd] transition-colors"
+            >
+              <div className="flex items-center gap-2 text-sm font-medium text-[#5c5347]">
+                <Repeat2 className="h-4 w-4 text-amber-500" />
+                {language === 'fr' ? "Habitudes du jour" : language === 'zh' ? '今日習慣' : "Today's habits"}
+                <span className="text-xs font-normal text-[#a99873]">
+                  ({todayHabits.filter((h) => ((h as Habit & { completions?: { id: string }[] }).completions?.length ?? 0) > 0).length}/{todayHabits.length})
+                </span>
+              </div>
+              {habitPanelOpen ? <ChevronUp className="h-4 w-4 text-[#a99873]" /> : <ChevronDown className="h-4 w-4 text-[#a99873]" />}
+            </button>
+            {habitPanelOpen && (
+              <div className="px-4 pb-4 border-t border-[#ece2cb]">
+                <div className="flex flex-wrap gap-2 pt-3">
+                  {todayHabits.map((habit) => {
+                    const doneToday = ((habit as Habit & { completions?: { id: string }[] }).completions?.length ?? 0) > 0
+                    return (
+                      <button
+                        key={habit.id}
+                        onClick={() => doneToday ? handleUncompleteHabit(habit.id) : handleCompleteHabit(habit.id)}
+                        className={cn(
+                          'flex items-center gap-2 rounded-xl px-3 py-2 text-sm border transition-all',
+                          doneToday
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-red-50 hover:border-red-200 hover:text-red-600'
+                            : 'bg-[#fbf7ee] border-[#e2d6bc] text-[#5c5347] hover:border-amber-300 hover:bg-amber-50'
+                        )}
+                      >
+                        {doneToday
+                          ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                          : <Circle className="h-3.5 w-3.5 text-[#cbb98e]" />
+                        }
+                        <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: habit.color }} />
+                        <span className={cn(doneToday && 'line-through')}>{habit.icon} {habit.title}</span>
+                        {habit.scheduledTime && <span className="text-xs opacity-60">{habit.scheduledTime}</span>}
+                      </button>
                     )
                   })}
                 </div>
@@ -264,6 +405,7 @@ export default function MatrixPage() {
         open={showTaskForm}
         onClose={() => { setShowTaskForm(false); setEditingTask(null) }}
         onSave={handleSaveTask}
+        onDelete={handleDeleteTask}
         task={editingTask}
         calendarAccounts={calendarAccounts}
         lang={language}

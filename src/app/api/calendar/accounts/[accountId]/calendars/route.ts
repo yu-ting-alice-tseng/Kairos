@@ -66,13 +66,31 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
     return NextResponse.json(result)
   } catch (err: unknown) {
+    const status = (err as { status?: number })?.status
+    const code = (err as { code?: string })?.code
     const msg = String(err)
-    const isAuthError = msg.includes('401') || msg.includes('403') || msg.includes('invalid_grant') || msg.includes('Token has been expired')
-    if (isAuthError) {
+
+    // Genuine token/credential failure — re-authorizing actually fixes this.
+    const isTokenError =
+      status === 401 || code === 'unauthorized' ||
+      msg.includes('401') || msg.includes('invalid_grant') || msg.includes('Token has been expired')
+    if (isTokenError) {
       return NextResponse.json({ error: 'Token expired. Please re-authorize.', code: 'NO_TOKEN' }, { status: 403 })
     }
+
+    // Notion-specific: integration token is valid but no pages/databases were
+    // shared with it. Re-authorizing does NOT fix this — the user must share
+    // a database with the integration from inside Notion.
+    const isPermissionError = status === 403 || code === 'restricted_resource'
+    if (isPermissionError) {
+      return NextResponse.json({
+        error: 'No databases shared with this integration. Open Notion and share a database with it.',
+        code: 'NO_ACCESS',
+      }, { status: 403 })
+    }
+
     console.error('Failed to list calendars:', err)
-    return NextResponse.json({ error: 'Failed to fetch calendars from provider' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to fetch calendars from provider', code: 'PROVIDER_ERROR' }, { status: 500 })
   }
 }
 

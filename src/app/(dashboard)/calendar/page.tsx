@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useAppStore } from '@/stores/useAppStore'
-import { Task, CalendarEvent } from '@/types'
+import { Task, CalendarEvent, Habit } from '@/types'
 import { t } from '@/lib/i18n'
 import { TaskForm } from '@/components/tasks/TaskForm'
 import { Button } from '@/components/ui/button'
@@ -12,12 +12,16 @@ import {
 } from 'lucide-react'
 import {
   format, startOfWeek, endOfWeek, addDays, isSameDay, addWeeks, subWeeks,
-  isToday, getHours,
+  isToday,
 } from 'date-fns'
-import { fr, enUS } from 'date-fns/locale'
+import { fr, enUS, zhTW } from 'date-fns/locale'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
 
 const HOURS = Array.from({ length: 14 }, (_, i) => i + 7)
+const ROW_HEIGHT = 60 // px per hour — 1px per minute, keeps every hour row identical
+const GRID_START_HOUR = HOURS[0]
+const GRID_TOTAL_MIN = HOURS.length * 60
+const MIN_BLOCK_HEIGHT = 20 // px — floor so very short/zero-duration items stay visible
 
 interface DragState {
   event: CalendarEvent
@@ -26,8 +30,60 @@ interface DragState {
   eventDurationMs: number
 }
 
+/**
+ * Greedy interval-partitioning layout (the standard "calendar overlap" algorithm):
+ * assigns each item a column index + the total column count of its overlap
+ * cluster, so concurrent items sit side-by-side instead of stacking and
+ * inflating the row height.
+ */
+function assignColumns<T extends { id: string; start: number; end: number }>(
+  items: T[]
+): Map<string, { col: number; cols: number }> {
+  const sorted = [...items].sort((a, b) => a.start - b.start || a.end - b.end)
+  const result = new Map<string, { col: number; cols: number }>()
+
+  let clusterIds: string[] = []
+  let columnEnds: number[] = []
+  let clusterEnd = -Infinity
+
+  const flush = () => {
+    const cols = columnEnds.length || 1
+    for (const id of clusterIds) {
+      const existing = result.get(id)
+      result.set(id, { col: existing?.col ?? 0, cols })
+    }
+    clusterIds = []
+    columnEnds = []
+    clusterEnd = -Infinity
+  }
+
+  for (const item of sorted) {
+    if (clusterIds.length > 0 && item.start >= clusterEnd) flush()
+    let colIdx = columnEnds.findIndex((end) => end <= item.start)
+    if (colIdx === -1) {
+      colIdx = columnEnds.length
+      columnEnds.push(item.end)
+    } else {
+      columnEnds[colIdx] = item.end
+    }
+    result.set(item.id, { col: colIdx, cols: 0 })
+    clusterIds.push(item.id)
+    clusterEnd = Math.max(clusterEnd, item.end)
+  }
+  flush()
+
+  return result
+}
+
+type DayBlock =
+  | { id: string; kind: 'event'; start: number; end: number; col: number; cols: number; data: CalendarEvent }
+  | { id: string; kind: 'task'; start: number; end: number; col: number; cols: number; data: Task }
+  | { id: string; kind: 'habit'; start: number; end: number; col: number; cols: number; data: Habit }
+
+const toGridMinutes = (d: Date) => d.getHours() * 60 + d.getMinutes() - GRID_START_HOUR * 60
+
 export default function CalendarPage() {
-  const { language, tasks, setTasks, calendarAccounts } = useAppStore()
+  const { language, tasks, setTasks, calendarAccounts, habits, setHabits } = useAppStore()
   const { toast } = useGlobalToast()
   const [currentWeek, setCurrentWeek] = useState(new Date())
   const [showTaskForm, setShowTaskForm] = useState(false)
@@ -50,7 +106,7 @@ export default function CalendarPage() {
   const dragPreviewRef = useRef<{ dayIdx: number; hour: number } | null>(null)
   dragPreviewRef.current = dragPreview
 
-  const locale = language === 'fr' ? fr : enUS
+  const locale = language === 'fr' ? fr : language === 'zh' ? zhTW : enUS
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 })
   const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 })
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
@@ -80,6 +136,12 @@ export default function CalendarPage() {
 
   useEffect(() => { loadTasks() }, [loadTasks])
   useEffect(() => { loadExternalEvents() }, [loadExternalEvents])
+  useEffect(() => {
+    if (habits.length === 0) {
+      fetch('/api/habits').then((r) => r.json()).then(setHabits).catch(() => {})
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const scheduledTasks = tasks.filter((task) => task.scheduledStart && task.scheduledEnd)
 
@@ -94,19 +156,52 @@ export default function CalendarPage() {
   const getAllDayEventsForDay = (day: Date) =>
     externalEvents.filter((ev) => ev.allDay && ev.start && isSameDay(new Date(ev.start), day))
 
-  const getTasksForDayHour = (day: Date, hour: number) =>
-    scheduledTasks.filter((task) => {
-      if (!task.scheduledStart) return false
-      const start = new Date(task.scheduledStart)
-      return isSameDay(start, day) && getHours(start) === hour
+  const isHabitActiveOnDay = (h: { isActive: boolean; frequency: string }, day: Date) => {
+    if (!h.isActive) return false
+    const dow = day.getDay()
+    if (h.frequency === 'DAILY') return true
+    if (h.frequency === 'WEEKDAYS') return dow >= 1 && dow <= 5
+    if (h.frequency === 'WEEKENDS') return dow === 0 || dow === 6
+    return false
+  }
+
+  const getHabitsAllDayForDay = (day: Date) =>
+    habits.filter((h) => !h.scheduledTime && isHabitActiveOnDay(h, day))
+
+  // Builds the duration-proportional, side-by-side-on-overlap blocks for one day column.
+  const getDayBlocks = (day: Date): DayBlock[] => {
+    type Raw = { id: string; kind: DayBlock['kind']; start: number; end: number; data: CalendarEvent | Task | Habit }
+    const raw: Raw[] = []
+
+    externalEvents.forEach((ev) => {
+      if (ev.allDay || !ev.start) return
+      const s = new Date(ev.start)
+      if (!isSameDay(s, day)) return
+      const e = ev.end ? new Date(ev.end) : new Date(s.getTime() + 30 * 60000)
+      raw.push({ id: `ev-${ev.id}`, kind: 'event', start: toGridMinutes(s), end: toGridMinutes(e), data: ev })
     })
 
-  const getEventsForDayHour = (day: Date, hour: number) =>
-    externalEvents.filter((ev) => {
-      if (!ev.start || ev.allDay) return false
-      const start = new Date(ev.start)
-      return isSameDay(start, day) && getHours(start) === hour
+    scheduledTasks.forEach((task) => {
+      const s = new Date(task.scheduledStart!)
+      if (!isSameDay(s, day)) return
+      const e = new Date(task.scheduledEnd!)
+      raw.push({ id: `task-${task.id}`, kind: 'task', start: toGridMinutes(s), end: toGridMinutes(e), data: task })
     })
+
+    habits.forEach((h) => {
+      if (!h.scheduledTime || !isHabitActiveOnDay(h, day)) return
+      const [hh, mm] = h.scheduledTime.split(':').map(Number)
+      const start = hh * 60 + mm - GRID_START_HOUR * 60
+      raw.push({ id: `habit-${h.id}`, kind: 'habit', start, end: start + (h.durationMinutes ?? 30), data: h })
+    })
+
+    const visible = raw
+      .filter((it) => it.end > 0 && it.start < GRID_TOTAL_MIN)
+      .map((it) => ({ ...it, start: Math.max(0, it.start), end: Math.min(GRID_TOTAL_MIN, it.end) }))
+
+    const cols = assignColumns(visible)
+    return visible.map((it) => ({ ...it, ...(cols.get(it.id) ?? { col: 0, cols: 1 }) })) as DayBlock[]
+  }
 
   const handleSaveEvent = useCallback(async (
     ev: CalendarEvent,
@@ -138,10 +233,10 @@ export default function CalendarPage() {
             : e
         )
       )
-      toast({ title: language === 'fr' ? 'Événement mis à jour' : 'Event updated', variant: 'success' })
+      toast({ title: language === 'fr' ? 'Événement mis à jour' : language === 'zh' ? '活動已更新' : 'Event updated', variant: 'success' })
       setEditingEvent(null)
     } else {
-      toast({ title: language === 'fr' ? 'Erreur lors de la mise à jour' : 'Failed to update event', variant: 'error' })
+      toast({ title: language === 'fr' ? 'Erreur lors de la mise à jour' : language === 'zh' ? '更新失敗' : 'Failed to update event', variant: 'error' })
     }
     setEventSaving(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -152,7 +247,7 @@ export default function CalendarPage() {
   handleSaveEventRef.current = handleSaveEvent
 
   const handleDeleteEvent = async (ev: CalendarEvent) => {
-    if (!confirm(language === 'fr' ? 'Supprimer cet événement ?' : 'Delete this event?')) return
+    if (!confirm(language === 'fr' ? 'Supprimer cet événement ?' : language === 'zh' ? '確定刪除此活動？' : 'Delete this event?')) return
     const res = await fetch('/api/calendar/events', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
@@ -160,10 +255,10 @@ export default function CalendarPage() {
     })
     if (res.ok) {
       setExternalEvents((prev) => prev.filter((e) => e.id !== ev.id))
-      toast({ title: language === 'fr' ? 'Événement supprimé' : 'Event deleted', variant: 'success' })
+      toast({ title: language === 'fr' ? 'Événement supprimé' : language === 'zh' ? '活動已刪除' : 'Event deleted', variant: 'success' })
       setEditingEvent(null)
     } else {
-      toast({ title: language === 'fr' ? 'Erreur lors de la suppression' : 'Failed to delete event', variant: 'error' })
+      toast({ title: language === 'fr' ? 'Erreur lors de la suppression' : language === 'zh' ? '刪除失敗' : 'Failed to delete event', variant: 'error' })
     }
   }
 
@@ -184,7 +279,7 @@ export default function CalendarPage() {
       if (res.ok) {
         const updated = await res.json()
         setTasks(tasks.map((task) => task.id === editingTask.id ? updated : task))
-        toast({ title: language === 'fr' ? 'Événement modifié' : 'Event updated', variant: 'success' })
+        toast({ title: language === 'fr' ? 'Événement modifié' : language === 'zh' ? '活動已更新' : 'Event updated', variant: 'success' })
       }
     } else {
       const res = await fetch('/api/tasks', {
@@ -195,11 +290,17 @@ export default function CalendarPage() {
       if (res.ok) {
         const created = await res.json()
         setTasks([...tasks, created])
-        toast({ title: language === 'fr' ? 'Événement créé !' : 'Event created!', variant: 'success' })
+        toast({ title: language === 'fr' ? 'Événement créé !' : language === 'zh' ? '活動已建立！' : 'Event created!', variant: 'success' })
       }
     }
     setEditingTask(null)
     setSelectedDate(null)
+  }
+
+  const handleDeleteTask = async (id: string) => {
+    await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
+    setTasks(tasks.filter((task) => task.id !== id))
+    setEditingTask(null)
   }
 
   const handleCellClick = (day: Date, hour: number) => {
@@ -299,7 +400,7 @@ export default function CalendarPage() {
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-red-800" />
       </div>
     )
   }
@@ -308,17 +409,17 @@ export default function CalendarPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 bg-white sticky top-0 z-10">
+      <div className="flex items-center justify-between px-6 py-5 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <Calendar className="h-5 w-5 text-indigo-600" />
-            <h1 className="text-xl font-bold text-gray-900">{t('calendar', language)}</h1>
+            <Calendar className="h-5 w-5 text-[#ab3326]" />
+            <h1 className="text-2xl font-brush text-[#2a2420]">{t('calendar', language)}</h1>
           </div>
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="icon-sm" onClick={() => setCurrentWeek(subWeeks(currentWeek, 1))}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="text-sm font-medium text-gray-700 px-2 min-w-[160px] text-center">
+            <span className="text-sm font-medium text-[#5c5347] px-2 min-w-[160px] text-center">
               {format(weekStart, 'dd MMM', { locale })} – {format(weekEnd, 'dd MMM yyyy', { locale })}
             </span>
             <Button variant="ghost" size="icon-sm" onClick={() => setCurrentWeek(addWeeks(currentWeek, 1))}>
@@ -330,9 +431,9 @@ export default function CalendarPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {eventsLoading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+          {eventsLoading && <Loader2 className="h-4 w-4 animate-spin text-[#a99873]" />}
           {calendarAccounts.length > 0 && (
-            <div className="flex items-center gap-1.5" title={language === 'fr' ? 'Calendriers connectés' : 'Connected calendars'}>
+            <div className="flex items-center gap-1.5" title={language === 'fr' ? 'Calendriers connectés' : language === 'zh' ? '已連接的日曆' : 'Connected calendars'}>
               {calendarAccounts.map((acc) => (
                 <div
                   key={acc.id}
@@ -353,18 +454,18 @@ export default function CalendarPage() {
       <div className={cn('flex-1 overflow-auto', isDragging && 'cursor-grabbing select-none')}>
         <div className="min-w-[700px]">
           {/* Day headers */}
-          <div className="grid grid-cols-8 border-b border-gray-100 bg-white sticky top-0 z-10">
-            <div className="py-3 px-2 text-xs text-gray-400 border-r border-gray-100" />
+          <div className="grid grid-cols-8 border-b border-[#ece2cb] bg-[#fbf7ee] sticky top-0 z-10">
+            <div className="py-3 px-2 text-xs text-[#a99873] border-r border-[#ece2cb]" />
             {weekDays.map((day) => (
               <div
                 key={day.toISOString()}
                 className={cn(
-                  'py-3 px-2 text-center border-r border-gray-100',
-                  isToday(day) && 'bg-indigo-50'
+                  'py-3 px-2 text-center border-r border-[#ece2cb]',
+                  isToday(day) && 'bg-red-50'
                 )}
               >
-                <p className="text-xs text-gray-500 uppercase">{format(day, 'EEE', { locale })}</p>
-                <p className={cn('text-sm font-semibold mt-0.5', isToday(day) ? 'text-indigo-600' : 'text-gray-900')}>
+                <p className="text-xs text-[#8a7a5e] uppercase">{format(day, 'EEE', { locale })}</p>
+                <p className={cn('text-sm font-semibold mt-0.5', isToday(day) ? 'text-red-800' : 'text-[#2a2420]')}>
                   {format(day, 'd')}
                 </p>
               </div>
@@ -372,22 +473,23 @@ export default function CalendarPage() {
           </div>
 
           {/* All-day / deadline row */}
-          <div className="grid grid-cols-8 border-b-2 border-gray-200 bg-gray-50/60">
-            <div className="px-2 py-1.5 text-xs text-gray-400 text-right border-r border-gray-200 flex items-start justify-end pt-2 shrink-0">
-              {language === 'fr' ? 'Dû' : 'Due'}
+          <div className="grid grid-cols-8 border-b-2 border-[#e2d6bc] bg-[#f3ecdd]/60">
+            <div className="px-2 py-1.5 text-xs text-[#a99873] text-right border-r border-[#e2d6bc] flex items-start justify-end pt-2 shrink-0">
+              {language === 'fr' ? 'Dû' : language === 'zh' ? '到期' : 'Due'}
             </div>
             {weekDays.map((day, dayIdx) => {
               const deadlineTasks = getDeadlineTasksForDay(day)
               const allDayEvs = getAllDayEventsForDay(day)
-              const total = deadlineTasks.length + allDayEvs.length
+              const allDayHabits = getHabitsAllDayForDay(day)
+              const total = deadlineTasks.length + allDayEvs.length + allDayHabits.length
               const isPreviewHere = isDragging && dragPreview?.dayIdx === dayIdx && (dragPreview?.hour ?? 7) < 7
               return (
                 <div
                   key={day.toISOString()}
                   className={cn(
-                    'border-r border-gray-200 px-1 py-1 min-h-[32px]',
-                    isToday(day) && 'bg-indigo-50/40',
-                    isPreviewHere && 'bg-indigo-100/60'
+                    'border-r border-[#e2d6bc] px-1 py-1 min-h-[32px]',
+                    isToday(day) && 'bg-red-50/40',
+                    isPreviewHere && 'bg-red-100/60'
                   )}
                   onMouseMove={() => handleAllDayCellMouseMove(dayIdx)}
                 >
@@ -410,27 +512,41 @@ export default function CalendarPage() {
                       </div>
                     )
                   })}
+                  {allDayHabits.map((habit) => {
+                    const doneToday = isToday(day) ? (habit.completions?.length ?? 0) > 0 : false
+                    return (
+                      <div
+                        key={habit.id}
+                        className={cn('rounded px-1.5 py-0.5 text-xs mb-0.5 truncate border border-dashed select-none', doneToday && 'opacity-60')}
+                        style={{ backgroundColor: habit.color + '18', borderColor: habit.color, color: habit.color }}
+                        title={habit.title}
+                      >
+                        <span className={cn(doneToday && 'line-through')}>{habit.icon ?? '🔁'} {habit.title}</span>
+                      </div>
+                    )
+                  })}
                   {deadlineTasks.slice(0, 3).map((task) => {
                     const qId = getQuadrant(task.importance, task.urgency)
                     const q = EISENHOWER_QUADRANTS.find((q) => q.id === qId)
                     const acc = calendarAccounts.find((a) => a.id === task.calendarAccountId)
+                    const done = task.status === 'COMPLETED'
                     return (
                       <div
                         key={task.id}
                         onClick={() => handleTaskClick(task)}
                         title={task.title}
                         className={cn(
-                          'rounded px-1.5 py-0.5 text-xs cursor-pointer mb-0.5 truncate border transition-all hover:shadow-sm hover:brightness-95',
-                          q?.bgColor, q?.color
+                          'rounded px-1.5 py-0.5 text-xs cursor-pointer mb-0.5 truncate border transition-all hover:shadow-sm',
+                          done ? 'bg-emerald-50 border-emerald-200 text-emerald-700 opacity-70 line-through' : cn(q?.bgColor, q?.color)
                         )}
-                        style={acc ? { borderLeftColor: acc.color, borderLeftWidth: 3 } : {}}
+                        style={!done && acc ? { borderLeftColor: acc.color, borderLeftWidth: 3 } : {}}
                       >
                         {task.title}
                       </div>
                     )
                   })}
                   {deadlineTasks.length > 3 && (
-                    <p className="text-xs text-gray-400 px-1 leading-tight">
+                    <p className="text-xs text-[#a99873] px-1 leading-tight">
                       +{deadlineTasks.length - 3}
                     </p>
                   )}
@@ -455,48 +571,67 @@ export default function CalendarPage() {
             })}
           </div>
 
-          {/* Time grid */}
+          {/* Time grid — fixed-height hour rows (uniform spacing) with an absolutely
+              positioned overlay whose blocks are sized proportionally to actual duration */}
           <div className="relative" ref={gridRef}>
             {HOURS.map((hour) => (
-              <div key={hour} className="grid grid-cols-8 border-b border-gray-50 min-h-[56px]">
-                <div className="px-2 py-1 text-xs text-gray-400 text-right border-r border-gray-100 w-12 shrink-0">
+              <div key={hour} className="grid grid-cols-8 border-b border-[#f3ecdd] h-[60px]">
+                <div className="px-2 py-1 text-xs text-[#a99873] text-right border-r border-[#ece2cb] w-12 shrink-0">
                   {hour}:00
                 </div>
                 {weekDays.map((day, dayIdx) => {
-                  const cellTasks = getTasksForDayHour(day, hour)
-                  const cellEvents = getEventsForDayHour(day, hour)
-                  const isEmpty = cellTasks.length === 0 && cellEvents.length === 0
                   const isPreviewHere = isDragging && dragPreview?.dayIdx === dayIdx && dragPreview?.hour === hour
                   return (
                     <div
                       key={day.toISOString()}
                       className={cn(
-                        'border-r border-gray-100 px-1 py-0.5 cursor-pointer hover:bg-gray-50 transition-colors min-h-[56px]',
-                        isToday(day) && 'bg-indigo-50/30',
-                        isPreviewHere && 'bg-indigo-100/40'
+                        'border-r border-[#ece2cb] cursor-pointer hover:bg-[#f3ecdd] transition-colors',
+                        isToday(day) && 'bg-red-50/30',
+                        isPreviewHere && 'bg-red-100/40'
                       )}
-                      onClick={() => isEmpty && !isDragging && handleCellClick(day, hour)}
+                      onClick={() => handleCellClick(day, hour)}
                       onMouseMove={() => handleCellMouseMove(dayIdx, hour)}
-                    >
-                      {/* External calendar events — dashed border to distinguish from tasks */}
-                      {cellEvents.map((ev) => {
+                    />
+                  )
+                })}
+              </div>
+            ))}
+
+            <div className="absolute inset-0 grid grid-cols-8 pointer-events-none">
+              <div className="w-12 shrink-0" />
+              {weekDays.map((day, dayIdx) => {
+                const blocks = getDayBlocks(day)
+                const isPreviewHere = isDragging && dragPreview?.dayIdx === dayIdx && (dragPreview?.hour ?? -1) >= GRID_START_HOUR
+                return (
+                  <div key={day.toISOString()} className="relative px-1">
+                    {blocks.map((block) => {
+                      const top = block.start
+                      const height = Math.max(block.end - block.start, MIN_BLOCK_HEIGHT)
+                      const widthPct = 100 / block.cols
+                      const leftPct = block.col * widthPct
+                      const boxStyle: React.CSSProperties = {
+                        position: 'absolute',
+                        top,
+                        height,
+                        left: `${leftPct}%`,
+                        width: `calc(${widthPct}% - 4px)`,
+                      }
+
+                      if (block.kind === 'event') {
+                        const ev = block.data
                         const evColor = ev.color ?? calendarAccounts.find((a) => a.id === ev.calendarAccountId)?.color ?? '#6366F1'
                         const isDraggingThis = draggingEventId === ev.id
                         return (
                           <div
-                            key={ev.id}
+                            key={block.id}
                             onClick={(e) => { e.stopPropagation(); if (ev.editable && !isDragging) setEditingEvent(ev) }}
                             onMouseDown={(e) => { if (ev.editable) startDrag(e, ev) }}
                             className={cn(
-                              'rounded-lg px-2 py-1 text-xs mb-0.5 border border-dashed',
+                              'pointer-events-auto rounded-lg px-2 py-1 text-xs border border-dashed overflow-hidden',
                               ev.editable ? 'cursor-grab hover:brightness-95' : 'select-none',
                               isDraggingThis && 'opacity-40'
                             )}
-                            style={{
-                              backgroundColor: evColor + '1a',
-                              borderColor: evColor,
-                              color: evColor,
-                            }}
+                            style={{ ...boxStyle, backgroundColor: evColor + '1a', borderColor: evColor, color: evColor }}
                           >
                             <p className="font-medium truncate">{ev.title}</p>
                             {ev.start && ev.end && (
@@ -507,42 +642,25 @@ export default function CalendarPage() {
                             )}
                           </div>
                         )
-                      })}
+                      }
 
-                      {/* Ghost/preview for dragged event in this cell */}
-                      {isPreviewHere && dragRef.current && (() => {
-                        const drag = dragRef.current!
-                        const evColor = drag.event.color ?? calendarAccounts.find((a) => a.id === drag.event.calendarAccountId)?.color ?? '#6366F1'
-                        return (
-                          <div
-                            className="rounded-lg px-2 py-1 text-xs mb-0.5 border-2 border-dashed pointer-events-none"
-                            style={{
-                              backgroundColor: evColor + '30',
-                              borderColor: evColor,
-                              color: evColor,
-                            }}
-                          >
-                            <p className="font-medium truncate">{drag.event.title}</p>
-                          </div>
-                        )
-                      })()}
-
-                      {/* FlowPlan tasks */}
-                      {cellTasks.map((task) => {
+                      if (block.kind === 'task') {
+                        const task = block.data
                         const qId = getQuadrant(task.importance, task.urgency)
                         const q = EISENHOWER_QUADRANTS.find((q) => q.id === qId)
                         const acc = calendarAccounts.find((a) => a.id === task.calendarAccountId)
+                        const done = task.status === 'COMPLETED'
                         return (
                           <div
-                            key={task.id}
+                            key={block.id}
                             onClick={(e) => { e.stopPropagation(); handleTaskClick(task) }}
                             className={cn(
-                              'rounded-lg px-2 py-1 text-xs cursor-pointer mb-0.5 border transition-all hover:shadow-sm',
-                              q?.bgColor, q?.color
+                              'pointer-events-auto rounded-lg px-2 py-1 text-xs cursor-pointer border transition-all hover:shadow-sm overflow-hidden',
+                              done ? 'bg-emerald-50 border-emerald-200 text-emerald-700 opacity-70' : cn(q?.bgColor, q?.color)
                             )}
-                            style={acc ? { borderLeftColor: acc.color, borderLeftWidth: 3 } : {}}
+                            style={{ ...boxStyle, ...(!done && acc ? { borderLeftColor: acc.color, borderLeftWidth: 3 } : {}) }}
                           >
-                            <p className="font-medium truncate">{task.title}</p>
+                            <p className={cn('font-medium truncate', done && 'line-through')}>{task.title}</p>
                             {task.scheduledStart && task.scheduledEnd && (
                               <p className="opacity-70 flex items-center gap-1">
                                 <Clock className="h-2.5 w-2.5" />
@@ -551,12 +669,49 @@ export default function CalendarPage() {
                             )}
                           </div>
                         )
-                      })}
-                    </div>
-                  )
-                })}
-              </div>
-            ))}
+                      }
+
+                      const habit = block.data
+                      const doneToday = habit.completions?.length ?? 0
+                      return (
+                        <div
+                          key={block.id}
+                          title={habit.title}
+                          className={cn(
+                            'pointer-events-auto rounded-lg px-2 py-1 text-xs border select-none overflow-hidden',
+                            doneToday > 0 ? 'border-emerald-200 opacity-60' : 'border-dashed'
+                          )}
+                          style={{ ...boxStyle, backgroundColor: habit.color + '18', borderColor: habit.color, color: habit.color }}
+                        >
+                          <p className={cn('font-medium truncate', doneToday > 0 && 'line-through')}>
+                            {habit.icon ?? '🔁'} {habit.title}
+                          </p>
+                          {habit.durationMinutes && (
+                            <p className="opacity-70 text-[10px]">{habit.durationMinutes} min</p>
+                          )}
+                        </div>
+                      )
+                    })}
+
+                    {/* Ghost preview for the event currently being dragged */}
+                    {isPreviewHere && dragRef.current && (() => {
+                      const drag = dragRef.current!
+                      const top = (dragPreview!.hour - GRID_START_HOUR) * 60
+                      const height = Math.max(drag.eventDurationMs / 60000, MIN_BLOCK_HEIGHT)
+                      const evColor = drag.event.color ?? calendarAccounts.find((a) => a.id === drag.event.calendarAccountId)?.color ?? '#6366F1'
+                      return (
+                        <div
+                          className="absolute rounded-lg px-2 py-1 text-xs border-2 border-dashed pointer-events-none overflow-hidden"
+                          style={{ top, height, left: 0, width: 'calc(100% - 4px)', backgroundColor: evColor + '30', borderColor: evColor, color: evColor }}
+                        >
+                          <p className="font-medium truncate">{drag.event.title}</p>
+                        </div>
+                      )
+                    })()}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </div>
       </div>
@@ -565,6 +720,7 @@ export default function CalendarPage() {
         open={showTaskForm}
         onClose={() => { setShowTaskForm(false); setEditingTask(null); setSelectedDate(null) }}
         onSave={handleSaveTask}
+        onDelete={handleDeleteTask}
         task={editingTask}
         calendarAccounts={calendarAccounts}
         lang={language}
@@ -589,7 +745,7 @@ function EditEventModal({
   event, lang, saving, onSave, onDelete, onClose,
 }: {
   event: CalendarEvent
-  lang: 'fr' | 'en'
+  lang: 'fr' | 'en' | 'zh'
   saving: boolean
   onSave: (ev: CalendarEvent, title: string, start: string, end: string) => void
   onDelete: (ev: CalendarEvent) => void
@@ -606,40 +762,40 @@ function EditEventModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-[#fbf7ee] rounded-2xl shadow-xl p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <Pencil className="h-4 w-4 text-indigo-500" />
-            {lang === 'fr' ? 'Modifier l\'événement' : 'Edit event'}
+          <h2 className="text-lg font-semibold text-[#2a2420] flex items-center gap-2">
+            <Pencil className="h-4 w-4 text-red-500" />
+            {lang === 'fr' ? 'Modifier l\'événement' : lang === 'zh' ? '編輯活動' : 'Edit event'}
           </h2>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-[#ece2cb] text-[#a99873]">
             <X className="h-4 w-4" />
           </button>
         </div>
         <div className="flex flex-col gap-3">
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1 block">{lang === 'fr' ? 'Titre' : 'Title'}</label>
+            <label className="text-xs font-medium text-[#8a7a5e] mb-1 block">{lang === 'fr' ? 'Titre' : lang === 'zh' ? '標題' : 'Title'}</label>
             <input
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+              className="w-full border border-[#e2d6bc] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">{lang === 'fr' ? 'Début' : 'Start'}</label>
+              <label className="text-xs font-medium text-[#8a7a5e] mb-1 block">{lang === 'fr' ? 'Début' : lang === 'zh' ? '開始' : 'Start'}</label>
               <input
                 type="datetime-local"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                className="w-full border border-[#e2d6bc] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300"
                 value={start}
                 onChange={(e) => setStart(e.target.value)}
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">{lang === 'fr' ? 'Fin' : 'End'}</label>
+              <label className="text-xs font-medium text-[#8a7a5e] mb-1 block">{lang === 'fr' ? 'Fin' : lang === 'zh' ? '結束' : 'End'}</label>
               <input
                 type="datetime-local"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                className="w-full border border-[#e2d6bc] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300"
                 value={end}
                 onChange={(e) => setEnd(e.target.value)}
               />
@@ -652,12 +808,12 @@ function EditEventModal({
             className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 px-3 py-2 rounded-xl hover:bg-red-50"
           >
             <Trash2 className="h-3.5 w-3.5" />
-            {lang === 'fr' ? 'Supprimer' : 'Delete'}
+            {lang === 'fr' ? 'Supprimer' : lang === 'zh' ? '刪除' : 'Delete'}
           </button>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={onClose}>{lang === 'fr' ? 'Annuler' : 'Cancel'}</Button>
+            <Button variant="outline" size="sm" onClick={onClose}>{lang === 'fr' ? 'Annuler' : lang === 'zh' ? '取消' : 'Cancel'}</Button>
             <Button size="sm" disabled={saving} onClick={() => onSave(event, title, new Date(start).toISOString(), new Date(end).toISOString())}>
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (lang === 'fr' ? 'Enregistrer' : 'Save')}
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (lang === 'fr' ? 'Enregistrer' : lang === 'zh' ? '儲存' : 'Save')}
             </Button>
           </div>
         </div>

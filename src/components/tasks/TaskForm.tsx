@@ -8,38 +8,39 @@ import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
-import { Task, CalendarAccount, EISENHOWER_QUADRANTS } from '@/types'
+import { Task, CalendarAccount, EISENHOWER_QUADRANTS, QUADRANT_LABEL_ZH } from '@/types'
 import { t, TranslationKey } from '@/lib/i18n'
 import { getQuadrant } from '@/lib/utils'
-import { Sparkles, Calendar, Clock, Target, GitBranch } from 'lucide-react'
+import { Sparkles, Calendar, Clock, Target, GitBranch, Trash2 } from 'lucide-react'
 import { RetroplanDialog } from './RetroplanDialog'
 
 interface TaskFormProps {
   open: boolean
   onClose: () => void
   onSave: (data: Partial<Task>) => Promise<void>
+  onDelete?: (id: string) => Promise<void>
   task?: Task | null
   calendarAccounts?: CalendarAccount[]
-  lang?: 'fr' | 'en'
+  lang?: 'fr' | 'en' | 'zh'
   onRetroplanCreated?: () => void
 }
 
-function ScaleHint({ value, type, lang }: { value: number; type: 'importance' | 'urgency'; lang: 'fr' | 'en' }) {
+function ScaleHint({ value, type, lang }: { value: number; type: 'importance' | 'urgency'; lang: 'fr' | 'en' | 'zh' }) {
   let key: TranslationKey
   let color: string
   if (type === 'importance') {
-    if (value <= 3) { key = 'importanceHintLow'; color = 'text-gray-400' }
+    if (value <= 3) { key = 'importanceHintLow'; color = 'text-[#a99873]' }
     else if (value <= 6) { key = 'importanceHintMed'; color = 'text-amber-500' }
     else { key = 'importanceHintHigh'; color = 'text-red-500' }
   } else {
-    if (value <= 3) { key = 'urgencyHintLow'; color = 'text-gray-400' }
+    if (value <= 3) { key = 'urgencyHintLow'; color = 'text-[#a99873]' }
     else if (value <= 6) { key = 'urgencyHintMed'; color = 'text-amber-500' }
     else { key = 'urgencyHintHigh'; color = 'text-red-500' }
   }
   return <p className={`text-xs mt-1 ${color}`}>{t(key, lang)}</p>
 }
 
-export function TaskForm({ open, onClose, onSave, task, calendarAccounts = [], lang = 'fr', onRetroplanCreated }: TaskFormProps) {
+export function TaskForm({ open, onClose, onSave, onDelete, task, calendarAccounts = [], lang = 'fr', onRetroplanCreated }: TaskFormProps) {
   const [title, setTitle] = useState(task?.title ?? '')
   const [description, setDescription] = useState(task?.description ?? '')
   const [retroplanOpen, setRetroplanOpen] = useState(false)
@@ -52,6 +53,7 @@ export function TaskForm({ open, onClose, onSave, task, calendarAccounts = [], l
   const [calendarAccountId, setCalendarAccountId] = useState(task?.calendarAccountId ?? '')
   const [notes, setNotes] = useState(task?.notes ?? '')
   const [isSaving, setIsSaving] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   useEffect(() => {
     setTitle(task?.title ?? '')
@@ -92,7 +94,7 @@ export function TaskForm({ open, onClose, onSave, task, calendarAccounts = [], l
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Target className="h-5 w-5 text-indigo-600" />
+            <Target className="h-5 w-5 text-red-800" />
             {task ? t('edit', lang) : t('addTask', lang)}
           </DialogTitle>
         </DialogHeader>
@@ -103,7 +105,7 @@ export function TaskForm({ open, onClose, onSave, task, calendarAccounts = [], l
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder={lang === 'fr' ? 'Titre de la tâche...' : 'Task title...'}
+              placeholder={lang === 'fr' ? 'Titre de la tâche...' : lang === 'zh' ? '任務標題...' : 'Task title...'}
               autoFocus
             />
           </div>
@@ -113,7 +115,7 @@ export function TaskForm({ open, onClose, onSave, task, calendarAccounts = [], l
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder={lang === 'fr' ? 'Description optionnelle...' : 'Optional description...'}
+              placeholder={lang === 'fr' ? 'Description optionnelle...' : lang === 'zh' ? '選填描述...' : 'Optional description...'}
               rows={2}
             />
           </div>
@@ -155,7 +157,7 @@ export function TaskForm({ open, onClose, onSave, task, calendarAccounts = [], l
           {quadrant && (
             <div className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium ${quadrant.bgColor} ${quadrant.color}`}>
               <Sparkles className="h-4 w-4" />
-              {lang === 'fr' ? quadrant.labelFr : quadrant.label}
+              {lang === 'fr' ? quadrant.labelFr : lang === 'zh' ? QUADRANT_LABEL_ZH[quadrant.id] : quadrant.label}
             </div>
           )}
 
@@ -195,8 +197,8 @@ export function TaskForm({ open, onClose, onSave, task, calendarAccounts = [], l
                   onClick={() => setCalendarAccountId('')}
                   className={`flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm border transition-all ${
                     !calendarAccountId
-                      ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
-                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                      ? 'bg-red-50 border-red-300 text-red-900'
+                      : 'border-[#e2d6bc] text-[#6e6147] hover:bg-[#f3ecdd]'
                   }`}
                 >
                   Aucun
@@ -207,8 +209,8 @@ export function TaskForm({ open, onClose, onSave, task, calendarAccounts = [], l
                     onClick={() => setCalendarAccountId(acc.id)}
                     className={`flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm border transition-all ${
                       calendarAccountId === acc.id
-                        ? 'border-indigo-300 text-indigo-700'
-                        : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                        ? 'border-red-300 text-red-900'
+                        : 'border-[#e2d6bc] text-[#6e6147] hover:bg-[#f3ecdd]'
                     }`}
                     style={calendarAccountId === acc.id ? { backgroundColor: acc.color + '20', borderColor: acc.color } : {}}
                   >
@@ -225,19 +227,35 @@ export function TaskForm({ open, onClose, onSave, task, calendarAccounts = [], l
             <Textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder={lang === 'fr' ? 'Notes supplémentaires...' : 'Additional notes...'}
+              placeholder={lang === 'fr' ? 'Notes supplémentaires...' : lang === 'zh' ? '補充備註...' : 'Additional notes...'}
               rows={2}
             />
           </div>
         </div>
 
         <DialogFooter className="flex-col sm:flex-row gap-2">
-          {/* Retroplan button — only available when editing a task that has a deadline */}
+          {task?.id && onDelete && (
+            <Button
+              variant="outline"
+              disabled={isDeleting}
+              onClick={async () => {
+                if (!confirm(lang === 'fr' ? 'Supprimer cette tâche ?' : lang === 'zh' ? '確定刪除此任務？' : 'Delete this task?')) return
+                setIsDeleting(true)
+                await onDelete(task.id)
+                setIsDeleting(false)
+                onClose()
+              }}
+              className="sm:mr-auto border-red-200 text-red-600 hover:bg-red-50"
+            >
+              <Trash2 className="h-4 w-4" />
+              {lang === 'fr' ? 'Supprimer' : lang === 'zh' ? '刪除' : 'Delete'}
+            </Button>
+          )}
           {task?.id && deadline && (
             <Button
               variant="outline"
               onClick={() => setRetroplanOpen(true)}
-              className="sm:mr-auto border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+              className="border-red-200 text-red-800 hover:bg-red-50"
             >
               <GitBranch className="h-4 w-4" />
               {t('retroplanSetup', lang)}

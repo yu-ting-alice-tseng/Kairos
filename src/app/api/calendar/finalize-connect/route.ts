@@ -84,9 +84,11 @@ export async function GET(req: NextRequest) {
     // Non-fatal — fall back to provider name
   }
 
-  // Upsert the CalendarAccount for the TARGET user (original or same)
+  // Upsert the CalendarAccount for the TARGET user (original or same) — keyed by
+  // provider + name (the account's email) so multiple accounts of the same
+  // provider don't collide and overwrite each other.
   const existing = await prisma.calendarAccount.findFirst({
-    where: { userId: targetUserId, provider: config.provider, isActive: true },
+    where: { userId: targetUserId, provider: config.provider, name: accountName, isActive: true },
   })
 
   if (!existing) {

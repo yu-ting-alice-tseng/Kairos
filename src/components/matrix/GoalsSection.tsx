@@ -9,7 +9,7 @@ import { Plus, Target, Telescope, Trash2, Check, X, ChevronDown, ChevronUp, Penc
 import { cn } from '@/lib/utils'
 
 interface GoalsSectionProps {
-  lang: 'fr' | 'en'
+  lang: 'fr' | 'en' | 'zh'
 }
 
 function GoalItem({
@@ -100,7 +100,7 @@ function GoalItem({
         <button onClick={save} className="p-1 rounded hover:bg-green-100 text-green-600">
           <Check className="h-3.5 w-3.5" />
         </button>
-        <button onClick={() => setEditing(false)} className="p-1 rounded hover:bg-gray-100 text-gray-400">
+        <button onClick={() => setEditing(false)} className="p-1 rounded hover:bg-[#ece2cb] text-[#a99873]">
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
@@ -110,25 +110,25 @@ function GoalItem({
   return (
     <div>
       <div className="group flex items-start gap-2 py-1">
-        <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-indigo-400 flex-shrink-0" />
-        <span className="text-sm text-gray-700 flex-1 leading-snug">{goal.text}</span>
+        <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-red-400 flex-shrink-0" />
+        <span className="text-sm text-[#5c5347] flex-1 leading-snug">{goal.text}</span>
         <div className="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
           <button
             onClick={() => setBreaking((b) => !b)}
-            className="p-1 rounded hover:bg-indigo-50 text-gray-400 hover:text-indigo-500"
+            className="p-1 rounded hover:bg-red-50 text-[#a99873] hover:text-red-500"
             title="Break down"
           >
             <Scissors className="h-3 w-3" />
           </button>
           <button
             onClick={() => setEditing(true)}
-            className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+            className="p-1 rounded hover:bg-[#ece2cb] text-[#a99873] hover:text-[#6e6147]"
           >
             <Pencil className="h-3 w-3" />
           </button>
           <button
             onClick={() => onDelete(goal.id)}
-            className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500"
+            className="p-1 rounded hover:bg-red-50 text-[#a99873] hover:text-red-500"
           >
             <Trash2 className="h-3 w-3" />
           </button>
@@ -136,8 +136,8 @@ function GoalItem({
       </div>
 
       {breaking && (
-        <div className="ml-4 mb-2 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3">
-          <p className="text-xs font-medium text-indigo-700 mb-1.5">
+        <div className="ml-4 mb-2 rounded-xl border border-red-100 bg-red-50/50 p-3">
+          <p className="text-xs font-medium text-red-900 mb-1.5">
             {goalType === 'LONG_TERM' ? 'Break into smaller steps — one per line' : 'Add sub-steps — one per line'}
           </p>
           <textarea
@@ -146,13 +146,13 @@ function GoalItem({
             onChange={(e) => setBreakItems(e.target.value)}
             placeholder={'Step 1\nStep 2\nStep 3'}
             rows={3}
-            className="w-full rounded-lg border border-indigo-200 bg-white px-2.5 py-1.5 text-xs text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 resize-none"
+            className="w-full rounded-lg border border-red-200 bg-[#fbf7ee] px-2.5 py-1.5 text-xs text-[#5c5347] placeholder:text-[#a99873] focus:outline-none focus:ring-1 focus:ring-red-400 resize-none"
           />
           <div className="flex items-center gap-2 mt-2">
             <button
               onClick={handleBreakIntoGoals}
               disabled={saving || !lines().length}
-              className="flex items-center gap-1.5 rounded-lg bg-indigo-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-600 disabled:opacity-50 transition-colors"
+              className="flex items-center gap-1.5 rounded-lg bg-red-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-800 disabled:opacity-50 transition-colors"
             >
               {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Target className="h-3 w-3" />}
               {goalType === 'LONG_TERM' ? 'As short-term goals' : 'As goals'}
@@ -160,14 +160,14 @@ function GoalItem({
             <button
               onClick={handleBreakIntoTasks}
               disabled={saving || !lines().length}
-              className="flex items-center gap-1.5 rounded-lg bg-white border border-indigo-200 px-2.5 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 transition-colors"
+              className="flex items-center gap-1.5 rounded-lg bg-[#fbf7ee] border border-red-200 px-2.5 py-1 text-xs font-medium text-red-800 hover:bg-red-50 disabled:opacity-50 transition-colors"
             >
               {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <ListTodo className="h-3 w-3" />}
               As tasks
             </button>
             <button
               onClick={() => { setBreaking(false); setBreakItems('') }}
-              className="ml-auto p-1 rounded hover:bg-indigo-100 text-indigo-400"
+              className="ml-auto p-1 rounded hover:bg-red-100 text-red-400"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -189,7 +189,7 @@ function GoalColumn({
 }: {
   type: 'LONG_TERM' | 'SHORT_TERM'
   goals: Goal[]
-  lang: 'fr' | 'en'
+  lang: 'fr' | 'en' | 'zh'
   onAdd: (text: string, type: 'LONG_TERM' | 'SHORT_TERM') => void
   onDelete: (id: string) => void
   onEdit: (id: string, text: string) => void
@@ -213,14 +213,14 @@ function GoalColumn({
     <div className="flex-1 min-w-0">
       <div className={cn(
         'flex items-center gap-2 mb-2 pb-1.5 border-b',
-        isLong ? 'border-violet-200' : 'border-emerald-200'
+        isLong ? 'border-amber-200' : 'border-emerald-200'
       )}>
         {isLong
-          ? <Telescope className="h-3.5 w-3.5 text-violet-500 flex-shrink-0" />
+          ? <Telescope className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
           : <Target className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />}
         <span className={cn(
           'text-xs font-semibold uppercase tracking-wide',
-          isLong ? 'text-violet-600' : 'text-emerald-600'
+          isLong ? 'text-amber-700' : 'text-emerald-600'
         )}>
           {isLong ? t('longTermGoals', lang) : t('shortTermGoals', lang)}
         </span>
@@ -228,7 +228,7 @@ function GoalColumn({
 
       <div className="flex flex-col gap-0.5 mb-2 min-h-[28px]">
         {goals.length === 0 && !adding && (
-          <p className="text-xs text-gray-400 italic py-1">{t('noGoals', lang)}</p>
+          <p className="text-xs text-[#a99873] italic py-1">{t('noGoals', lang)}</p>
         )}
         {goals.map((g) => (
           <GoalItem key={g.id} goal={g} goalType={type} onDelete={onDelete} onEdit={onEdit} onGoalsCreated={onGoalsCreated} />
@@ -242,13 +242,13 @@ function GoalColumn({
             value={newText}
             onChange={(e) => setNewText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') setAdding(false) }}
-            placeholder={lang === 'fr' ? 'Mon objectif…' : 'My goal…'}
+            placeholder={lang === 'fr' ? 'Mon objectif…' : lang === 'zh' ? '我的目標…' : 'My goal…'}
             className="h-7 text-sm py-0 px-2"
           />
           <button onClick={submit} className="p-1 rounded hover:bg-green-100 text-green-600">
             <Check className="h-3.5 w-3.5" />
           </button>
-          <button onClick={() => setAdding(false)} className="p-1 rounded hover:bg-gray-100 text-gray-400">
+          <button onClick={() => setAdding(false)} className="p-1 rounded hover:bg-[#ece2cb] text-[#a99873]">
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -258,7 +258,7 @@ function GoalColumn({
           className={cn(
             'flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border border-dashed transition-colors',
             isLong
-              ? 'border-violet-200 text-violet-500 hover:bg-violet-50'
+              ? 'border-amber-200 text-amber-500 hover:bg-amber-50'
               : 'border-emerald-200 text-emerald-500 hover:bg-emerald-50'
           )}
         >
@@ -318,19 +318,19 @@ export function GoalsSection({ lang }: GoalsSectionProps) {
   const shortTerm = goals.filter((g) => g.type === 'SHORT_TERM')
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white shadow-sm mb-5">
+    <div className="rounded-2xl border border-[#ece2cb] bg-[#fbf7ee] shadow-sm mb-5">
       <button
         onClick={() => setCollapsed((c) => !c)}
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 rounded-2xl transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#f3ecdd] rounded-2xl transition-colors"
       >
         <div className="flex items-center gap-2">
-          <Target className="h-4 w-4 text-indigo-500" />
-          <span className="text-sm font-semibold text-gray-700">{t('goalsTitle', lang)}</span>
-          <span className="text-xs text-gray-400">— {t('goalsHint', lang)}</span>
+          <Target className="h-4 w-4 text-red-500" />
+          <span className="text-sm font-semibold text-[#5c5347]">{t('goalsTitle', lang)}</span>
+          <span className="text-xs text-[#a99873]">— {t('goalsHint', lang)}</span>
         </div>
         {collapsed
-          ? <ChevronDown className="h-4 w-4 text-gray-400" />
-          : <ChevronUp className="h-4 w-4 text-gray-400" />}
+          ? <ChevronDown className="h-4 w-4 text-[#a99873]" />
+          : <ChevronUp className="h-4 w-4 text-[#a99873]" />}
       </button>
 
       {!collapsed && (
@@ -344,7 +344,7 @@ export function GoalsSection({ lang }: GoalsSectionProps) {
             onEdit={handleEdit}
             onGoalsCreated={handleGoalsCreated}
           />
-          <div className="w-px bg-gray-100" />
+          <div className="w-px bg-[#ece2cb]" />
           <GoalColumn
             type="SHORT_TERM"
             goals={shortTerm}
