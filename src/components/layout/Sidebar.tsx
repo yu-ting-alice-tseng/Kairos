@@ -9,7 +9,7 @@ import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import {
   Zap, LayoutGrid, Calendar, Repeat2, Settings, LogOut,
-  ChevronLeft, ChevronRight, Globe, GitBranch,
+  ChevronLeft, ChevronRight, Globe, GitBranch, Info,
 } from 'lucide-react'
 
 const LANG_LABEL: Record<'fr' | 'en' | 'zh', string> = { fr: 'EN', en: '中', zh: 'FR' }
@@ -47,14 +47,37 @@ export function Sidebar() {
         collapsed ? 'justify-center' : 'justify-between'
       )}>
         <div className="flex items-center gap-2.5">
-          {/* 印章 Seal-stamp logo mark */}
-          <div className="seal-stamp h-9 w-9 text-[17px] shrink-0">
-            流
-          </div>
+          {/* Clock dial + ink-brush hand — language-agnostic mark, reads as time/planning */}
+          <svg viewBox="0 0 512 512" className="h-9 w-9 shrink-0 rounded-[8px] shadow-[0_2px_8px_rgba(0,0,0,0.25)]">
+            <defs>
+              <linearGradient id="sb-seal-bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="#c44a3a" />
+                <stop offset="55%" stopColor="#ab3326" />
+                <stop offset="100%" stopColor="#861f17" />
+              </linearGradient>
+            </defs>
+            <rect width="512" height="512" rx="112" fill="url(#sb-seal-bg)" />
+            <circle cx="256" cy="262" r="178" fill="none" stroke="#f3ecdd" strokeOpacity="0.2" strokeWidth="10" />
+            <g stroke="#f3ecdd" strokeOpacity="0.55" strokeWidth="9" strokeLinecap="round">
+              <line x1="256" y1="84" x2="256" y2="102" />
+              <line x1="256" y1="422" x2="256" y2="440" />
+              <line x1="78" y1="262" x2="96" y2="262" />
+              <line x1="416" y1="262" x2="434" y2="262" />
+            </g>
+            <circle cx="256" cy="262" r="16" fill="#f3ecdd" />
+            <path
+              d="M256 270 C 250 246, 234 206, 213 172 C 197 146, 183 128, 174 117
+                 C 172 114, 176 112, 179 115 C 200 137, 224 165, 244 196
+                 C 261 222, 271 246, 268 266 C 267 274, 257 277, 256 270 Z"
+              fill="#fbf3e3"
+            />
+          </svg>
           {!collapsed && (
             <div className="flex flex-col leading-none">
-              <span className="font-brush text-[22px] text-[#e8d9b8] leading-none">流光計劃</span>
-              <span className="text-[9px] uppercase tracking-[0.18em] text-[#8a7a5e] mt-0.5">FlowPlan</span>
+              <span className="leading-none">
+                <span className="font-script text-[22px] text-[#e2a08f]">Kairos</span>
+              </span>
+              <span className="text-[9px] uppercase tracking-[0.18em] text-[#8a7a5e] mt-0.5">墨時 · TIME, INKED.</span>
             </div>
           )}
         </div>
@@ -118,6 +141,19 @@ export function Sidebar() {
 
       {/* ── Footer ── */}
       <div className="p-3 border-t border-[rgba(225,200,150,0.10)] flex flex-col gap-0.5">
+        {/* About / product page */}
+        <Link
+          href="/about"
+          title={collapsed ? 'Kairos' : undefined}
+          className={cn(
+            'flex items-center gap-3 rounded-xl text-[#6e6147] hover:bg-[#fbf7ee]/[0.05] hover:text-[#d9c79f] transition-all text-xs font-medium',
+            collapsed ? 'justify-center h-10 w-10 mx-auto' : 'px-3 py-2'
+          )}
+        >
+          <Info className="h-4 w-4 shrink-0" />
+          {!collapsed && <span className="font-script text-sm text-[#c47f6a]">Kairos</span>}
+        </Link>
+
         {/* Language toggle — cycles FR → EN → 中 → FR */}
         <button
           onClick={() => setLanguage(language === 'fr' ? 'en' : language === 'en' ? 'zh' : 'fr')}

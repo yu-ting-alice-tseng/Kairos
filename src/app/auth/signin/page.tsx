@@ -51,10 +51,10 @@ export default async function SignInPage() {
               <ChiseledWall className="h-full w-full" />
             </div>
           </div>
-          <h1 className="text-[36px] font-brush text-[#e8d9b8] tracking-tight mb-1 leading-none">流光計劃</h1>
-          <p className="text-[#8a7a5e] text-sm font-medium tracking-wide mb-2">FlowPlan</p>
+          <h1 className="text-[36px] font-brush text-[#e2a08f] tracking-tight mb-1 leading-none">Kairos 墨時</h1>
+          <p className="text-[#8a7a5e] text-sm font-medium tracking-wide mb-2">潑墨成時，掌握生命中的關鍵時刻</p>
           <p className="text-[#cba968]/80 text-[13px] font-medium tracking-wide">
-            鑿壁偷光 · 篤志而行 — Planifiez intelligent. Vivez mieux.
+            鑿壁偷光 · 篤志而行 — Maîtrisez l&apos;Instant Décisif.
           </p>
         </div>
 
