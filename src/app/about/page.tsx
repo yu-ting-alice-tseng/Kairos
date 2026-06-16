@@ -58,7 +58,7 @@ const features = {
     {
       icon: '📋',
       title: 'Matrice des Tâches',
-      body: 'Priorisez vos objectifs grâce à la matrice d'Eisenhower. Glissez-déposez vos tâches avec la fluidité d'un pinceau pour distinguer l'important de l'urgent.',
+      body: "Priorisez vos objectifs grâce à la matrice d’Eisenhower. Glissez-déposez vos tâches avec la fluidité d’un pinceau pour distinguer l’important de l’urgent.",
     },
     {
       icon: '📅',
@@ -73,7 +73,7 @@ const features = {
     {
       icon: '🔗',
       title: 'Rétroplanning Automatique',
-      body: 'Détectez les mots-clés pour générer instantanément une chaîne de sous-tâches à partir de modèles personnalisés ou intégrés (examens, projets), offrant une vue d'ensemble sur votre progression.',
+      body: "Détectez les mots-clés pour générer instantanément une chaîne de sous-tâches à partir de modèles personnalisés ou intégrés (examens, projets), offrant une vue d'ensemble sur votre progression.",
     },
   ],
 }
@@ -107,14 +107,14 @@ const hero = {
   },
   fr: {
     headline: 'Kairos / 墨時',
-    sub: 'Maîtrisez l'Instant Décisif, Peignez le Temps à l'Encre',
+    sub: "Maîtrisez l'Instant Décisif, Peignez le Temps à l'Encre",
     philosophy: `Dans la Grèce antique, le temps possédait deux visages : Chronos, le temps linéaire, et Kairos, l'instant opportun, le moment décisif. « MoShi » (墨時) signifie « Mettre le temps en encre ».\n\nEn unissant l'esthétique du lavis oriental (nuances d'encre, vermillon et or ocre) aux outils de productivité modernes, Kairos transforme la gestion du temps en un art de vivre fluide, guidé par la philosophie de « percer le mur pour y dérober la lumière » (鑿壁偷光).`,
     aiLabel: '🤖 Assistance IA',
-    aiBody: 'Bénéficiez d'une IA optionnelle pour décomposer vos projets complexes et optimiser votre emploi du temps.',
+    aiBody: "Bénéficiez d'une IA optionnelle pour décomposer vos projets complexes et optimiser votre emploi du temps.",
     triLabel: '🌐 Interface Trilingue',
-    triBody: 'Basculez instantanément entre le français, l'anglais et le chinois traditionnel.',
+    triBody: "Basculez instantanément entre le français, l'anglais et le chinois traditionnel.",
     visitorLabel: '👁 Mode Invité',
-    visitorBody: 'Découvrez l'intégralité de l'application sans inscription grâce au Mode Invité.',
+    visitorBody: "Découvrez l'intégralité de l'application sans inscription grâce au Mode Invité.",
     cta: 'Commencer',
     featureTitle: 'Fonctionnalités Clés',
   },
