@@ -4,7 +4,7 @@
   "description": "Potrez le temps à l'encre. Planification intelligente avec IA.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f3ecdd",
+  "background_color": "#fbeacb",
   "theme_color": "#ab3326",
   "orientation": "portrait-primary",
   "icons": [

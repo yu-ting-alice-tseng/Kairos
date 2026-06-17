@@ -1,36 +1,42 @@
 @import "tailwindcss";
 
 :root {
-  /* ── 宣紙 Rice-paper canvas ── */
-  --background: #f3ecdd;
-  --foreground: #2a2420;
+  /* ── Kairos Brand Palette ── */
+  /* Parchment — page backgrounds */
+  --background: #fbeacb;       /* Lit Vellum */
+  --foreground: #2a1f12;       /* Ink */
   --font-sans: var(--font-noto-sans-sc), var(--font-geist), system-ui, sans-serif;
   --font-serif: var(--font-noto-serif-sc), 'Songti SC', serif;
-  --font-brush: var(--font-brush), cursive;
+  --font-brush: var(--font-ma-shan-zheng), cursive;
+  --font-script: var(--font-dancing-script), cursive;
 
-  --surface: #fbf7ee;
-  --border: #e2d6bc;
-  --border-subtle: #ece2cb;
+  --surface: #f3dcb2;          /* Parchment — cards/panels */
+  --border: #e7c894;           /* Aged Leaf */
+  --border-subtle: #efd9a8;
 
-  /* ── 朱紅 Cinnabar / seal-stamp red — primary accent ── */
+  /* Cinnabar Seal — primary accent (unchanged) */
   --brand: #ab3326;
   --brand-light: #c44a3a;
-  --brand-dark: #861f17;
+  --brand-dark: #6f1a10;       /* Ember Base */
 
-  /* ── 赭金 Aged-gold — secondary accent ── */
-  --gold: #b08948;
-  --gold-light: #cba968;
-  --gold-dark: #8a6a32;
+  /* Antique Gold — secondary accent */
+  --gold: #a87f3e;             /* Antique Gold */
+  --gold-light: #ffb24a;       /* Candle Glow */
+  --gold-dark: #8a6b3e;        /* Muted Gold */
 
-  /* ── 墨 Ink — deep charcoal for sidebar / headings ── */
-  --ink: #211c17;
-  --ink-light: #322a22;
+  /* Flame palette */
+  --flame-tip: #ffd27a;
+  --flame-glow: #ffb24a;
+  --flame-amber: #ef8a32;
+  --flame-ember: #6f1a10;
 
-  /* ── 青玉 Jade — tertiary accent ── */
-  --jade: #4f6f5e;
+  /* Ink — text / sidebar */
+  --ink: #2a1f12;
+  --ink-light: #3d2e1a;
 
-  --sidebar-bg: #1b1612;
-  --sidebar-border: rgba(225,200,150,0.10);
+  /* Night Ground — sidebar */
+  --sidebar-bg: #2a1d10;       /* Warm Shade */
+  --sidebar-border: rgba(168,127,62,0.15);
 }
 
 @theme inline {
@@ -39,6 +45,7 @@
   --font-sans: var(--font-sans);
   --font-serif: var(--font-serif);
   --font-brush: var(--font-brush);
+  --font-script: var(--font-script);
 }
 
 * {
@@ -56,8 +63,8 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-image:
-    radial-gradient(ellipse 70% 50% at 8% -5%, rgba(171,51,38,0.05), transparent),
-    radial-gradient(ellipse 60% 45% at 100% 0%, rgba(176,137,72,0.07), transparent),
+    radial-gradient(ellipse 70% 50% at 8% -5%, rgba(239,138,50,0.07), transparent),
+    radial-gradient(ellipse 60% 45% at 100% 0%, rgba(168,127,62,0.09), transparent),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.025 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-attachment: fixed;
 }
