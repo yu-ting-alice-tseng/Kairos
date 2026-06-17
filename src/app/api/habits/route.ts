@@ -63,10 +63,12 @@ export async function POST(req: NextRequest) {
         const tomorrow = new Date(today)
         tomorrow.setDate(tomorrow.getDate() + 1)
         calendarEventId = await createGoogleEvent(
+          account.id,
           account.accessToken,
           parsed.data.calendarId,
           { title: parsed.data.title, allDay: true, start: today, end: tomorrow },
-          account.refreshToken ?? undefined
+          account.refreshToken,
+          account.expiresAt
         )
       }
     } catch (err) {

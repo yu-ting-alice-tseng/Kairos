@@ -175,19 +175,22 @@ function ChainCard({
 
 function TemplateEditor({
   template,
+  initial,
   onSave,
   onClose,
   lang,
 }: {
   template: RetroTemplate | null
+  /** Pre-fill when forking a built-in template into an editable custom one. */
+  initial?: { name: string; keywords: string[]; stages: RetroStage[] }
   onSave: (data: { name: string; keywords: string[]; stages: RetroStage[] }) => Promise<void>
   onClose: () => void
   lang: 'fr' | 'en' | 'zh'
 }) {
-  const [name, setName] = useState(template?.name ?? '')
-  const [keywords, setKeywords] = useState<string[]>(template?.keywords ?? [])
+  const [name, setName] = useState(template?.name ?? initial?.name ?? '')
+  const [keywords, setKeywords] = useState<string[]>(template?.keywords ?? initial?.keywords ?? [])
   const [newKw, setNewKw] = useState('')
-  const [stages, setStages] = useState<RetroStage[]>(template?.stages ?? [{ name: '', daysBeforeDeadline: 7 }])
+  const [stages, setStages] = useState<RetroStage[]>(template?.stages ?? initial?.stages ?? [{ name: '', daysBeforeDeadline: 7 }])
   const [saving, setSaving] = useState(false)
 
   const addKeyword = () => {
@@ -211,8 +214,19 @@ function TemplateEditor({
             <GitBranch className="h-5 w-5 text-red-800" />
             {template
               ? (lang === 'fr' ? 'Modifier le modèle' : lang === 'zh' ? '編輯模板' : 'Edit template')
+              : initial
+              ? (lang === 'fr' ? 'Personnaliser le modèle' : lang === 'zh' ? '自訂此模板' : 'Customize template')
               : (lang === 'fr' ? 'Nouveau modèle' : lang === 'zh' ? '新增模板' : 'New template')}
           </DialogTitle>
+          {initial && (
+            <p className="text-xs text-[#8a7a5e] mt-1">
+              {lang === 'fr'
+                ? 'Les modèles intégrés ne sont pas modifiables directement — vos changements seront enregistrés comme un nouveau modèle personnalisé.'
+                : lang === 'zh'
+                ? '內建模板無法直接編輯 — 您的變更將會儲存為新的自訂模板。'
+                : "Built-in templates can't be edited directly — your changes will be saved as a new custom template."}
+            </p>
+          )}
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
@@ -308,6 +322,7 @@ export default function RetroplanningPage() {
   const [userTemplates, setUserTemplates] = useState<RetroTemplate[]>([])
   const [loadingTemplates, setLoadingTemplates] = useState(true)
   const [editingTemplate, setEditingTemplate] = useState<RetroTemplate | null | 'new'>()
+  const [forkDraft, setForkDraft] = useState<{ name: string; keywords: string[]; stages: RetroStage[] } | null>(null)
   const [selectedChainId, setSelectedChainId] = useState<string | null>(null)
 
   // Task form state for editing a task from the chain
@@ -376,6 +391,7 @@ export default function RetroplanningPage() {
       }
     }
     setEditingTemplate(undefined)
+    setForkDraft(null)
   }
 
   const handleDeleteTemplate = async (id: string) => {
@@ -483,8 +499,27 @@ export default function RetroplanningPage() {
               {lang === 'fr' ? 'Intégrés' : lang === 'zh' ? '內建' : 'Built-in'}
             </p>
             {BUILTIN_TEMPLATES.map((tmpl) => (
-              <div key={tmpl.id} className="rounded-xl px-3 py-2.5 hover:bg-[#f3ecdd] transition-colors">
-                <p className="text-sm font-medium text-[#3a3326]">{lang === 'fr' ? tmpl.nameFr : tmpl.name}</p>
+              <div key={tmpl.id} className="group rounded-xl px-3 py-2.5 hover:bg-[#f3ecdd] transition-colors">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-[#3a3326] flex-1 truncate">{lang === 'fr' ? tmpl.nameFr : tmpl.name}</p>
+                  <button
+                    onClick={() => {
+                      setForkDraft({
+                        name: lang === 'fr' ? tmpl.nameFr : tmpl.name,
+                        keywords: tmpl.keywords,
+                        stages: tmpl.stages.map((s) => ({
+                          name: lang === 'fr' ? s.nameFr : s.name,
+                          daysBeforeDeadline: s.daysBeforeDeadline,
+                        })),
+                      })
+                      setEditingTemplate('new')
+                    }}
+                    title={lang === 'fr' ? 'Personnaliser' : lang === 'zh' ? '自訂' : 'Customize'}
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-red-100 text-[#a99873] hover:text-red-800 transition-all shrink-0"
+                  >
+                    <Edit2 className="h-3 w-3" />
+                  </button>
+                </div>
                 <div className="flex flex-wrap gap-1 mt-1.5">
                   {tmpl.keywords.slice(0, 4).map((kw) => (
                     <span key={kw} className="text-[10px] bg-[#ece2cb] text-[#8a7a5e] rounded-full px-2 py-0.5">{kw}</span>
@@ -734,8 +769,9 @@ export default function RetroplanningPage() {
       {editingTemplate !== undefined && (
         <TemplateEditor
           template={editingTemplate === 'new' ? null : editingTemplate}
+          initial={editingTemplate === 'new' ? forkDraft ?? undefined : undefined}
           onSave={handleSaveTemplate}
-          onClose={() => setEditingTemplate(undefined)}
+          onClose={() => { setEditingTemplate(undefined); setForkDraft(null) }}
           lang={lang}
         />
       )}

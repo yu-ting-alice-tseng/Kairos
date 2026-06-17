@@ -19,7 +19,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   })
   if (!account) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const { accessToken, refreshToken } = account
+  const { accessToken, refreshToken, expiresAt } = account
   if (!accessToken) {
     return NextResponse.json({ error: 'No token stored. Please re-authorize this calendar.', code: 'NO_TOKEN' }, { status: 403 })
   }
@@ -28,7 +28,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     let providerCalendars: { id: string; name: string; color?: string }[] = []
 
     if (account.provider === 'GOOGLE') {
-      const raw = await listGoogleCalendars(accessToken, refreshToken ?? undefined)
+      const raw = await listGoogleCalendars(account.id, accessToken, refreshToken, expiresAt)
       providerCalendars = raw.map((c) => ({
         id: c.id ?? '',
         name: c.summary ?? c.id ?? '',

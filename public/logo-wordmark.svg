@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 260">
+  <defs>
+    <linearGradient id="seal-bg" x1="0" y1="0" x2="220" y2="220" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#c44a3a"/>
+      <stop offset="55%" stop-color="#ab3326"/>
+      <stop offset="100%" stop-color="#861f17"/>
+    </linearGradient>
+    <radialGradient id="seal-sheen" cx="32%" cy="22%" r="70%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- ── Icon mark (clock dial + ink-brush hand), scaled down ── -->
+  <g transform="translate(20,20) scale(0.43)">
+    <rect width="512" height="512" rx="112" fill="url(#seal-bg)"/>
+    <rect width="512" height="512" rx="112" fill="url(#seal-sheen)"/>
+    <circle cx="256" cy="262" r="178" fill="none" stroke="#f3ecdd" stroke-opacity="0.20" stroke-width="8"/>
+    <g stroke="#f3ecdd" stroke-opacity="0.55" stroke-width="7" stroke-linecap="round">
+      <line x1="256" y1="84"  x2="256" y2="102"/>
+      <line x1="256" y1="422" x2="256" y2="440"/>
+      <line x1="78"  y1="262" x2="96"  y2="262"/>
+      <line x1="416" y1="262" x2="434" y2="262"/>
+      <line x1="131" y1="137" x2="144" y2="150"/>
+      <line x1="368" y1="374" x2="381" y2="387"/>
+      <line x1="381" y1="137" x2="368" y2="150"/>
+      <line x1="144" y1="374" x2="131" y2="387"/>
+    </g>
+    <circle cx="256" cy="262" r="14" fill="#f3ecdd"/>
+    <path
+      d="M256 270 C 250 246, 234 206, 213 172 C 197 146, 183 128, 174 117
+         C 172 114, 176 112, 179 115 C 200 137, 224 165, 244 196
+         C 261 222, 271 246, 268 266 C 267 274, 257 277, 256 270 Z"
+      fill="#fbf3e3"
+    />
+    <path
+      d="M256 262 C 270 270, 296 286, 318 300 C 327 306, 326 312, 318 313
+         C 296 316, 270 308, 254 296 C 250 293, 251 285, 256 262 Z"
+      fill="#f3ecdd" fill-opacity="0.75"
+    />
+  </g>
+
+  <!-- ── Wordmark: "Flow" (script, fluid) + "Plan" (bold, structured) ──
+       The typographic contrast itself is the brand twist: organic flow
+       meeting deliberate structure. -->
+  <text x="270" y="165" font-family="'Brush Script MT', cursive" font-size="92" fill="#ab3326">Flow</text>
+  <text x="445" y="160" font-family="'Segoe UI', Arial, sans-serif" font-weight="700" font-size="78" letter-spacing="1" fill="#2a2420">Plan</text>
+
+  <!-- Bilingual caption -->
+  <text x="271" y="205" font-family="'Microsoft YaHei', 'Noto Serif SC', sans-serif" font-size="26" letter-spacing="3" fill="#8a7a5e">流光計劃 · TIME, PLANNED.</text>
+</svg>

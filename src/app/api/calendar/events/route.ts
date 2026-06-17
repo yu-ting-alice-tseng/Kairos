@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
 
       const accessToken = account.accessToken
       const refreshToken = account.refreshToken
+      const expiresAt = account.expiresAt
       if (!accessToken) return
 
       const calendarIds = account.subCalendars.length > 0
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest) {
               let events: CalendarEvent[] = []
 
               if (account.provider === 'GOOGLE') {
-                events = await listGoogleEvents(accessToken, id!, timeMin, timeMax, refreshToken ?? undefined)
+                events = await listGoogleEvents(account.id, accessToken, id!, timeMin, timeMax, refreshToken, expiresAt)
                 events = events.map((e) => ({ ...e, editable: true }))
               } else if (account.provider === 'OUTLOOK') {
                 events = await listOutlookEvents(accessToken, id!, timeMin, timeMax)
@@ -90,6 +91,7 @@ export async function PATCH(req: NextRequest) {
 
   if (account.provider === 'GOOGLE') {
     await updateGoogleEvent(
+      account.id,
       account.accessToken,
       calendarId ?? 'primary',
       eventId,
@@ -99,7 +101,8 @@ export async function PATCH(req: NextRequest) {
         start: start ? new Date(start) : undefined,
         end: end ? new Date(end) : undefined,
       },
-      account.refreshToken ?? undefined
+      account.refreshToken,
+      account.expiresAt
     )
     return NextResponse.json({ ok: true })
   }
@@ -122,10 +125,12 @@ export async function DELETE(req: NextRequest) {
 
   if (account.provider === 'GOOGLE') {
     await deleteGoogleEvent(
+      account.id,
       account.accessToken,
       calendarId ?? 'primary',
       eventId,
-      account.refreshToken ?? undefined
+      account.refreshToken,
+      account.expiresAt
     )
     return NextResponse.json({ ok: true })
   }

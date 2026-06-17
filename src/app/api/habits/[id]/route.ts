@@ -24,10 +24,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           const tomorrow = new Date(today)
           tomorrow.setDate(tomorrow.getDate() + 1)
           body.calendarEventId = await createGoogleEvent(
+            account.id,
             account.accessToken,
             body.calendarId,
             { title: body.title ?? existing?.title ?? '', allDay: true, start: today, end: tomorrow },
-            account.refreshToken ?? undefined
+            account.refreshToken,
+            account.expiresAt
           )
         }
       } catch (err) {
