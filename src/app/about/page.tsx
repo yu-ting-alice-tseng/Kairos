@@ -183,6 +183,12 @@ export default function AboutPage() {
             <div className="h-px w-16 bg-gradient-to-l from-transparent to-[#b08948]/40" />
           </div>
 
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/Kairos Logo (static).png"
+            alt="Kairos"
+            className="h-28 w-28 rounded-2xl shadow-2xl shadow-black/40 mx-auto mb-4 object-cover"
+          />
           <h1 className="font-brush text-5xl md:text-6xl text-[#e2a08f] leading-tight">
             {h.headline}
           </h1>

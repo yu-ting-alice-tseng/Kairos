@@ -47,9 +47,12 @@ export default async function SignInPage() {
         {/* Hero — 鑿壁偷光 */}
         <div className="text-center mb-9">
           <div className="inline-flex items-center justify-center mb-5">
-            <div className="relative h-[88px] w-[88px] rounded-[22px] overflow-hidden shadow-2xl shadow-black/40 animate-float ring-1 ring-[rgba(225,200,150,0.14)]">
-              <ChiseledWall className="h-full w-full" />
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/Kairos Logo -animated-.gif"
+              alt="Kairos"
+              className="h-[100px] w-[100px] rounded-[22px] shadow-2xl shadow-black/50 animate-float object-cover"
+            />
           </div>
           <h1 className="text-[36px] font-brush text-[#e2a08f] tracking-tight mb-1 leading-none">Kairos 墨時</h1>
           <p className="text-[#8a7a5e] text-sm font-medium tracking-wide mb-2">潑墨成時，掌握生命中的關鍵時刻</p>

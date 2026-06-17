@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700&family=Noto+Serif+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; -webkit-font-smoothing: antialiased; }
+  @keyframes kairosFlame {
+    0%   { opacity:0.92; transform:translate(-50%,-50%) scale(1)    rotate(0deg); }
+    20%  { opacity:1;    transform:translate(-50%,-50%) scale(1.06) rotate(-0.6deg); }
+    40%  { opacity:0.84; transform:translate(-50%,-50%) scale(0.97) rotate(0.5deg); }
+    60%  { opacity:0.98; transform:translate(-50%,-50%) scale(1.03) rotate(-0.3deg); }
+    80%  { opacity:0.88; transform:translate(-50%,-50%) scale(0.99) rotate(0.4deg); }
+    100% { opacity:0.92; transform:translate(-50%,-50%) scale(1)    rotate(0deg); }
+  }
+  @keyframes kairosTip {
+    0%,100% { opacity:0.85; }
+    30%     { opacity:1; }
+    55%     { opacity:0.7; }
+    75%     { opacity:0.95; }
+  }
+</style>
+</helmet>
+
+<div style="--seal: {{ seal }}; --gold: {{ gold }}; --glow: {{ glow }}; --ink:#221d17; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:64px 40px; background:#171009; background-image: radial-gradient(120% 90% at 50% 38%, #2a1d10 0%, #160f08 60%, #100a05 100%); font-family:'Cormorant Garamond', Georgia, serif;">
+
+  <!-- the lantern card -->
+  <div style="position:relative; width:340px; padding:62px 48px 54px; border-radius:8px; overflow:hidden;
+    background: radial-gradient(95% 62% at 50% 33%, #fbeacb 0%, #f3dcb2 42%, #e7c894 78%, #d8b27a 100%);
+    box-shadow: 0 40px 90px -30px rgba(0,0,0,0.8), 0 0 70px rgba(214,140,60,0.28), inset 0 0 0 1px rgba(255,250,238,0.6), inset 0 0 60px rgba(255,196,120,0.35);">
+
+    <!-- warm candlelit vignette (corners fall into shadow) -->
+    <div style="position:absolute; inset:0; pointer-events:none; background: radial-gradient(78% 56% at 50% 33%, transparent 55%, rgba(120,62,18,0.28) 100%);"></div>
+
+    <!-- flickering candle halo behind the dial -->
+    <div style="position:absolute; left:50%; top:33%; width:300px; height:300px; pointer-events:none; border-radius:50%; filter:blur(14px); mix-blend-mode:screen; animation:kairosFlame 4.6s ease-in-out infinite;
+      background: radial-gradient(circle, var(--glow,#ffb24a) 0%, rgba(255,150,60,0.5) 28%, rgba(255,130,50,0.18) 52%, transparent 72%);"></div>
+
+    <!-- DIAL -->
+    <div style="position:relative; display:flex; flex-direction:column; align-items:center; gap:34px;">
+      <svg width="150" height="150" viewBox="0 0 120 120" aria-label="candlelit clock">
+        <defs>
+          <linearGradient id="cl-flame" x1="0" y1="0" x2="0.18" y2="1">
+            <stop offset="0" stop-color="#ffd27a"/>
+            <stop offset="0.28" stop-color="#ef8a32"/>
+            <stop offset="0.62" stop-color="var(--seal,#ab3326)"/>
+            <stop offset="1" stop-color="#6f1a10"/>
+          </linearGradient>
+          <radialGradient id="cl-core" cx="0.5" cy="0.32" r="0.5">
+            <stop offset="0" stop-color="#fff3d6"/>
+            <stop offset="0.5" stop-color="#ffca73"/>
+            <stop offset="1" stop-color="rgba(255,170,80,0)"/>
+          </radialGradient>
+          <filter id="cl-rough"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.1"/></filter>
+          <filter id="cl-soft" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="2.4"/></filter>
+        </defs>
+
+        <!-- hour ticks, warm ink -->
+        <g stroke="#3a2c1c" stroke-linecap="round">
+          <line x1="60" y1="10" x2="60" y2="18" stroke-width="3"/>
+          <line x1="110" y1="60" x2="102" y2="60" stroke-width="3"/>
+          <line x1="60" y1="110" x2="60" y2="102" stroke-width="3"/>
+          <line x1="10" y1="60" x2="18" y2="60" stroke-width="3"/>
+          <line x1="94.6" y1="25.4" x2="89.6" y2="30.4" stroke-width="2"/>
+          <line x1="94.6" y1="94.6" x2="89.6" y2="89.6" stroke-width="2"/>
+          <line x1="25.4" y1="94.6" x2="30.4" y2="89.6" stroke-width="2"/>
+          <line x1="25.4" y1="25.4" x2="30.4" y2="30.4" stroke-width="2"/>
+        </g>
+
+        <!-- glow cast by the flame onto the tip -->
+        <ellipse cx="60" cy="24" rx="17" ry="22" fill="url(#cl-core)" filter="url(#cl-soft)" style="transform-origin:60px 30px; animation:kairosTip 3.8s ease-in-out infinite;"/>
+
+        <!-- the flame-teardrop (point at the present moment, lit at the tip) -->
+        <g filter="url(#cl-rough)">
+          <path d="M60 60 C 49 41, 47 28, 60 17 C 73 28, 71 41, 60 60 Z" fill="url(#cl-flame)"/>
+        </g>
+        <!-- bright inner core of the flame -->
+        <path d="M60 50 C 55 40, 54 31, 60 23 C 66 31, 65 40, 60 50 Z" fill="#ffd083" opacity="0.65" filter="url(#cl-soft)"/>
+
+        <!-- gold hand sweeping to the moment -->
+        <line x1="60" y1="60" x2="83" y2="71" stroke="var(--gold,#a87f3e)" stroke-width="3.5" stroke-linecap="round"/>
+        <circle cx="60" cy="60" r="4" fill="#2a1f12"/>
+      </svg>
+
+      <!-- wordmark -->
+      <div style="display:flex; flex-direction:column; align-items:center;">
+        <div style="font-size:46px; font-weight:600; line-height:1; letter-spacing:0.02em; color:#2a1f12;">Kairos</div>
+        <div style="font-family:'Noto Serif SC',serif; font-size:14px; font-weight:500; letter-spacing:0.48em; color:#8a6b3e; margin-top:11px; padding-left:0.48em;">墨時</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:520,&quot;height&quot;:640},&quot;seal&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#ab3326&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;gold&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#a87f3e&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;glow&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#ffb24a&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      seal: this.props.seal ?? '#ab3326',
+      gold: this.props.gold ?? '#a87f3e',
+      glow: this.props.glow ?? '#ffb24a',
+    };
+  }
+}
+</script>
+</body>
+</html>

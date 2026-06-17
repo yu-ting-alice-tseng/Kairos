@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700&family=Noto+Serif+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; -webkit-font-smoothing: antialiased; }
+</style>
+</helmet>
+
+<div style="min-height:100vh; padding:72px 56px 80px; background:#171009; background-image: radial-gradient(120% 90% at 50% 12%, #2a1d10 0%, #160f08 60%, #100a05 100%); font-family:'Cormorant Garamond', Georgia, serif; color:#f3dcb2;">
+
+  <div style="max-width:1040px; margin:0 auto;">
+
+    <!-- header -->
+    <div style="display:flex; flex-direction:column; align-items:center; text-align:center; margin-bottom:64px;">
+      <div style="width:54px; height:1px; background:linear-gradient(90deg, transparent, #a87f3e, transparent); margin-bottom:26px;"></div>
+      <div style="font-size:15px; font-weight:500; letter-spacing:0.42em; color:#a87f3e; text-transform:uppercase; padding-left:0.42em;">Brand Palette</div>
+      <div style="font-size:58px; font-weight:600; line-height:1; letter-spacing:0.01em; color:#fbeacb; margin-top:18px;">Kairos</div>
+      <div style="font-family:'Noto Serif SC',serif; font-size:16px; font-weight:500; letter-spacing:0.5em; color:#8a6b3e; margin-top:14px; padding-left:0.5em;">墨時</div>
+      <div style="font-size:19px; font-style:italic; color:#c9a972; margin-top:20px; max-width:460px;">Ink &amp; time, read by candlelight — a warm, ceremonial system of flame, gold, and parchment.</div>
+    </div>
+
+    <!-- CORE -->
+    <div style="font-size:13px; font-weight:600; letter-spacing:0.32em; color:#8a6b3e; text-transform:uppercase; margin:0 0 20px; padding-left:0.32em;">Core</div>
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:20px; margin-bottom:56px;">
+
+      <div style="border-radius:10px; overflow:hidden; background:rgba(255,250,238,0.04); box-shadow:inset 0 0 0 1px rgba(168,127,62,0.22);">
+        <div style="height:148px; background:#ab3326;"></div>
+        <div style="padding:18px 20px 20px;">
+          <div style="font-size:22px; font-weight:600; color:#fbeacb;">Cinnabar Seal</div>
+          <div style="font-size:15px; color:#c9a972; margin-top:3px;">Primary — the lit heart of the flame</div>
+          <div style="font-family:'Noto Serif SC',serif; font-size:15px; letter-spacing:0.12em; color:#a87f3e; margin-top:12px;">#AB3326</div>
+        </div>
+      </div>
+
+      <div style="border-radius:10px; overflow:hidden; background:rgba(255,250,238,0.04); box-shadow:inset 0 0 0 1px rgba(168,127,62,0.22);">
+        <div style="height:148px; background:#a87f3e;"></div>
+        <div style="padding:18px 20px 20px;">
+          <div style="font-size:22px; font-weight:600; color:#fbeacb;">Antique Gold</div>
+          <div style="font-size:15px; color:#c9a972; margin-top:3px;">Accent — the hand, rules &amp; marks</div>
+          <div style="font-family:'Noto Serif SC',serif; font-size:15px; letter-spacing:0.12em; color:#a87f3e; margin-top:12px;">#A87F3E</div>
+        </div>
+      </div>
+
+      <div style="border-radius:10px; overflow:hidden; background:rgba(255,250,238,0.04); box-shadow:inset 0 0 0 1px rgba(168,127,62,0.22);">
+        <div style="height:148px; background:#2a1f12;"></div>
+        <div style="padding:18px 20px 20px;">
+          <div style="font-size:22px; font-weight:600; color:#fbeacb;">Ink</div>
+          <div style="font-size:15px; color:#c9a972; margin-top:3px;">Wordmark &amp; ticks on parchment</div>
+          <div style="font-family:'Noto Serif SC',serif; font-size:15px; letter-spacing:0.12em; color:#a87f3e; margin-top:12px;">#2A1F12</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FLAME -->
+    <div style="font-size:13px; font-weight:600; letter-spacing:0.32em; color:#8a6b3e; text-transform:uppercase; margin:0 0 20px; padding-left:0.32em;">Flame</div>
+    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:56px;">
+      <div style="border-radius:10px; overflow:hidden; box-shadow:inset 0 0 0 1px rgba(168,127,62,0.22);">
+        <div style="height:96px; background:#ffd27a;"></div>
+        <div style="padding:14px 16px 16px; background:rgba(255,250,238,0.04);">
+          <div style="font-size:18px; font-weight:600; color:#fbeacb;">Flame Tip</div>
+          <div style="font-family:'Noto Serif SC',serif; font-size:14px; letter-spacing:0.1em; color:#a87f3e; margin-top:8px;">#FFD27A</div>
+        </div>
+      </div>
+      <div style="border-radius:10px; overflow:hidden; box-shadow:inset 0 0 0 1px rgba(168,127,62,0.22);">
+        <div style="height:96px; background:#ffb24a;"></div>
+        <div style="padding:14px 16px 16px; background:rgba(255,250,238,0.04);">
+          <div style="font-size:18px; font-weight:600; color:#fbeacb;">Candle Glow</div>
+          <div style="font-family:'Noto Serif SC',serif; font-size:14px; letter-spacing:0.1em; color:#a87f3e; margin-top:8px;">#FFB24A</div>
+        </div>
+      </div>
+      <div style="border-radius:10px; overflow:hidden; box-shadow:inset 0 0 0 1px rgba(168,127,62,0.22);">
+        <div style="height:96px; background:#ef8a32;"></div>
+        <div style="padding:14px 16px 16px; background:rgba(255,250,238,0.04);">
+          <div style="font-size:18px; font-weight:600; color:#fbeacb;">Amber</div>
+          <div style="font-family:'Noto Serif SC',serif; font-size:14px; letter-spacing:0.1em; color:#a87f3e; margin-top:8px;">#EF8A32</div>
+        </div>
+      </div>
+      <div style="border-radius:10px; overflow:hidden; box-shadow:inset 0 0 0 1px rgba(168,127,62,0.22);">
+        <div style="height:96px; background:#6f1a10;"></div>
+        <div style="padding:14px 16px 16px; background:rgba(255,250,238,0.04);">
+          <div style="font-size:18px; font-weight:600; color:#fbeacb;">Ember Base</div>
+          <div style="font-family:'Noto Serif SC',serif; font-size:14px; letter-spacing:0.1em; color:#a87f3e; margin-top:8px;">#6F1A10</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PARCHMENT -->
+    <div style="font-size:13px; font-weight:600; letter-spacing:0.32em; color:#8a6b3e; text-transform:uppercase; margin:0 0 20px; padding-left:0.32em;">Parchment</div>
+    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:56px;">
+      <div style="border-radius:10px; overflow:hidden; box-shadow:inset 0 0 0 1px rgba(168,127,62,0.22);">
+        <div style="height:96px; background:#fbeacb;"></div>
+        <div style="padding:14px 16px 16px; background:rgba(255,250,238,0.04);">
+          <div style="font-size:18px; font-weight:600; color:#fbeacb;">Lit Vellum</div>
+          <div style="font-family:'Noto Serif SC',serif; font-size:14px; letter-spacing:0.1em; color:#a87f3e; margin-top:8px;">#FBEACB</div>
+        </div>
+      </div>
+      <div style="border-radius:10px; overflow:hidden; box-shadow:inset 0 0 0 1px rgba(168,127,62,0.22);">
+        <div style="height:96px; background:#f3dcb2;"></div>
+        <div style="padding:14px 16px 16px; background:rgba(255,250,238,0.04);">
+          <div style="font-size:18px; font-weight:600; color:#fbeacb;">Parchment</div>
+          <div style="font-family:'Noto Serif SC',serif; font-size:14px; letter-spacing:0.1em; color:#a87f3e; margin-top:8px;">#F3DCB2</div>
+        </div>
+      </div>
+      <div style="border-radius:10px; overflow:hidden; box-shadow:inset 0 0 0 1px rgba(168,127,62,0.22);">
+        <div style="height:96px; background:#e7c894;"></div>
+        <div style="padding:14px 16px 16px; background:rgba(255,250,238,0.04);">
+          <div style="font-size:18px; font-weight:600; color:#fbeacb;">Aged Leaf</div>
+          <div style="font-family:'Noto Serif SC',serif; font-size:14px; letter-spacing:0.1em; color:#a87f3e; margin-top:8px;">#E7C894</div>
+        </div>
+      </div>
+      <div style="border-radius:10px; overflow:hidden; box-shadow:inset 0 0 0 1px rgba(168,127,62,0.22);">
+        <div style="height:96px; background:#8a6b3e;"></div>
+        <div style="padding:14px 16px 16px; background:rgba(255,250,238,0.04);">
+          <div style="font-size:18px; font-weight:600; color:#fbeacb;">Muted Gold</div>
+          <div style="font-family:'Noto Serif SC',serif; font-size:14px; letter-spacing:0.1em; color:#a87f3e; margin-top:8px;">#8A6B3E</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUND -->
+    <div style="font-size:13px; font-weight:600; letter-spacing:0.32em; color:#8a6b3e; text-transform:uppercase; margin:0 0 20px; padding-left:0.32em;">Night Ground</div>
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px;">
+      <div style="border-radius:10px; overflow:hidden; box-shadow:inset 0 0 0 1px rgba(168,127,62,0.22);">
+        <div style="height:110px; background:#2a1d10;"></div>
+        <div style="padding:14px 18px 16px; background:rgba(255,250,238,0.04);">
+          <div style="font-size:19px; font-weight:600; color:#fbeacb;">Warm Shade</div>
+          <div style="font-family:'Noto Serif SC',serif; font-size:14px; letter-spacing:0.1em; color:#a87f3e; margin-top:8px;">#2A1D10</div>
+        </div>
+      </div>
+      <div style="border-radius:10px; overflow:hidden; box-shadow:inset 0 0 0 1px rgba(168,127,62,0.22);">
+        <div style="height:110px; background:#171009;"></div>
+        <div style="padding:14px 18px 16px; background:rgba(255,250,238,0.04);">
+          <div style="font-size:19px; font-weight:600; color:#fbeacb;">Night</div>
+          <div style="font-family:'Noto Serif SC',serif; font-size:14px; letter-spacing:0.1em; color:#a87f3e; margin-top:8px;">#171009</div>
+        </div>
+      </div>
+      <div style="border-radius:10px; overflow:hidden; box-shadow:inset 0 0 0 1px rgba(168,127,62,0.22);">
+        <div style="height:110px; background:#100a05;"></div>
+        <div style="padding:14px 18px 16px; background:rgba(255,250,238,0.04);">
+          <div style="font-size:19px; font-weight:600; color:#fbeacb;">Pitch</div>
+          <div style="font-family:'Noto Serif SC',serif; font-size:14px; letter-spacing:0.1em; color:#a87f3e; margin-top:8px;">#100A05</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

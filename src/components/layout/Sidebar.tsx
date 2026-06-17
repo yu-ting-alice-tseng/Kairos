@@ -47,38 +47,13 @@ export function Sidebar() {
         collapsed ? 'justify-center' : 'justify-between'
       )}>
         <div className="flex items-center gap-2.5">
-          {/* Candle-clock mark — matches new Kairos logo */}
-          <svg viewBox="0 0 512 512" className="h-9 w-9 shrink-0 rounded-[8px] shadow-[0_2px_8px_rgba(0,0,0,0.35)]">
-            <defs>
-              <linearGradient id="sb-bg" x1="0" y1="0" x2="0" y2="512" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="#fbeacb" />
-                <stop offset="100%" stopColor="#e7c894" />
-              </linearGradient>
-              <linearGradient id="sb-flame" x1="0.5" y1="0" x2="0.5" y2="1">
-                <stop offset="0%" stopColor="#ffd27a" />
-                <stop offset="45%" stopColor="#ef8a32" />
-                <stop offset="100%" stopColor="#6f1a10" />
-              </linearGradient>
-            </defs>
-            <rect width="512" height="512" rx="108" fill="url(#sb-bg)" />
-            <circle cx="256" cy="206" r="148" fill="none" stroke="#2a1f12" strokeOpacity="0.15" strokeWidth="6" />
-            <g stroke="#2a1f12" strokeOpacity="0.35" strokeLinecap="round">
-              <line x1="330.5" y1="65.3" x2="321.8" y2="80.4" strokeWidth="5" />
-              <line x1="404" y1="206" x2="388" y2="206" strokeWidth="6" />
-              <line x1="256" y1="354" x2="256" y2="368" strokeWidth="6" />
-              <line x1="108" y1="206" x2="124" y2="206" strokeWidth="6" />
-              <line x1="181.5" y1="65.3" x2="190.2" y2="80.4" strokeWidth="5" />
-              <line x1="389.7" y1="132.5" x2="378.0" y2="139.7" strokeWidth="5" />
-              <line x1="122.3" y1="132.5" x2="134.0" y2="139.7" strokeWidth="5" />
-            </g>
-            <line x1="256" y1="206" x2="318" y2="272" stroke="#a87f3e" strokeWidth="7" strokeLinecap="round" />
-            <line x1="256" y1="206" x2="200" y2="160" stroke="#2a1f12" strokeWidth="9" strokeLinecap="round" strokeOpacity="0.7" />
-            <ellipse cx="256" cy="72" rx="22" ry="28" fill="#ffb24a" fillOpacity="0.22" />
-            <path d="M256 44 C249 54,237 68,239 84 C241 98,249 108,256 110 C263 108,271 98,273 84 C275 68,263 54,256 44 Z" fill="url(#sb-flame)" />
-            <ellipse cx="254" cy="78" rx="5" ry="10" fill="#ffd27a" fillOpacity="0.6" />
-            <line x1="256" y1="110" x2="256" y2="126" stroke="#2a1f12" strokeWidth="4" strokeLinecap="round" strokeOpacity="0.55" />
-            <circle cx="256" cy="206" r="7" fill="#2a1f12" fillOpacity="0.5" />
-          </svg>
+          {/* Animated Kairos logo */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/Kairos Logo -animated-.gif"
+            alt="Kairos"
+            className="h-9 w-9 shrink-0 rounded-[8px] shadow-[0_2px_8px_rgba(0,0,0,0.35)] object-cover"
+          />
           {!collapsed && (
             <div className="flex flex-col leading-none">
               <span className="font-serif text-[20px] font-semibold text-[#fbeacb] tracking-wide leading-none">Kairos</span>
