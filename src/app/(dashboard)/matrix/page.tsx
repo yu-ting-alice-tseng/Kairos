@@ -55,9 +55,8 @@ export default function MatrixPage() {
       const res = await fetch(`/api/calendar/events?start=${start}&end=${end}`)
       if (res.ok) {
         const events: CalendarEvent[] = await res.json()
-        const nonAllDay = events.filter((e) => !e.allDay)
-        setTodayEvents(nonAllDay)
-        setCalendarPanelOpen(nonAllDay.length > 0)
+        setTodayEvents(events)
+        setCalendarPanelOpen(events.length > 0)
       }
     } catch {
       // best-effort
@@ -299,7 +298,11 @@ export default function MatrixPage() {
                           style={{ backgroundColor: color }}
                         />
                         <span className="font-medium text-[#3a3326] max-w-[160px] truncate">{ev.title}</span>
-                        {ev.start && ev.end && (
+                        {ev.allDay ? (
+                          <span className="text-[#a99873] whitespace-nowrap text-[10px] italic">
+                            {language === 'fr' ? 'Journée' : language === 'zh' ? '整天' : 'All day'}
+                          </span>
+                        ) : ev.start && ev.end && (
                           <span className="text-[#a99873] whitespace-nowrap">
                             {formatTime(ev.start)} – {formatTime(ev.end)}
                           </span>

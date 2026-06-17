@@ -206,6 +206,8 @@ export interface CalendarEvent {
   habitId?: string
   allDay?: boolean
   description?: string
+  location?: string
+  htmlLink?: string
   editable?: boolean    // false for read-only calendars
 }
 

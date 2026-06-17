@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { cn, formatTime, getQuadrant, EISENHOWER_QUADRANTS } from '@/lib/utils'
 import {
   ChevronLeft, ChevronRight, Calendar, Plus, Clock, Loader2, Pencil, Trash2, X,
+  MapPin, ExternalLink, GitBranch, AlignLeft,
 } from 'lucide-react'
 import {
   format, startOfWeek, endOfWeek, addDays, isSameDay, addWeeks, subWeeks,
@@ -504,11 +505,12 @@ export default function CalendarPage() {
                           ev.editable && !isDragging ? 'cursor-grab' : '',
                           isDraggingThis && 'opacity-40'
                         )}
-                        style={{ backgroundColor: color + '15', borderColor: color, color }}
+                        style={{ backgroundColor: color + '22', borderColor: color }}
                         title={ev.title}
                         onMouseDown={(e) => { if (ev.editable) startAllDayDrag(e, ev) }}
+                        onClick={(e) => { e.stopPropagation(); if (!isDragging) setEditingEvent(ev) }}
                       >
-                        {ev.title}
+                        <span className="text-[#2a2420]">{ev.title}</span>
                       </div>
                     )
                   })}
@@ -631,11 +633,11 @@ export default function CalendarPage() {
                               ev.editable ? 'cursor-grab hover:brightness-95' : 'select-none',
                               isDraggingThis && 'opacity-40'
                             )}
-                            style={{ ...boxStyle, backgroundColor: evColor + '1a', borderColor: evColor, color: evColor }}
+                            style={{ ...boxStyle, backgroundColor: evColor + '22', borderColor: evColor }}
                           >
-                            <p className="font-medium truncate">{ev.title}</p>
+                            <p className="font-medium truncate text-[#2a2420]">{ev.title}</p>
                             {ev.start && ev.end && (
-                              <p className="opacity-70 flex items-center gap-1">
+                              <p className="flex items-center gap-1 text-[#5c5347]">
                                 <Clock className="h-2.5 w-2.5" />
                                 {formatTime(ev.start)} – {formatTime(ev.end)}
                               </p>
@@ -732,6 +734,7 @@ export default function CalendarPage() {
           event={editingEvent}
           lang={language}
           saving={eventSaving}
+          tasks={tasks}
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
           onClose={() => setEditingEvent(null)}
@@ -742,11 +745,12 @@ export default function CalendarPage() {
 }
 
 function EditEventModal({
-  event, lang, saving, onSave, onDelete, onClose,
+  event, lang, saving, tasks, onSave, onDelete, onClose,
 }: {
   event: CalendarEvent
   lang: 'fr' | 'en' | 'zh'
   saving: boolean
+  tasks: Task[]
   onSave: (ev: CalendarEvent, title: string, start: string, end: string) => void
   onDelete: (ev: CalendarEvent) => void
   onClose: () => void
@@ -756,68 +760,216 @@ function EditEventModal({
     const offset = dt.getTimezoneOffset() * 60000
     return new Date(dt.getTime() - offset).toISOString().slice(0, 16)
   }
+  const [editing, setEditing] = React.useState(false)
   const [title, setTitle] = React.useState(event.title)
   const [start, setStart] = React.useState(toLocal(event.start))
   const [end, setEnd] = React.useState(toLocal(event.end))
 
+  // Find retroplanning chains linked to this event by title keywords
+  const relatedChains = React.useMemo(() => {
+    const words = event.title.toLowerCase().split(/\s+/).filter((w) => w.length > 2)
+    return tasks.filter((t) =>
+      t.parentTaskId &&
+      words.some((w) => t.title.toLowerCase().includes(w))
+    )
+  }, [event.title, tasks])
+
+  // Extract URLs from description
+  const links = React.useMemo(() => {
+    if (!event.description) return []
+    const urlRe = /https?:\/\/[^\s<>"]+/g
+    return Array.from(new Set(event.description.match(urlRe) ?? []))
+  }, [event.description])
+
+  const evColor = event.color ?? '#ab3326'
+
+  if (editing) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+        <div className="bg-[#fbf7ee] rounded-2xl shadow-xl p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-[#2a2420] flex items-center gap-2">
+              <Pencil className="h-4 w-4 text-red-500" />
+              {lang === 'fr' ? "Modifier l'événement" : lang === 'zh' ? '編輯活動' : 'Edit event'}
+            </h2>
+            <button onClick={() => setEditing(false)} className="p-1 rounded-lg hover:bg-[#ece2cb] text-[#a99873]">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="text-xs font-medium text-[#8a7a5e] mb-1 block">{lang === 'fr' ? 'Titre' : lang === 'zh' ? '標題' : 'Title'}</label>
+              <input
+                className="w-full border border-[#e2d6bc] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300 bg-white"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-[#8a7a5e] mb-1 block">{lang === 'fr' ? 'Début' : lang === 'zh' ? '開始' : 'Start'}</label>
+                <input
+                  type="datetime-local"
+                  className="w-full border border-[#e2d6bc] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300 bg-white"
+                  value={start}
+                  onChange={(e) => setStart(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-[#8a7a5e] mb-1 block">{lang === 'fr' ? 'Fin' : lang === 'zh' ? '結束' : 'End'}</label>
+                <input
+                  type="datetime-local"
+                  className="w-full border border-[#e2d6bc] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300 bg-white"
+                  value={end}
+                  onChange={(e) => setEnd(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2 mt-5">
+            <button
+              onClick={() => onDelete(event)}
+              className="flex-1 rounded-xl border border-red-200 text-red-600 text-sm py-2 hover:bg-red-50 transition-colors"
+            >
+              <Trash2 className="h-4 w-4 inline mr-1" />
+              {lang === 'fr' ? 'Supprimer' : lang === 'zh' ? '刪除' : 'Delete'}
+            </button>
+            <button
+              onClick={() => onSave(event, title, new Date(start).toISOString(), new Date(end).toISOString())}
+              disabled={saving}
+              className="flex-1 rounded-xl bg-[#ab3326] text-white text-sm py-2 hover:bg-[#861f17] transition-colors disabled:opacity-60"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin inline" /> : (lang === 'fr' ? 'Enregistrer' : lang === 'zh' ? '儲存' : 'Save')}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Detail view (default)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-[#fbf7ee] rounded-2xl shadow-xl p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-[#2a2420] flex items-center gap-2">
-            <Pencil className="h-4 w-4 text-red-500" />
-            {lang === 'fr' ? 'Modifier l\'événement' : lang === 'zh' ? '編輯活動' : 'Edit event'}
-          </h2>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-[#ece2cb] text-[#a99873]">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="flex flex-col gap-3">
-          <div>
-            <label className="text-xs font-medium text-[#8a7a5e] mb-1 block">{lang === 'fr' ? 'Titre' : lang === 'zh' ? '標題' : 'Title'}</label>
-            <input
-              className="w-full border border-[#e2d6bc] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
+      <div className="bg-[#fbf7ee] rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        {/* Colour accent bar */}
+        <div className="h-1.5 w-full" style={{ backgroundColor: evColor }} />
+        <div className="p-5">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <h2 className="text-base font-semibold text-[#2a2420] leading-snug">{event.title}</h2>
+            <button onClick={onClose} className="p-1 rounded-lg hover:bg-[#ece2cb] text-[#a99873] shrink-0">
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-[#8a7a5e] mb-1 block">{lang === 'fr' ? 'Début' : lang === 'zh' ? '開始' : 'Start'}</label>
-              <input
-                type="datetime-local"
-                className="w-full border border-[#e2d6bc] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300"
-                value={start}
-                onChange={(e) => setStart(e.target.value)}
-              />
+
+          <div className="flex flex-col gap-3 text-sm">
+            {/* Time */}
+            {!event.allDay && event.start && event.end && (
+              <div className="flex items-center gap-2 text-[#5c5347]">
+                <Clock className="h-4 w-4 text-[#a99873] shrink-0" />
+                <span>{formatTime(event.start)} – {formatTime(event.end)}</span>
+              </div>
+            )}
+            {event.allDay && (
+              <div className="flex items-center gap-2 text-[#5c5347]">
+                <Clock className="h-4 w-4 text-[#a99873] shrink-0" />
+                <span>{lang === 'fr' ? 'Toute la journée' : lang === 'zh' ? '整天' : 'All day'}</span>
+              </div>
+            )}
+
+            {/* Location */}
+            {event.location && (
+              <div className="flex items-start gap-2 text-[#5c5347]">
+                <MapPin className="h-4 w-4 text-[#a99873] shrink-0 mt-0.5" />
+                <span className="break-words">{event.location}</span>
+              </div>
+            )}
+
+            {/* Description */}
+            {event.description && (
+              <div className="flex items-start gap-2">
+                <AlignLeft className="h-4 w-4 text-[#a99873] shrink-0 mt-0.5" />
+                <p className="text-[#5c5347] text-xs leading-relaxed whitespace-pre-wrap break-words line-clamp-6">
+                  {event.description}
+                </p>
+              </div>
+            )}
+
+            {/* Extracted links */}
+            {links.length > 0 && (
+              <div className="flex flex-col gap-1">
+                {links.map((url) => (
+                  <a
+                    key={url}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-xs text-[#ab3326] hover:underline truncate"
+                  >
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                    {url.replace(/^https?:\/\//, '').split('/')[0]}
+                  </a>
+                ))}
+              </div>
+            )}
+
+            {/* Open in Google Calendar */}
+            {event.htmlLink && (
+              <a
+                href={event.htmlLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs text-[#8a7a5e] hover:text-[#ab3326] transition-colors"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                {lang === 'fr' ? 'Ouvrir dans Google Calendar' : lang === 'zh' ? '在 Google 日曆中開啟' : 'Open in Google Calendar'}
+              </a>
+            )}
+
+            {/* Related retroplanning chains */}
+            {relatedChains.length > 0 && (
+              <div className="border-t border-[#ece2cb] pt-3 mt-1">
+                <p className="text-xs font-semibold text-[#8a7a5e] flex items-center gap-1.5 mb-2">
+                  <GitBranch className="h-3.5 w-3.5" />
+                  {lang === 'fr' ? 'Rétroplanning lié' : lang === 'zh' ? '關聯逆向規劃' : 'Related retroplanning'}
+                </p>
+                <div className="flex flex-col gap-1">
+                  {relatedChains.slice(0, 5).map((t) => (
+                    <div key={t.id} className="flex items-center justify-between text-xs rounded-lg px-2.5 py-1.5 bg-[#f3ecdd] border border-[#ece2cb]">
+                      <span className="text-[#3a3326] truncate flex-1">{t.title}</span>
+                      {t.deadline && (
+                        <span className="text-[#a99873] ml-2 shrink-0">
+                          {new Date(t.deadline).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          {event.editable && (
+            <div className="flex gap-2 mt-4 pt-4 border-t border-[#ece2cb]">
+              <button
+                onClick={() => onDelete(event)}
+                className="flex items-center gap-1.5 rounded-xl border border-red-200 text-red-600 text-xs px-3 py-2 hover:bg-red-50 transition-colors"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                {lang === 'fr' ? 'Supprimer' : lang === 'zh' ? '刪除' : 'Delete'}
+              </button>
+              <button
+                onClick={() => setEditing(true)}
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-[#ab3326] text-white text-xs px-3 py-2 hover:bg-[#861f17] transition-colors"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                {lang === 'fr' ? 'Modifier' : lang === 'zh' ? '編輯' : 'Edit'}
+              </button>
             </div>
-            <div>
-              <label className="text-xs font-medium text-[#8a7a5e] mb-1 block">{lang === 'fr' ? 'Fin' : lang === 'zh' ? '結束' : 'End'}</label>
-              <input
-                type="datetime-local"
-                className="w-full border border-[#e2d6bc] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300"
-                value={end}
-                onChange={(e) => setEnd(e.target.value)}
-              />
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center justify-between mt-5">
-          <button
-            onClick={() => onDelete(event)}
-            className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 px-3 py-2 rounded-xl hover:bg-red-50"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            {lang === 'fr' ? 'Supprimer' : lang === 'zh' ? '刪除' : 'Delete'}
-          </button>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={onClose}>{lang === 'fr' ? 'Annuler' : lang === 'zh' ? '取消' : 'Cancel'}</Button>
-            <Button size="sm" disabled={saving} onClick={() => onSave(event, title, new Date(start).toISOString(), new Date(end).toISOString())}>
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (lang === 'fr' ? 'Enregistrer' : lang === 'zh' ? '儲存' : 'Save')}
-            </Button>
-          </div>
+          )}
         </div>
       </div>
     </div>
   )
+
 }
