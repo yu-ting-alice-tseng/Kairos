@@ -38,6 +38,7 @@ export default function TodayPage() {
   const [rescheduleSuggestion, setRescheduleSuggestion] = useState<{ start: string; end: string; reason: string } | null>(null)
   const [rescheduleLoading, setRescheduleLoading] = useState(false)
   const [todayEvents, setTodayEvents] = useState<CalendarEvent[]>([])
+  const [tomorrowEvents, setTomorrowEvents] = useState<CalendarEvent[]>([])
 
   const today = format(new Date(), 'PPPP', { locale: language === 'fr' ? fr : language === 'zh' ? zhTW : enUS })
 
@@ -59,42 +60,23 @@ export default function TodayPage() {
 
   useEffect(() => {
     if (calendarAccounts.length === 0) return
-    const fetchAndAutoImport = async () => {
+    const fetchEvents = async () => {
       try {
-        const todayDate = new Date()
-        const start = new Date(todayDate.setHours(0, 0, 0, 0)).toISOString()
-        const end = new Date(new Date().setHours(23, 59, 59, 999)).toISOString()
-        const evRes = await fetch(`/api/calendar/events?start=${start}&end=${end}`)
-        if (!evRes.ok) return
-        const events: CalendarEvent[] = await evRes.json()
-        setTodayEvents(events)
+        const now = new Date()
+        const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
+        const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999)
+        const tmrStart = new Date(now); tmrStart.setDate(tmrStart.getDate() + 1); tmrStart.setHours(0, 0, 0, 0)
+        const tmrEnd = new Date(now); tmrEnd.setDate(tmrEnd.getDate() + 1); tmrEnd.setHours(23, 59, 59, 999)
 
-        // Auto-import non-allDay events that don't already have a task
-        const tasksSnap = useAppStore.getState().tasks
-        const existingEventIds = new Set(tasksSnap.map((t) => t.calendarEventId).filter(Boolean))
-        const toImport = events.filter((ev) => !ev.allDay && !existingEventIds.has(ev.id))
-        if (toImport.length === 0) return
-        const created = (await Promise.all(
-          toImport.map((ev) =>
-            fetch('/api/tasks', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                title: ev.title,
-                importance: 5,
-                urgency: 5,
-                scheduledStart: ev.start,
-                scheduledEnd: ev.end,
-                calendarAccountId: ev.calendarAccountId,
-                calendarEventId: ev.id,
-              }),
-            }).then((r) => r.ok ? r.json() : null)
-          )
-        )).filter(Boolean)
-        if (created.length > 0) setTasks([...useAppStore.getState().tasks, ...created])
+        const [todayRes, tmrRes] = await Promise.all([
+          fetch(`/api/calendar/events?start=${todayStart.toISOString()}&end=${todayEnd.toISOString()}`),
+          fetch(`/api/calendar/events?start=${tmrStart.toISOString()}&end=${tmrEnd.toISOString()}`),
+        ])
+        if (todayRes.ok) setTodayEvents(await todayRes.json())
+        if (tmrRes.ok) setTomorrowEvents(await tmrRes.json())
       } catch { /* best-effort */ }
     }
-    fetchAndAutoImport()
+    fetchEvents()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calendarAccounts.length])
 
@@ -102,7 +84,13 @@ export default function TodayPage() {
     todayExcludePatterns.some((p) => p && title.toLowerCase().includes(p.toLowerCase()))
 
   const prioritizedTasks = generatePriorityList(
-    tasks.filter((t) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && t.parentTaskId === null && !isExcludedFromToday(t.title))
+    tasks.filter((t) =>
+      t.status !== 'COMPLETED' &&
+      t.status !== 'CANCELLED' &&
+      t.parentTaskId === null &&
+      !t.calendarEventId &&
+      !isExcludedFromToday(t.title)
+    )
   )
 
   const completedToday = tasks.filter(
@@ -275,6 +263,7 @@ export default function TodayPage() {
           <div className="flex items-center gap-2.5">
             <Sundial className="h-8 w-8" />
             <h1 className="text-2xl font-brush text-[#2a2420] tracking-tight leading-none">{t('today', language)}</h1>
+
           </div>
           <p className="text-[13px] text-[#8a7a5e] mt-1 capitalize pl-[42px]">{today}</p>
         </div>
@@ -356,6 +345,35 @@ export default function TodayPage() {
               </div>
               <div className="p-3 flex flex-col gap-1.5">
                 {todayEvents
+                  .filter(ev => !ev.allDay)
+                  .sort((a, b) => new Date(a.start ?? 0).getTime() - new Date(b.start ?? 0).getTime())
+                  .map(ev => {
+                    const acc = calendarAccounts.find(a => a.id === ev.calendarAccountId)
+                    const color = ev.color ?? acc?.color ?? '#6366F1'
+                    return (
+                      <div key={ev.id} className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm border border-[#ece2cb] bg-white/40">
+                        <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                        <span className="font-medium text-[#2a2420] flex-1 truncate">{ev.title}</span>
+                        {ev.start && ev.end && (
+                          <span className="text-xs text-[#8a7a5e] shrink-0">{formatTime(ev.start)} – {formatTime(ev.end)}</span>
+                        )}
+                      </div>
+                    )
+                  })}
+              </div>
+            </div>
+          )}
+
+          {tomorrowEvents.filter(ev => !ev.allDay).length > 0 && (
+            <div className="rounded-2xl border border-[#e2d6bc] bg-[#fbf7ee] overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-[#ece2cb]">
+                <CalendarDays className="h-4 w-4 text-[#a99873]" />
+                <span className="text-sm font-semibold text-[#5c5347]">
+                  {language === 'fr' ? 'Demain' : language === 'zh' ? '明日行程' : "Tomorrow's schedule"}
+                </span>
+              </div>
+              <div className="p-3 flex flex-col gap-1.5">
+                {tomorrowEvents
                   .filter(ev => !ev.allDay)
                   .sort((a, b) => new Date(a.start ?? 0).getTime() - new Date(b.start ?? 0).getTime())
                   .map(ev => {

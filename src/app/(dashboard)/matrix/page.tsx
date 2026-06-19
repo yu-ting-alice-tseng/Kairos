@@ -60,33 +60,6 @@ export default function MatrixPage() {
         setCalendarPanelOpen(events.length > 0)
         setImportedEventIds(new Set(events.map((e) => e.id)))
 
-        // Auto-import non-allDay events that don't already have a matching task
-        const tasksSnap = useAppStore.getState().tasks
-        const existingEventIds = new Set(tasksSnap.map((t) => t.calendarEventId).filter(Boolean))
-        const toImport = events.filter((ev) => !ev.allDay && !existingEventIds.has(ev.id))
-        if (toImport.length > 0) {
-          const created = (await Promise.all(
-            toImport.map((ev) =>
-              fetch('/api/tasks', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  title: ev.title,
-                  importance: 5,
-                  urgency: 5,
-                  scheduledStart: ev.start,
-                  scheduledEnd: ev.end,
-                  calendarAccountId: ev.calendarAccountId,
-                  calendarEventId: ev.id,
-                }),
-              }).then((r) => r.ok ? r.json() : null)
-            )
-          )).filter(Boolean)
-          if (created.length > 0) {
-            setTasks([...useAppStore.getState().tasks, ...created])
-            setImportedEventIds(new Set(events.map((e) => e.id)))
-          }
-        }
       }
     } catch {
       // best-effort
@@ -232,9 +205,9 @@ export default function MatrixPage() {
   const isExcludedFromMatrix = (title: string) =>
     matrixExcludePatterns.some((p) => p && title.toLowerCase().includes(p.toLowerCase()))
 
-  // Feature 3: filter tasks by calendar account + exclusion patterns
+  // Filter tasks: exclude calendar-imported events and exclusion patterns
   const filteredTasks = (filterAccountId === 'all' ? tasks : tasks.filter((t) => t.calendarAccountId === filterAccountId))
-    .filter((t) => !isExcludedFromMatrix(t.title))
+    .filter((t) => !t.calendarEventId && !isExcludedFromMatrix(t.title))
 
   if (loading) {
     return (

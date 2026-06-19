@@ -4,7 +4,7 @@ export const translations = {
   fr: {
     appName: 'FlowPlan',
     tagline: 'Planifiez intelligent. Vivez mieux.',
-    today: "Aujourd'hui",
+    today: "To-do list",
     matrix: 'Matrice',
     calendar: 'Calendrier',
     habits: 'Habitudes',
@@ -116,7 +116,7 @@ export const translations = {
   en: {
     appName: 'FlowPlan',
     tagline: 'Plan smart. Live better.',
-    today: 'Today',
+    today: 'To-do list',
     matrix: 'Matrix',
     calendar: 'Calendar',
     habits: 'Habits',
