@@ -1,19 +1,18 @@
 import type { Metadata, Viewport } from 'next'
-import { Geist, Noto_Serif_SC, Noto_Sans_SC, Ma_Shan_Zheng, Dancing_Script } from 'next/font/google'
+import { Cormorant_Garamond, Dancing_Script } from 'next/font/google'
+import Script from 'next/script'
 import './globals.css'
 import { SessionProvider } from '@/components/providers/SessionProvider'
 import { ToastProvider } from '@/components/providers/ToastProvider'
 
-const geist = Geist({ subsets: ['latin'], variable: '--font-geist' })
-const notoSerifSC = Noto_Serif_SC({ subsets: ['latin'], weight: ['500', '700', '900'], variable: '--font-noto-serif-sc' })
-const notoSansSC = Noto_Sans_SC({ subsets: ['latin'], weight: ['400', '500', '700'], variable: '--font-noto-sans-sc' })
-const brush = Ma_Shan_Zheng({ subsets: ['latin'], weight: ['400'], variable: '--font-ma-shan-zheng' })
-// Latin script face for the "Flow" half of the wordmark — same flowing-vs-structured
-// contrast as the static logo asset (public/logo-wordmark.svg), but loadable in-app.
+const cormorant = Cormorant_Garamond({ subsets: ['latin'], weight: ['300', '400', '500', '600', '700'], variable: '--font-cormorant' })
 const script = Dancing_Script({ subsets: ['latin'], weight: ['700'], variable: '--font-dancing-script' })
 
 export const metadata: Metadata = {
   title: 'Kairos — 墨時',
+  verification: {
+    google: 'wozi09rl40kAONzGXfn2G72Ta0NFXagn6PBBdZFswio',
+  },
   description: 'Potrez le temps à l\'encre. Maîtrisez vos priorités avec la matrice Eisenhower, synchronisez vos calendriers et laissez l\'IA optimiser votre emploi du temps.',
   manifest: '/manifest.json',
   appleWebApp: { capable: true, statusBarStyle: 'default', title: 'Kairos' },
@@ -36,8 +35,21 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="fr" className={`${geist.variable} ${notoSerifSC.variable} ${notoSansSC.variable} ${brush.variable} ${script.variable} h-full antialiased`}>
+    <html lang="fr" className={`${cormorant.variable} ${script.variable} h-full antialiased`}>
+      <head>
+        {/* CJK fonts loaded directly — next/font CJK subset support is unreliable in dev */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@500;700;900&display=swap" rel="stylesheet" />
+      </head>
       <body className="h-full font-sans">
+        <Script src="https://www.googletagmanager.com/gtag/js?id=G-DYCZHN8RV5" strategy="afterInteractive" />
+        <Script id="gtag-init" strategy="afterInteractive">{`
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-DYCZHN8RV5');
+        `}</Script>
         <SessionProvider>
           <ToastProvider>
             {children}
