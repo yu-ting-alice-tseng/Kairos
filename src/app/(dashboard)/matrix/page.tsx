@@ -18,7 +18,8 @@ import { startOfDay, endOfDay } from 'date-fns'
 const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === 'true'
 
 export default function MatrixPage() {
-  const { language, tasks, setTasks, calendarAccounts, habits, setHabits, matrixExcludePatterns } = useAppStore()
+  const { language, tasks, setTasks, calendarAccounts, habits, setHabits } = useAppStore()
+  const matrixExcludePatterns = useAppStore((s) => s.matrixExcludePatterns)
   const { toast } = useGlobalToast()
   const [loading, setLoading] = useState(true)
   const [showTaskForm, setShowTaskForm] = useState(false)
