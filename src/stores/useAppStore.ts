@@ -4,7 +4,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { Task, Habit, CalendarAccount, Language } from '@/types'
 
-interface AppState {
+export interface AppState {
   language: Language
   tasks: Task[]
   habits: Habit[]
@@ -12,6 +12,9 @@ interface AppState {
   selectedDate: string
   isLoading: boolean
   activeView: 'today' | 'matrix' | 'calendar' | 'habits' | 'settings'
+  // Exclusion patterns: task titles matching these substrings won't appear in matrix/today
+  matrixExcludePatterns: string[]
+  todayExcludePatterns: string[]
 
   setLanguage: (lang: Language) => void
   setTasks: (tasks: Task[]) => void
@@ -26,6 +29,8 @@ interface AppState {
   setSelectedDate: (date: string) => void
   setIsLoading: (loading: boolean) => void
   setActiveView: (view: AppState['activeView']) => void
+  setMatrixExcludePatterns: (patterns: string[]) => void
+  setTodayExcludePatterns: (patterns: string[]) => void
 }
 
 export const useAppStore = create<AppState>()(
@@ -38,6 +43,8 @@ export const useAppStore = create<AppState>()(
       selectedDate: new Date().toISOString().split('T')[0],
       isLoading: false,
       activeView: 'today',
+      matrixExcludePatterns: [],
+      todayExcludePatterns: [],
 
       setLanguage: (lang) => set({ language: lang }),
       setTasks: (tasks) => set({ tasks }),
@@ -60,12 +67,16 @@ export const useAppStore = create<AppState>()(
       setSelectedDate: (date) => set({ selectedDate: date }),
       setIsLoading: (loading) => set({ isLoading: loading }),
       setActiveView: (view) => set({ activeView: view }),
+      setMatrixExcludePatterns: (patterns) => set({ matrixExcludePatterns: patterns }),
+      setTodayExcludePatterns: (patterns) => set({ todayExcludePatterns: patterns }),
     }),
     {
       name: 'flowplan-store',
       partialize: (state) => ({
         language: state.language,
         activeView: state.activeView,
+        matrixExcludePatterns: state.matrixExcludePatterns,
+        todayExcludePatterns: state.todayExcludePatterns,
       }),
     }
   )

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, useCallback } from 'react'
-import { useAppStore } from '@/stores/useAppStore'
+import { useAppStore, AppState } from '@/stores/useAppStore'
 import { Task, CalendarEvent, Habit } from '@/types'
 import { t } from '@/lib/i18n'
 import { EisenhowerMatrix } from '@/components/matrix/EisenhowerMatrix'
@@ -19,7 +19,7 @@ const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === 'true'
 
 export default function MatrixPage() {
   const { language, tasks, setTasks, calendarAccounts, habits, setHabits } = useAppStore()
-  const matrixExcludePatterns = useAppStore((s) => s.matrixExcludePatterns)
+  const matrixExcludePatterns = useAppStore((s: AppState) => s.matrixExcludePatterns)
   const { toast } = useGlobalToast()
   const [loading, setLoading] = useState(true)
   const [showTaskForm, setShowTaskForm] = useState(false)
