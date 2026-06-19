@@ -8,7 +8,7 @@ export const DEMO_USER_ID = 'demo-user-flowplan'
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
-  secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? 'flowplan-demo-secret-replace-in-prod',
+  secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
   adapter: PrismaAdapter(prisma) as never,
   providers: [
     ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
@@ -19,7 +19,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             params: {
               scope: 'openid email profile https://www.googleapis.com/auth/calendar',
               access_type: 'offline',
-              prompt: 'consent',
+              prompt: 'select_account',
             },
           },
         })]
