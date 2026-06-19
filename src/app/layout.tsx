@@ -37,12 +37,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr" className={`${cormorant.variable} ${script.variable} h-full antialiased`}>
       <head>
+        {/* Google Tag Manager */}
+        {/* eslint-disable-next-line @next/next/no-before-interactive-script-component */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','GTM-PPKKJ8GS');` }} />
         {/* CJK fonts loaded directly — next/font CJK subset support is unreliable in dev */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@500;700;900&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Long+Cang&family=cwTeXKai&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@500;700;900&display=swap" rel="stylesheet" />
       </head>
       <body className="h-full font-sans">
+        {/* Google Tag Manager (noscript) */}
+        <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PPKKJ8GS" height="0" width="0" style={{ display: 'none', visibility: 'hidden' }}></iframe></noscript>
+        {/* Google Analytics */}
         <Script src="https://www.googletagmanager.com/gtag/js?id=G-DYCZHN8RV5" strategy="afterInteractive" />
         <Script id="gtag-init" strategy="afterInteractive">{`
           window.dataLayer = window.dataLayer || [];
