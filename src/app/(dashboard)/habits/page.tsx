@@ -197,9 +197,12 @@ export default function HabitsPage() {
 
   const loadHabits = useCallback(async () => {
     setLoading(true)
-    const res = await fetch('/api/habits')
-    setHabits(await res.json())
-    setLoading(false)
+    try {
+      const res = await fetch('/api/habits')
+      if (res.ok) setHabits(await res.json())
+    } catch { /* best-effort */ } finally {
+      setLoading(false)
+    }
   }, [setHabits])
 
   useEffect(() => { loadHabits() }, [loadHabits])
@@ -362,6 +365,7 @@ export default function HabitsPage() {
       </div>
 
       <HabitForm
+        key={showForm ? (editingHabit?.id ?? 'new') : 'closed'}
         open={showForm}
         onClose={() => { setShowForm(false); setEditingHabit(null) }}
         onSave={handleSave}

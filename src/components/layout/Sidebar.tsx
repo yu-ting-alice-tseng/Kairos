@@ -25,9 +25,33 @@ const navItems = [
 
 export function Sidebar() {
   const pathname    = usePathname()
-  const { language, setLanguage } = useAppStore()
+  const { language, setLanguage, setTasks, setHabits, setCalendarAccounts } = useAppStore()
   const { data: session } = useSession()
   const [collapsed, setCollapsed] = React.useState(false)
+
+  // Load calendarAccounts for all pages, and clear store when user switches
+  const prevUserIdRef = React.useRef<string | undefined>(undefined)
+  React.useEffect(() => {
+    const userId = session?.user?.id
+    if (!userId) return
+
+    // User switched — force full reload to guarantee clean state
+    if (prevUserIdRef.current && prevUserIdRef.current !== userId) {
+      setTasks([])
+      setHabits([])
+      setCalendarAccounts([])
+      prevUserIdRef.current = userId
+      window.location.reload()
+      return
+    }
+    prevUserIdRef.current = userId
+
+    // Load calendar accounts so every page has them
+    fetch('/api/calendar/accounts')
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => setCalendarAccounts(Array.isArray(data) ? data : []))
+      .catch(() => {})
+  }, [session?.user?.id, setTasks, setHabits, setCalendarAccounts])
 
   return (
     <aside
@@ -47,12 +71,11 @@ export function Sidebar() {
         collapsed ? 'justify-center' : 'justify-between'
       )}>
         <div className="flex items-center gap-2.5">
-          {/* Animated Kairos logo */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/Kairos Logo -animated-.gif"
+            src="/logo-v3-static.png"
             alt="Kairos"
-            className="h-9 w-9 shrink-0 rounded-[8px] shadow-[0_2px_8px_rgba(0,0,0,0.35)] object-cover"
+            className="h-9 w-9 shrink-0 rounded-lg object-cover object-top"
           />
           {!collapsed && (
             <div className="flex flex-col leading-none">

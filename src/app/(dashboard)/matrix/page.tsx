@@ -18,7 +18,7 @@ import { startOfDay, endOfDay } from 'date-fns'
 const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === 'true'
 
 export default function MatrixPage() {
-  const { language, tasks, setTasks, calendarAccounts, habits, setHabits } = useAppStore()
+  const { language, tasks, setTasks, calendarAccounts, habits, setHabits, matrixExcludePatterns } = useAppStore()
   const { toast } = useGlobalToast()
   const [loading, setLoading] = useState(true)
   const [showTaskForm, setShowTaskForm] = useState(false)
@@ -57,12 +57,41 @@ export default function MatrixPage() {
         const events: CalendarEvent[] = await res.json()
         setTodayEvents(events)
         setCalendarPanelOpen(events.length > 0)
+        setImportedEventIds(new Set(events.map((e) => e.id)))
+
+        // Auto-import non-allDay events that don't already have a matching task
+        const tasksSnap = useAppStore.getState().tasks
+        const existingEventIds = new Set(tasksSnap.map((t) => t.calendarEventId).filter(Boolean))
+        const toImport = events.filter((ev) => !ev.allDay && !existingEventIds.has(ev.id))
+        if (toImport.length > 0) {
+          const created = (await Promise.all(
+            toImport.map((ev) =>
+              fetch('/api/tasks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  title: ev.title,
+                  importance: 5,
+                  urgency: 5,
+                  scheduledStart: ev.start,
+                  scheduledEnd: ev.end,
+                  calendarAccountId: ev.calendarAccountId,
+                  calendarEventId: ev.id,
+                }),
+              }).then((r) => r.ok ? r.json() : null)
+            )
+          )).filter(Boolean)
+          if (created.length > 0) {
+            setTasks([...useAppStore.getState().tasks, ...created])
+            setImportedEventIds(new Set(events.map((e) => e.id)))
+          }
+        }
       }
     } catch {
       // best-effort
     }
     setTodayEventsLoading(false)
-  }, [calendarAccounts.length])
+  }, [calendarAccounts.length, setTasks])
 
   useEffect(() => { loadTasks() }, [loadTasks])
   useEffect(() => { loadTodayEvents() }, [loadTodayEvents])
@@ -199,10 +228,12 @@ export default function MatrixPage() {
     })
   })()
 
-  // Feature 3: filter tasks by calendar account
-  const filteredTasks = filterAccountId === 'all'
-    ? tasks
-    : tasks.filter((t) => t.calendarAccountId === filterAccountId)
+  const isExcludedFromMatrix = (title: string) =>
+    matrixExcludePatterns.some((p) => p && title.toLowerCase().includes(p.toLowerCase()))
+
+  // Feature 3: filter tasks by calendar account + exclusion patterns
+  const filteredTasks = (filterAccountId === 'all' ? tasks : tasks.filter((t) => t.calendarAccountId === filterAccountId))
+    .filter((t) => !isExcludedFromMatrix(t.title))
 
   if (loading) {
     return (
@@ -308,37 +339,9 @@ export default function MatrixPage() {
                           </span>
                         )}
 
-                        {isImported ? (
-                          <span className="text-green-500 font-medium ml-1">
-                            {language === 'fr' ? 'importé' : language === 'zh' ? '已匯入' : 'imported'}
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => handleImportEvent(ev)}
-                            className="ml-1 flex items-center gap-1 text-red-800 hover:text-red-950 font-medium"
-                            title={language === 'fr' ? 'Importer comme tâche' : language === 'zh' ? '匯入為任務' : 'Import as task'}
-                          >
-                            <Plus className="h-3 w-3" />
-                            {language === 'fr' ? 'Tâche' : language === 'zh' ? '任務' : 'Task'}
-                          </button>
-                        )}
-
-                        <span className="text-[#e2d6bc]">|</span>
-
-                        {isImportedHabit ? (
-                          <span className="text-green-500 font-medium">
-                            {language === 'fr' ? 'importé' : language === 'zh' ? '已匯入' : 'imported'}
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => handleImportEventAsHabit(ev)}
-                            className="flex items-center gap-1 text-[#8a6a32] hover:text-[#6e5526] font-medium"
-                            title={language === 'fr' ? 'Importer comme habitude' : language === 'zh' ? '匯入為習慣' : 'Import as habit'}
-                          >
-                            <Candle className="h-3.5 w-3" lit={false} />
-                            {language === 'fr' ? 'Habitude' : language === 'zh' ? '習慣' : 'Habit'}
-                          </button>
-                        )}
+                        <span className="text-green-500 font-medium ml-1">
+                          {language === 'fr' ? '✓ Auto-importé' : language === 'zh' ? '✓ 已自動匯入' : '✓ Auto-imported'}
+                        </span>
                       </div>
                     )
                   })}
