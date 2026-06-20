@@ -7,6 +7,7 @@ import { prisma } from './prisma'
 export const DEMO_USER_ID = 'demo-user-flowplan'
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  debug: true,
   trustHost: true,
   secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
   adapter: PrismaAdapter(prisma) as never,
