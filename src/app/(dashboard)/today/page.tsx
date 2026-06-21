@@ -21,7 +21,7 @@ import { format } from 'date-fns'
 import { fr, enUS, zhTW } from 'date-fns/locale'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
 import {
-  DndContext, DragEndEvent, DragOverlay,
+  DndContext, DragEndEvent,
   useDraggable, useDroppable,
 } from '@dnd-kit/core'
 
@@ -65,26 +65,55 @@ function DraggableTaskRow({ task, index, onComplete, onEdit, onDelete, onBreakdo
   )
 }
 
-function ScheduleHourSlot({ hour, events, calendarAccounts, isActive }: {
-  hour: number
-  events: CalendarEvent[]
-  calendarAccounts: { id: string; color: string }[]
-  isActive: boolean
-}) {
-  const { setNodeRef, isOver } = useDroppable({ id: `hour-${hour}` })
-  const label = `${String(hour).padStart(2, '0')}:00`
+function DraggableScheduledTask({ task, onEdit }: { task: Task; onEdit: (t: Task) => void }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `scheduled-${task.id}` })
   return (
     <div
       ref={setNodeRef}
-      className={`flex gap-2 min-h-[36px] rounded-xl px-2 py-1.5 border transition-all text-xs ${
+      style={{ transform: transform ? `translate(${transform.x}px,${transform.y}px)` : undefined, opacity: isDragging ? 0.4 : 1 }}
+      className="flex items-center gap-1.5 leading-tight cursor-pointer group"
+      onClick={() => onEdit(task)}
+    >
+      <div {...listeners} {...attributes} className="shrink-0 text-[#c9b89a] hover:text-[#ab3326] cursor-grab">
+        <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/>
+          <circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>
+          <circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/>
+        </svg>
+      </div>
+      <span className="truncate text-[#3a3326] group-hover:text-red-700 text-[11px]">{task.title}</span>
+      {task.scheduledStart && task.scheduledEnd && (
+        <span className="text-[#a99873] shrink-0 ml-auto text-[10px]">
+          {formatTime(String(task.scheduledStart))}–{formatTime(String(task.scheduledEnd))}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function ScheduleHourSlot({ hour, events, scheduledTasks, calendarAccounts, isActive, onEditTask }: {
+  hour: number
+  events: CalendarEvent[]
+  scheduledTasks: Task[]
+  calendarAccounts: { id: string; color: string }[]
+  isActive: boolean
+  onEditTask: (t: Task) => void
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `hour-${hour}` })
+  const label = `${String(hour).padStart(2, '0')}:00`
+  const hasContent = events.length > 0 || scheduledTasks.length > 0
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex gap-2 min-h-[34px] rounded-xl px-2 py-1.5 border transition-all text-xs ${
         isOver
           ? 'border-red-400 bg-red-50 shadow-sm'
-          : events.length > 0
+          : hasContent
             ? 'border-[#e2d6bc] bg-[#fbf7ee]'
             : 'border-dashed border-[#e2d6bc] bg-transparent'
       }`}
     >
-      <span className={`w-11 shrink-0 font-mono ${isActive ? 'text-red-500 font-bold' : 'text-[#a99873]'}`}>{label}</span>
+      <span className={`w-10 shrink-0 font-mono text-[10px] mt-0.5 ${isActive ? 'text-red-500 font-bold' : 'text-[#a99873]'}`}>{label}</span>
       <div className="flex-1 flex flex-col gap-0.5">
         {events.map((ev) => {
           const acc = calendarAccounts.find((a) => a.id === ev.calendarAccountId)
@@ -93,18 +122,33 @@ function ScheduleHourSlot({ hour, events, calendarAccounts, isActive }: {
             <div key={ev.id} className="flex items-center gap-1.5 leading-tight">
               <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
               <span className="truncate text-[#3a3326]">{ev.title}</span>
-              {ev.start && ev.end && (
-                <span className="text-[#a99873] shrink-0 ml-auto">{formatTime(ev.start)}</span>
-              )}
             </div>
           )
         })}
-        {isOver && (
-          <div className="text-red-400 italic">
-            {`→ ${label}`}
-          </div>
-        )}
+        {scheduledTasks.map((task) => (
+          <DraggableScheduledTask key={task.id} task={task} onEdit={onEditTask} />
+        ))}
+        {isOver && <div className="text-red-400 italic text-[10px]">→ {label}</div>}
       </div>
+    </div>
+  )
+}
+
+function DroppableTasksPanel({ children, isHighlight }: { children: React.ReactNode; isHighlight?: boolean }) {
+  const { setNodeRef, isOver } = useDroppable({ id: 'unschedule-zone' })
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex-1 min-w-0 transition-all rounded-2xl ${
+        isOver ? 'ring-2 ring-red-300 ring-offset-1' : ''
+      } ${isHighlight ? 'bg-red-50/30' : ''}`}
+    >
+      {isOver && (
+        <div className="text-center text-xs text-red-400 mb-2 py-1 rounded-xl border border-dashed border-red-300 bg-red-50">
+          ↩ Retirer du planning
+        </div>
+      )}
+      {children}
     </div>
   )
 }
@@ -177,9 +221,17 @@ export default function TodayPage() {
       t.status !== 'CANCELLED' &&
       t.parentTaskId === null &&
       !t.calendarEventId &&
+      !t.scheduledStart &&
       !isExcludedFromToday(t.title)
     )
   )
+
+  const scheduledTasks = tasks.filter(
+    (t) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && !!t.scheduledStart
+  )
+
+  const scheduledTasksByHour = (hour: number) =>
+    scheduledTasks.filter((t) => t.scheduledStart && new Date(String(t.scheduledStart)).getHours() === hour)
 
   const completedToday = tasks.filter(
     (t) => t.status === 'COMPLETED' && t.completedAt &&
@@ -335,19 +387,42 @@ export default function TodayPage() {
     const { active, over } = event
     if (!over || !active) return
     const overId = String(over.id)
-    if (!overId.startsWith('hour-')) return
+    const activeId = String(active.id)
+
+    // Unschedule: drag from left panel (scheduled-xxx) to right panel
+    if (overId === 'unschedule-zone' && activeId.startsWith('scheduled-')) {
+      const taskId = activeId.replace('scheduled-', '')
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduledStart: null, scheduledEnd: null }),
+      })
+      if (res.ok) {
+        const updated = await res.json()
+        setTasks(tasks.map((t) => t.id === taskId ? updated : t))
+        setEditingTask(updated)
+        setShowTaskForm(true)
+        toast({ title: language === 'fr' ? 'Retiré du planning' : language === 'zh' ? '已移出行程' : 'Removed from schedule', variant: 'success' })
+      }
+      return
+    }
+
+    // Schedule: drag from right panel to hour slot
+    if (!overId.startsWith('hour-') || activeId.startsWith('scheduled-')) return
     const hour = parseInt(overId.replace('hour-', ''), 10)
     const now = new Date()
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, 0, 0)
-    const end = new Date(start.getTime() + 60 * 60 * 1000)
-    const res = await fetch(`/api/tasks/${active.id}`, {
+    const task = tasks.find((t) => t.id === activeId)
+    const durationMs = (task?.estimatedMinutes ?? 60) * 60 * 1000
+    const end = new Date(start.getTime() + durationMs)
+    const res = await fetch(`/api/tasks/${activeId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scheduledStart: start.toISOString(), scheduledEnd: end.toISOString() }),
     })
     if (res.ok) {
       const updated = await res.json()
-      setTasks(tasks.map((t) => t.id === active.id ? updated : t))
+      setTasks(tasks.map((t) => t.id === activeId ? updated : t))
       toast({
         title: language === 'fr' ? `Planifié à ${String(hour).padStart(2,'0')}:00` : language === 'zh' ? `已排定於 ${String(hour).padStart(2,'0')}:00` : `Scheduled at ${String(hour).padStart(2,'0')}:00`,
         variant: 'success',
@@ -553,8 +628,10 @@ export default function TodayPage() {
                         key={hour}
                         hour={hour}
                         events={eventsAtHour}
+                        scheduledTasks={scheduledTasksByHour(hour)}
                         calendarAccounts={calendarAccounts}
                         isActive={hour === nowHour}
+                        onEditTask={(t) => { setEditingTask(t); setShowTaskForm(true) }}
                       />
                     )
                   })}
@@ -562,7 +639,7 @@ export default function TodayPage() {
               </div>
 
               {/* Right: Priority tasks (draggable) */}
-              <div className="flex-1 min-w-0">
+              <DroppableTasksPanel>
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-sm font-semibold text-[#4a4866] flex items-center gap-2">
                     <Clock className="h-4 w-4 text-red-500" />
@@ -601,7 +678,7 @@ export default function TodayPage() {
                     ))}
                   </div>
                 )}
-              </div>
+              </DroppableTasksPanel>
             </div>
           </DndContext>
 

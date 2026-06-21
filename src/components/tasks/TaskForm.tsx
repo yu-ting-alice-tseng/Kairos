@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -11,8 +11,9 @@ import { Badge } from '@/components/ui/badge'
 import { Task, CalendarAccount, EISENHOWER_QUADRANTS, QUADRANT_LABEL_ZH } from '@/types'
 import { t, TranslationKey } from '@/lib/i18n'
 import { getQuadrant } from '@/lib/utils'
-import { Sparkles, Calendar, Clock, Target, GitBranch, Trash2 } from 'lucide-react'
+import { Sparkles, Calendar, Clock, Target, GitBranch, Trash2, Wand2 } from 'lucide-react'
 import { RetroplanDialog } from './RetroplanDialog'
+import { useAppStore } from '@/stores/useAppStore'
 
 interface TaskFormProps {
   open: boolean
@@ -41,6 +42,7 @@ function ScaleHint({ value, type, lang }: { value: number; type: 'importance' | 
 }
 
 export function TaskForm({ open, onClose, onSave, onDelete, task, calendarAccounts = [], lang = 'fr', onRetroplanCreated }: TaskFormProps) {
+  const { keywordRules } = useAppStore()
   const [title, setTitle] = useState(task?.title ?? '')
   const [description, setDescription] = useState(task?.description ?? '')
   const [retroplanOpen, setRetroplanOpen] = useState(false)
@@ -54,6 +56,8 @@ export function TaskForm({ open, onClose, onSave, onDelete, task, calendarAccoun
   const [notes, setNotes] = useState(task?.notes ?? '')
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [ruleApplied, setRuleApplied] = useState<string | null>(null)
+  const ruleAppliedRef = useRef(false)
 
   useEffect(() => {
     setTitle(task?.title ?? '')
@@ -64,7 +68,24 @@ export function TaskForm({ open, onClose, onSave, onDelete, task, calendarAccoun
     setDeadline(task?.deadline ? new Date(task.deadline).toISOString().split('T')[0] : '')
     setCalendarAccountId(task?.calendarAccountId ?? '')
     setNotes(task?.notes ?? '')
+    setRuleApplied(null)
+    ruleAppliedRef.current = false
   }, [task?.id])
+
+  const handleTitleChange = (value: string) => {
+    setTitle(value)
+    // Only auto-apply rules for NEW tasks (no existing id), and only once
+    if (!task?.id && !ruleAppliedRef.current && keywordRules.length > 0) {
+      const lower = value.toLowerCase()
+      const matched = keywordRules.find((r) => lower.includes(r.keyword.toLowerCase()))
+      if (matched) {
+        setImportance(matched.importance)
+        setUrgency(matched.urgence)
+        setRuleApplied(matched.keyword)
+        ruleAppliedRef.current = true
+      }
+    }
+  }
 
   const quadrantId = getQuadrant(importance, urgency)
   const quadrant = EISENHOWER_QUADRANTS.find((q) => q.id === quadrantId)
@@ -104,10 +125,16 @@ export function TaskForm({ open, onClose, onSave, onDelete, task, calendarAccoun
             <Label>{t('tasks', lang)}</Label>
             <Input
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => handleTitleChange(e.target.value)}
               placeholder={lang === 'fr' ? 'Titre de la tâche...' : lang === 'zh' ? '任務標題...' : 'Task title...'}
               autoFocus
             />
+            {ruleApplied && (
+              <p className="text-xs text-amber-600 flex items-center gap-1">
+                <Wand2 className="h-3 w-3" />
+                {lang === 'fr' ? `Règle "${ruleApplied}" appliquée` : lang === 'zh' ? `已套用「${ruleApplied}」規則` : `Rule "${ruleApplied}" applied`}
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col gap-1.5">

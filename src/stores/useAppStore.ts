@@ -4,6 +4,13 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { Task, Habit, CalendarAccount, Language } from '@/types'
 
+export interface KeywordRule {
+  id: string
+  keyword: string
+  importance: number
+  urgence: number
+}
+
 export interface AppState {
   language: Language
   tasks: Task[]
@@ -12,9 +19,9 @@ export interface AppState {
   selectedDate: string
   isLoading: boolean
   activeView: 'today' | 'matrix' | 'calendar' | 'habits' | 'settings'
-  // Exclusion patterns: task titles matching these substrings won't appear in matrix/today
   matrixExcludePatterns: string[]
   todayExcludePatterns: string[]
+  keywordRules: KeywordRule[]
 
   setLanguage: (lang: Language) => void
   setTasks: (tasks: Task[]) => void
@@ -31,6 +38,10 @@ export interface AppState {
   setActiveView: (view: AppState['activeView']) => void
   setMatrixExcludePatterns: (patterns: string[]) => void
   setTodayExcludePatterns: (patterns: string[]) => void
+  setKeywordRules: (rules: KeywordRule[]) => void
+  addKeywordRule: (rule: KeywordRule) => void
+  updateKeywordRule: (id: string, updates: Partial<KeywordRule>) => void
+  removeKeywordRule: (id: string) => void
 }
 
 export const useAppStore = create<AppState>()(
@@ -45,6 +56,7 @@ export const useAppStore = create<AppState>()(
       activeView: 'today',
       matrixExcludePatterns: [],
       todayExcludePatterns: [],
+      keywordRules: [],
 
       setLanguage: (lang) => set({ language: lang }),
       setTasks: (tasks) => set({ tasks }),
@@ -69,6 +81,14 @@ export const useAppStore = create<AppState>()(
       setActiveView: (view) => set({ activeView: view }),
       setMatrixExcludePatterns: (patterns) => set({ matrixExcludePatterns: patterns }),
       setTodayExcludePatterns: (patterns) => set({ todayExcludePatterns: patterns }),
+      setKeywordRules: (rules) => set({ keywordRules: rules }),
+      addKeywordRule: (rule) => set((state) => ({ keywordRules: [...state.keywordRules, rule] })),
+      updateKeywordRule: (id, updates) =>
+        set((state) => ({
+          keywordRules: state.keywordRules.map((r) => r.id === id ? { ...r, ...updates } : r),
+        })),
+      removeKeywordRule: (id) =>
+        set((state) => ({ keywordRules: state.keywordRules.filter((r) => r.id !== id) })),
     }),
     {
       name: 'flowplan-store',
@@ -77,6 +97,7 @@ export const useAppStore = create<AppState>()(
         activeView: state.activeView,
         matrixExcludePatterns: state.matrixExcludePatterns,
         todayExcludePatterns: state.todayExcludePatterns,
+        keywordRules: state.keywordRules,
       }),
     }
   )

@@ -209,7 +209,7 @@ export default function MatrixPage() {
 
   // Filter tasks: exclude calendar-imported events and exclusion patterns
   const filteredTasks = (filterAccountId === 'all' ? tasks : tasks.filter((t) => t.calendarAccountId === filterAccountId))
-    .filter((t) => !t.calendarEventId && !isExcludedFromMatrix(t.title))
+    .filter((t) => !t.calendarEventId && !t.scheduledStart && !isExcludedFromMatrix(t.title))
 
   if (loading) {
     return (
