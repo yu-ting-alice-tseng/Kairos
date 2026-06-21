@@ -1,6 +1,6 @@
 'use server'
 
-import { signOut } from '@/lib/auth'
+import { auth, signOut } from '@/lib/auth'
 import { cookies } from 'next/headers'
 
 export async function signOutAction() {
@@ -14,23 +14,20 @@ export async function signOutAction() {
  */
 export async function prepareCalendarConnect() {
   const cookieStore = await cookies()
+  const session = await auth()
+  if (!session?.user?.id) return null
 
-  // NextAuth v5 uses different names depending on protocol
+  const isSecure = (process.env.AUTH_URL ?? process.env.NEXTAUTH_URL ?? '').startsWith('https://')
+  const opts = { httpOnly: true, sameSite: 'lax' as const, maxAge: 300, path: '/', secure: isSecure }
+
+  // Store the primary user's ID directly — session.findUnique doesn't work with strategy:'jwt'
+  cookieStore.set('_cal_restore_userid', session.user.id, opts)
+
+  // Also preserve the JWT cookie so we can restore the session after OAuth
   const sessionToken =
     cookieStore.get('__Secure-authjs.session-token')?.value ??
     cookieStore.get('authjs.session-token')?.value
+  if (sessionToken) cookieStore.set('_cal_restore_session', sessionToken, opts)
 
-  if (!sessionToken) return null
-
-  const isSecure = (process.env.AUTH_URL ?? process.env.NEXTAUTH_URL ?? '').startsWith('https://')
-
-  cookieStore.set('_cal_restore_session', sessionToken, {
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 300, // 5 minutes — enough for the OAuth round-trip
-    path: '/',
-    secure: isSecure,
-  })
-
-  return sessionToken
+  return session.user.id
 }

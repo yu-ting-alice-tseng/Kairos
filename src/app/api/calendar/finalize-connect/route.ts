@@ -32,18 +32,13 @@ export async function GET(req: NextRequest) {
 
   const newUserId = currentSession.user.id
 
-  // Determine which user to store the calendar for
-  let targetUserId = newUserId
+  // Determine which user to store the calendar for.
+  // Strategy:'jwt' stores no DB sessions, so read the primary userId from the cookie
+  // set by prepareCalendarConnect() rather than looking it up in prisma.session.
+  const restoreUserId = cookieStore.get('_cal_restore_userid')?.value
+  cookieStore.delete('_cal_restore_userid')
 
-  if (restoreToken) {
-    // A different user was signed in before — resolve them from the stored token
-    const originalSession = await prisma.session.findUnique({
-      where: { sessionToken: restoreToken },
-    })
-    if (originalSession?.userId && originalSession.userId !== newUserId) {
-      targetUserId = originalSession.userId
-    }
-  }
+  let targetUserId = restoreUserId && restoreUserId !== newUserId ? restoreUserId : newUserId
 
   // Fetch the OAuth account record that NextAuth just stored for the signed-in user
   const oauthAccount = await prisma.account.findFirst({
@@ -84,34 +79,46 @@ export async function GET(req: NextRequest) {
     // Non-fatal — fall back to provider name
   }
 
-  // Upsert the CalendarAccount for the TARGET user (original or same) — keyed by
-  // provider + name (the account's email) so multiple accounts of the same
-  // provider don't collide and overwrite each other.
-  const existing = await prisma.calendarAccount.findFirst({
-    where: { userId: targetUserId, provider: config.provider, name: accountName, isActive: true },
+  const tokenData = {
+    accessToken: oauthAccount.access_token,
+    ...(oauthAccount.refresh_token ? { refreshToken: oauthAccount.refresh_token } : {}),
+    ...(oauthAccount.expires_at ? { expiresAt: new Date(oauthAccount.expires_at * 1000) } : {}),
+  }
+
+  // Look for an existing CalendarAccount for this email under the target (primary) user
+  const existingPrimary = await prisma.calendarAccount.findFirst({
+    where: { userId: targetUserId, provider: config.provider, name: accountName },
   })
 
-  if (!existing) {
-    await prisma.calendarAccount.create({
-      data: {
-        userId: targetUserId,
-        provider: config.provider,
-        name: accountName,
-        color: config.color,
-        accessToken: oauthAccount.access_token,
-        refreshToken: oauthAccount.refresh_token ?? null,
-        expiresAt: oauthAccount.expires_at ? new Date(oauthAccount.expires_at * 1000) : null,
-      },
-    })
+  if (existingPrimary) {
+    // Already exists under primary user — just refresh tokens
+    await prisma.calendarAccount.update({ where: { id: existingPrimary.id }, data: tokenData })
   } else {
-    await prisma.calendarAccount.update({
-      where: { id: existing.id },
-      data: {
-        accessToken: oauthAccount.access_token,
-        ...(oauthAccount.refresh_token ? { refreshToken: oauthAccount.refresh_token } : {}),
-        ...(oauthAccount.expires_at ? { expiresAt: new Date(oauthAccount.expires_at * 1000) } : {}),
-      },
-    })
+    // The signIn callback may have created a CalendarAccount under newUserId during the OAuth flow.
+    // Migrate it to targetUserId (and rename it to the real email) instead of creating a duplicate.
+    const fromSignIn = newUserId !== targetUserId
+      ? await prisma.calendarAccount.findFirst({
+          where: { userId: newUserId, provider: config.provider },
+        })
+      : null
+
+    if (fromSignIn) {
+      await prisma.calendarAccount.update({
+        where: { id: fromSignIn.id },
+        data: { userId: targetUserId, name: accountName, ...tokenData },
+      })
+    } else {
+      // No existing record anywhere — create fresh under target user
+      await prisma.calendarAccount.create({
+        data: {
+          userId: targetUserId,
+          provider: config.provider,
+          name: accountName,
+          color: config.color,
+          ...tokenData,
+        },
+      })
+    }
   }
 
   // Build the redirect response
