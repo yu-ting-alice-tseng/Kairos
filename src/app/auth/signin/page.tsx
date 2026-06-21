@@ -1,4 +1,4 @@
-import { signIn, auth } from '@/lib/auth'
+import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { Target, Brain, CalendarDays, Flame } from 'lucide-react'
 import { DemoLoginButton } from '@/components/auth/DemoLoginButton'
@@ -72,12 +72,11 @@ export default async function SignInPage() {
             Connectez-vous avec votre compte Google ou Notion
           </p>
 
-          {/* Auth buttons */}
+          {/* Auth buttons — direct POST to NextAuth route handler, bypassing server actions
+              which do not reliably set cookies in Next.js 16 */}
           <div className="flex flex-col gap-3 mb-3">
-            <form action={async () => {
-              'use server'
-              await signIn('google', { redirectTo: '/today' })
-            }}>
+            <form method="POST" action="/api/auth/signin/google">
+              <input type="hidden" name="callbackUrl" value="/today" />
               <button
                 type="submit"
                 className="group w-full flex items-center justify-center gap-3 rounded-2xl bg-[#fbf7ee] px-4 py-3.5 text-sm font-semibold text-[#3a3326] shadow-lg shadow-black/20 hover:bg-[#f3ecdd] transition-all duration-200 hover:scale-[1.015] active:scale-[0.99]"
@@ -92,10 +91,8 @@ export default async function SignInPage() {
               </button>
             </form>
 
-            <form action={async () => {
-              'use server'
-              await signIn('notion', { redirectTo: '/today' })
-            }}>
+            <form method="POST" action="/api/auth/signin/notion">
+              <input type="hidden" name="callbackUrl" value="/today" />
               <button
                 type="submit"
                 className="w-full flex items-center justify-center gap-3 rounded-2xl bg-[#fbf7ee]/[0.06] border border-[rgba(225,200,150,0.14)] px-4 py-3.5 text-sm font-semibold text-[#e8d9b8] shadow-lg shadow-black/20 hover:bg-[#fbf7ee]/[0.10] transition-all duration-200 hover:scale-[1.015] active:scale-[0.99]"
