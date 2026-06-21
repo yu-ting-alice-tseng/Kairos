@@ -49,6 +49,7 @@ function SubCalendarPanel({ account, lang }: { account: CalendarAccount; lang: '
   const [toggling, setToggling] = useState<string | null>(null)
   const [togglingAll, setTogglingAll] = useState(false)
   const [errorState, setErrorState] = useState<'reauth' | 'access' | 'generic' | null>(null)
+  const [search, setSearch] = useState('')
   const { toast } = useGlobalToast()
 
   const load = useCallback(async () => {
@@ -157,6 +158,10 @@ function SubCalendarPanel({ account, lang }: { account: CalendarAccount; lang: '
     )
   }
 
+  const filteredCalendars = search.trim()
+    ? calendars.filter((c) => c.name.toLowerCase().includes(search.toLowerCase()))
+    : calendars
+
   return (
     <div className="flex flex-col gap-1 py-2 px-4">
       <div className="flex items-center justify-between mb-1">
@@ -193,7 +198,21 @@ function SubCalendarPanel({ account, lang }: { account: CalendarAccount; lang: '
           </button>
         </div>
       </div>
-      {calendars.map((cal) => (
+      {isNotion && calendars.length > 5 && (
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={lang === 'fr' ? 'Rechercher...' : lang === 'zh' ? '搜尋...' : 'Search...'}
+          className="mb-1 w-full rounded-lg border border-[#e2d6bc] bg-[#fbf7ee] px-3 py-1.5 text-xs text-[#5c5347] placeholder:text-[#c4b49a] focus:outline-none focus:ring-1 focus:ring-[#c4b49a]"
+        />
+      )}
+      {filteredCalendars.length === 0 && search.trim() && (
+        <p className="py-2 text-xs text-[#a99873]">
+          {lang === 'fr' ? 'Aucun résultat.' : lang === 'zh' ? '找不到結果。' : 'No results.'}
+        </p>
+      )}
+      {filteredCalendars.map((cal) => (
         <div key={cal.externalId} className="flex items-center gap-3 py-2 px-2 rounded-xl hover:bg-[#f3ecdd] transition-colors">
           <div className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: cal.color }} />
           <span className="text-sm text-[#5c5347] flex-1 truncate">{cal.name}</span>
