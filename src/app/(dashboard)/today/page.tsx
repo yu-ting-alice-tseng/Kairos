@@ -12,10 +12,10 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Sundial } from '@/components/ui/Sundial'
 import { Candle } from '@/components/ui/Candle'
-import { generatePriorityList, formatDate, formatTime } from '@/lib/utils'
+import { generatePriorityList, formatDate, formatTime, cn } from '@/lib/utils'
 import {
   Plus, Sparkles, Sun, Flame, RefreshCw, MessageSquare, ChevronRight,
-  CheckCircle2, Clock, Loader2, X, AlarmCheck, Zap, CalendarDays,
+  CheckCircle2, Clock, Loader2, X, AlarmCheck, Zap, CalendarDays, SlidersHorizontal,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { fr, enUS, zhTW } from 'date-fns/locale'
@@ -156,12 +156,14 @@ function DroppableTasksPanel({ children, isHighlight }: { children: React.ReactN
 const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === 'true'
 
 export default function TodayPage() {
-  const { language, tasks, habits, setTasks, setHabits, calendarAccounts, todayExcludePatterns } = useAppStore()
+  const { language, tasks, habits, setTasks, setHabits, calendarAccounts, todayExcludePatterns, setTodayExcludePatterns } = useAppStore()
   const { toast } = useGlobalToast()
 
   const [loading, setLoading] = useState(true)
   const [showTaskForm, setShowTaskForm] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false)
+  const [newExcludePattern, setNewExcludePattern] = useState('')
   const [breakdownTask, setBreakdownTask] = useState<Task | null>(null)
   const [showChat, setShowChat] = useState(false)
   const [recap, setRecap] = useState<string | null>(null)
@@ -468,6 +470,18 @@ export default function TodayPage() {
               <MessageSquare className="h-4 w-4" />
             </Button>
           )}
+          <button
+            onClick={() => setFilterPanelOpen((o) => !o)}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm border transition-all',
+              filterPanelOpen
+                ? 'bg-[#f3ecdd] border-[#cba968] text-[#5c5347]'
+                : 'border-[#e2d6bc] text-[#8a7a5e] hover:bg-[#f3ecdd]'
+            )}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            {language === 'fr' ? 'Filtres' : language === 'zh' ? '篩選' : 'Filters'}
+          </button>
           <Button size="sm" onClick={() => setShowTaskForm(true)}
             className="bg-gradient-to-br from-[#c44a3a] to-[#861f17] hover:from-[#ab3326] hover:to-[#6e190f] text-[#f3ecdd] border-0 shadow-md shadow-[#ab3326]/25 transition-all hover:scale-[1.02] active:scale-[0.98]">
             <Plus className="h-4 w-4" />
@@ -475,6 +489,37 @@ export default function TodayPage() {
           </Button>
         </div>
       </div>
+
+      {/* Today exclude-pattern filter panel */}
+      {filterPanelOpen && (
+        <div className="border-b border-[#ece2cb] bg-[#f8f4ea] px-6 py-4">
+          <p className="text-xs font-semibold text-[#5c5347] mb-2 flex items-center gap-1.5">
+            <span>🚫</span>
+            {language === 'fr' ? "Masquer de Aujourd'hui" : language === 'zh' ? '從今日頁面隱藏' : "Hide from Today"}
+          </p>
+          <div className="flex flex-wrap gap-2 items-center">
+            {todayExcludePatterns.map((p) => (
+              <span key={p} className="flex items-center gap-1 rounded-lg bg-[#f3ecdd] border border-[#e2d6bc] px-2.5 py-1 text-xs text-[#5c5347]">
+                {p}
+                <button onClick={() => setTodayExcludePatterns(todayExcludePatterns.filter((x) => x !== p))} className="text-[#a99873] hover:text-red-500 ml-0.5">×</button>
+              </span>
+            ))}
+            <div className="flex items-center gap-1.5">
+              <input
+                value={newExcludePattern}
+                onChange={(e) => setNewExcludePattern(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && newExcludePattern.trim()) { setTodayExcludePatterns([...todayExcludePatterns, newExcludePattern.trim()]); setNewExcludePattern('') } }}
+                placeholder={language === 'fr' ? 'ex: Meeting' : language === 'zh' ? '例：會議' : 'e.g. Meeting'}
+                className="border border-[#e2d6bc] rounded-lg px-2.5 py-1 text-xs w-32 focus:outline-none focus:ring-1 focus:ring-red-300 bg-[#fbf7ee]"
+              />
+              <button
+                onClick={() => { if (newExcludePattern.trim()) { setTodayExcludePatterns([...todayExcludePatterns, newExcludePattern.trim()]); setNewExcludePattern('') } }}
+                className="text-xs px-2 py-1 rounded-lg bg-[#c44a3a] text-white hover:bg-[#ab3326]"
+              >+</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 flex min-h-0 overflow-hidden">
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 animate-fade-in">

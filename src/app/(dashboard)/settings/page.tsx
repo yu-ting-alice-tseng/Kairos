@@ -15,7 +15,7 @@ import { DEMO_USER_ID } from '@/lib/demo-data'
 import {
   Settings, Plus, Trash2, Globe, Calendar, Check,
   MonitorSmartphone, Loader2, AlertTriangle, ChevronDown, ChevronUp, RefreshCw,
-  Pencil, KeyRound, LogOut, Wand2, Zap,
+  Pencil, KeyRound, LogOut,
 } from 'lucide-react'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
 import { cn } from '@/lib/utils'
@@ -495,48 +495,10 @@ function AddCalendarDialog({ open, onClose, onAdd, lang, isDemo }: {
   )
 }
 
-// ── Exclusion pattern editor ──────────────────────────────────────────────────
-
-function ExcludePatternEditor({ label, patterns, onChange }: {
-  label: string
-  patterns: string[]
-  onChange: (p: string[]) => void
-}) {
-  const [input, setInput] = useState('')
-  const add = () => {
-    const v = input.trim()
-    if (!v || patterns.includes(v)) { setInput(''); return }
-    onChange([...patterns, v]); setInput('')
-  }
-  return (
-    <div>
-      <p className="text-xs font-medium text-[#5c5347] mb-2">{label}</p>
-      <div className="flex gap-2 mb-2">
-        <Input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && add()}
-          placeholder="e.g. Meeting"
-          className="text-sm h-8"
-        />
-        <Button size="sm" variant="outline" onClick={add} className="h-8 px-3">+</Button>
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {patterns.map((p) => (
-          <span key={p} className="inline-flex items-center gap-1 rounded-full bg-[#f3ecdd] border border-[#e2d6bc] px-2.5 py-0.5 text-xs text-[#5c5347]">
-            {p}
-            <button onClick={() => onChange(patterns.filter((x) => x !== p))} className="text-[#a99873] hover:text-red-500 ml-0.5">×</button>
-          </span>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 // ── Settings page ─────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const { language, setLanguage, calendarAccounts, setCalendarAccounts, matrixExcludePatterns, todayExcludePatterns, setMatrixExcludePatterns, setTodayExcludePatterns, keywordRules, addKeywordRule, removeKeywordRule, setKeywordRules } = useAppStore()
+  const { language, setLanguage, calendarAccounts, setCalendarAccounts } = useAppStore()
   const { data: session } = useSession()
   const isDemo = session?.user?.id === DEMO_USER_ID
   const { toast } = useGlobalToast()
@@ -544,20 +506,6 @@ export default function SettingsPage() {
   const [showAddCalendar, setShowAddCalendar] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [editAccount, setEditAccount] = useState<CalendarAccount | null>(null)
-  const [cleanupLoading, setCleanupLoading] = useState(false)
-  const [newRuleKeyword, setNewRuleKeyword] = useState('')
-  const [newRuleImportance, setNewRuleImportance] = useState(5)
-  const [newRuleUrgence, setNewRuleUrgence] = useState(5)
-
-  const syncRules = async (rules: typeof keywordRules) => {
-    setKeywordRules(rules)
-    await fetch('/api/keyword-rules', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(rules),
-    })
-  }
-
   // Surface OAuth result toasts — use window.location.search to avoid Suspense requirement
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -712,143 +660,6 @@ export default function SettingsPage() {
               {language === 'fr' ? 'PWA — Installable sur mobile' : language === 'zh' ? 'PWA — 可安裝至手機' : 'PWA — Installable on mobile'}
             </div>
           </div>
-        </section>
-
-        {/* Exclusion patterns */}
-        <section>
-          <h2 className="text-sm font-semibold text-[#5c5347] mb-1 flex items-center gap-2">
-            <span className="text-base">🚫</span>
-            {language === 'fr' ? 'Filtres d\'exclusion' : language === 'zh' ? '排除規則' : 'Exclusion filters'}
-          </h2>
-          <p className="text-xs text-[#a99873] mb-4">
-            {language === 'fr'
-              ? 'Les tâches dont le titre contient ces mots seront masquées de la Matrice ou de Aujourd\'hui.'
-              : language === 'zh'
-              ? '標題包含以下關鍵字的任務將不會顯示在矩陣或今日頁面。'
-              : 'Tasks whose title contains these words will be hidden from the Matrix or Today view.'}
-          </p>
-          <ExcludePatternEditor
-            label={language === 'fr' ? 'Masquer de la Matrice' : language === 'zh' ? '從矩陣隱藏' : 'Hide from Matrix'}
-            patterns={matrixExcludePatterns}
-            onChange={setMatrixExcludePatterns}
-          />
-          <div className="mt-3" />
-          <ExcludePatternEditor
-            label={language === 'fr' ? 'Masquer de Aujourd\'hui' : language === 'zh' ? '從今日頁面隱藏' : 'Hide from Today'}
-            patterns={todayExcludePatterns}
-            onChange={setTodayExcludePatterns}
-          />
-        </section>
-
-        {/* Keyword rules */}
-        <section>
-          <h2 className="text-sm font-semibold text-[#5c5347] mb-1 flex items-center gap-2">
-            <Wand2 className="h-4 w-4 text-[#a87f3e]" />
-            {language === 'fr' ? 'Règles par mot-clé' : language === 'zh' ? '關鍵字規則' : 'Keyword rules'}
-          </h2>
-          <p className="text-xs text-[#a99873] mb-4">
-            {language === 'fr'
-              ? 'Les tâches contenant ce mot-clé reçoivent automatiquement les valeurs d\'importance et d\'urgence définies.'
-              : language === 'zh'
-              ? '任務標題包含關鍵字時，自動套用對應的重要性與緊急度設定。'
-              : 'Tasks whose title contains a keyword automatically receive the defined importance and urgency values.'}
-          </p>
-
-          {/* Existing rules */}
-          {keywordRules.length > 0 && (
-            <div className="flex flex-col gap-2 mb-4">
-              {keywordRules.map((rule) => (
-                <div key={rule.id} className="flex items-center gap-3 rounded-xl border border-[#e2d6bc] bg-[#fbf7ee] px-3 py-2">
-                  <span className="text-sm font-medium text-[#2a2420] flex-1">
-                    <span className="font-mono bg-[#f3ecdd] rounded px-1.5 py-0.5 text-xs mr-2">{rule.keyword}</span>
-                    {language === 'fr' ? 'Imp.' : language === 'zh' ? '重要' : 'Imp.'} <strong>{rule.importance}</strong>
-                    {' · '}
-                    {language === 'fr' ? 'Urg.' : language === 'zh' ? '緊急' : 'Urg.'} <strong>{rule.urgence}</strong>
-                  </span>
-                  <button
-                    onClick={() => syncRules(keywordRules.filter((r) => r.id !== rule.id))}
-                    className="text-[#a99873] hover:text-red-500 transition-colors"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Add new rule */}
-          <div className="flex gap-2 flex-wrap items-end">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-[#8a7a5e]">{language === 'fr' ? 'Mot-clé' : language === 'zh' ? '關鍵字' : 'Keyword'}</label>
-              <input
-                value={newRuleKeyword}
-                onChange={(e) => setNewRuleKeyword(e.target.value)}
-                placeholder="Review"
-                className="border border-[#e2d6bc] rounded-lg px-2.5 py-1.5 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-red-300 bg-[#fbf7ee]"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-[#8a7a5e]">{language === 'fr' ? 'Importance' : language === 'zh' ? '重要性' : 'Importance'} ({newRuleImportance})</label>
-              <input
-                type="range" min={1} max={10} value={newRuleImportance}
-                onChange={(e) => setNewRuleImportance(Number(e.target.value))}
-                className="w-24 accent-red-600"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-[#8a7a5e]">{language === 'fr' ? 'Urgence' : language === 'zh' ? '緊急度' : 'Urgency'} ({newRuleUrgence})</label>
-              <input
-                type="range" min={1} max={10} value={newRuleUrgence}
-                onChange={(e) => setNewRuleUrgence(Number(e.target.value))}
-                className="w-24 accent-amber-600"
-              />
-            </div>
-            <button
-              disabled={!newRuleKeyword.trim()}
-              onClick={() => {
-                if (!newRuleKeyword.trim()) return
-                syncRules([...keywordRules, { id: Date.now().toString(), keyword: newRuleKeyword.trim(), importance: newRuleImportance, urgence: newRuleUrgence }])
-                setNewRuleKeyword('')
-                setNewRuleImportance(5)
-                setNewRuleUrgence(5)
-              }}
-              className="flex items-center gap-1.5 rounded-xl bg-[#c44a3a] text-[#f3ecdd] px-3 py-1.5 text-sm font-medium hover:bg-[#ab3326] transition-colors disabled:opacity-50"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              {language === 'fr' ? 'Ajouter' : language === 'zh' ? '新增' : 'Add'}
-            </button>
-          </div>
-        </section>
-
-        {/* Data cleanup */}
-        <section>
-          <h2 className="text-sm font-semibold text-[#5c5347] mb-1 flex items-center gap-2">
-            <Zap className="h-4 w-4 text-amber-500" />
-            {language === 'fr' ? 'Nettoyage des données' : language === 'zh' ? '資料清理' : 'Data cleanup'}
-          </h2>
-          <p className="text-xs text-[#a99873] mb-4">
-            {language === 'fr'
-              ? 'Supprime toutes les tâches dont le titre est exactement "Booked" (activités importées supprimées du calendrier).'
-              : language === 'zh'
-              ? '刪除所有標題為「Booked」的任務（已從行事曆刪除的匯入活動）。'
-              : 'Delete all tasks titled exactly "Booked" (imported events deleted from the calendar).'}
-          </p>
-          <button
-            disabled={cleanupLoading}
-            onClick={async () => {
-              if (!confirm(language === 'fr' ? 'Supprimer toutes les tâches "Booked" ?' : language === 'zh' ? '確定刪除所有「Booked」任務？' : 'Delete all "Booked" tasks?')) return
-              setCleanupLoading(true)
-              const res = await fetch('/api/tasks/cleanup?title=Booked', { method: 'DELETE' })
-              const { deleted } = await res.json()
-              toast({ title: `${deleted} ${language === 'fr' ? 'tâche(s) supprimée(s)' : language === 'zh' ? '個任務已刪除' : 'task(s) deleted'}`, variant: 'success' })
-              setCleanupLoading(false)
-              window.location.reload()
-            }}
-            className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-medium text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50"
-          >
-            {cleanupLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-            {language === 'fr' ? 'Supprimer les "Booked"' : language === 'zh' ? '刪除所有 Booked' : 'Delete "Booked" tasks'}
-          </button>
         </section>
 
         {/* Sign out */}

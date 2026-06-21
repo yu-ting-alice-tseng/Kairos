@@ -68,10 +68,12 @@ export async function GET(req: NextRequest) {
   const profile = profileRes.ok ? await profileRes.json() : null
   const accountName = profile?.email ?? 'Google Calendar'
 
-  // If this Google email is already connected, update its tokens instead of creating a duplicate
+  // Search globally (no userId filter): if C signed in directly before being added via Settings,
+  // a CalendarAccount for C's email may already exist under C's own userId.
+  // Migrate it to the current primary user (session.user.id) so there is only one record.
   const existing = profile?.email
     ? await prisma.calendarAccount.findFirst({
-        where: { userId: session.user.id, provider: 'GOOGLE', name: profile.email },
+        where: { provider: 'GOOGLE', name: profile.email },
       })
     : null
 
@@ -79,6 +81,7 @@ export async function GET(req: NextRequest) {
     await prisma.calendarAccount.update({
       where: { id: existing.id },
       data: {
+        userId: session.user.id,   // consolidate to primary user if it was under another userId
         accessToken: tokens.access_token,
         ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
         ...(expiresAt ? { expiresAt } : {}),

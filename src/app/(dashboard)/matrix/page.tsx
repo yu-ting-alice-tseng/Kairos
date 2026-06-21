@@ -1,43 +1,39 @@
 'use client'
 
 import React, { useEffect, useState, useCallback } from 'react'
-import { useAppStore, AppState } from '@/stores/useAppStore'
-import { Task, CalendarEvent, Habit } from '@/types'
+import { useAppStore, AppState, KeywordRule } from '@/stores/useAppStore'
+import { Task, Habit } from '@/types'
 import { t } from '@/lib/i18n'
 import { EisenhowerMatrix } from '@/components/matrix/EisenhowerMatrix'
 import { GoalsSection } from '@/components/matrix/GoalsSection'
 import { TaskForm } from '@/components/tasks/TaskForm'
 import { BreakdownDialog } from '@/components/ai/BreakdownDialog'
 import { Button } from '@/components/ui/button'
-import { Plus, LayoutGrid, Loader2, CalendarDays, ChevronDown, ChevronUp, Repeat2, CheckCircle2, Circle } from 'lucide-react'
-import { Candle } from '@/components/ui/Candle'
+import { Plus, LayoutGrid, Loader2, Repeat2, CheckCircle2, Circle, Settings, Wand2, Trash2, SlidersHorizontal, ChevronUp, ChevronDown } from 'lucide-react'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
-import { cn, formatTime } from '@/lib/utils'
-import { startOfDay, endOfDay } from 'date-fns'
+import { cn } from '@/lib/utils'
 
 const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === 'true'
 
 export default function MatrixPage() {
-  const { language, tasks, setTasks, calendarAccounts, habits, setHabits } = useAppStore()
-  const matrixExcludePatterns = useAppStore((s: AppState) => s.matrixExcludePatterns)
+  const { language, tasks, setTasks, calendarAccounts, habits, setHabits, matrixExcludePatterns, setMatrixExcludePatterns, keywordRules, setKeywordRules } = useAppStore()
   const { toast } = useGlobalToast()
   const [loading, setLoading] = useState(true)
   const [showTaskForm, setShowTaskForm] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [breakdownTask, setBreakdownTask] = useState<Task | null>(null)
-
-  // Feature 3: sub-calendar filter
   const [filterAccountId, setFilterAccountId] = useState<string | 'all'>('all')
-
-  // Habits panel
   const [habitPanelOpen, setHabitPanelOpen] = useState(true)
+  const [settingsPanelOpen, setSettingsPanelOpen] = useState(false)
+  const [newRuleKeyword, setNewRuleKeyword] = useState('')
+  const [newRuleImportance, setNewRuleImportance] = useState(5)
+  const [newRuleUrgence, setNewRuleUrgence] = useState(5)
+  const [newExcludePattern, setNewExcludePattern] = useState('')
 
-  // Feature 2: calendar import panel
-  const [todayEvents, setTodayEvents] = useState<CalendarEvent[]>([])
-  const [todayEventsLoading, setTodayEventsLoading] = useState(false)
-  const [importedEventIds, setImportedEventIds] = useState<Set<string>>(new Set())
-  const [importedHabitEventIds, setImportedHabitEventIds] = useState<Set<string>>(new Set())
-  const [calendarPanelOpen, setCalendarPanelOpen] = useState(false)
+  const syncRules = async (rules: KeywordRule[]) => {
+    setKeywordRules(rules)
+    await fetch('/api/keyword-rules', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rules) })
+  }
 
   const loadTasks = useCallback(async () => {
     setLoading(true)
@@ -46,90 +42,13 @@ export default function MatrixPage() {
     setLoading(false)
   }, [setTasks])
 
-  const loadTodayEvents = useCallback(async () => {
-    if (calendarAccounts.length === 0) return
-    setTodayEventsLoading(true)
-    try {
-      const today = new Date()
-      const start = startOfDay(today).toISOString()
-      const end = endOfDay(today).toISOString()
-      const res = await fetch(`/api/calendar/events?start=${start}&end=${end}`)
-      if (res.ok) {
-        const events: CalendarEvent[] = await res.json()
-        // Only show all-day events in the import panel; timed events are already scheduled
-        setTodayEvents(events.filter((e) => e.allDay))
-        setCalendarPanelOpen(events.filter((e) => e.allDay).length > 0)
-        setImportedEventIds(new Set())
-
-      }
-    } catch {
-      // best-effort
-    }
-    setTodayEventsLoading(false)
-  }, [calendarAccounts.length, setTasks])
-
   useEffect(() => { loadTasks() }, [loadTasks])
-  useEffect(() => { loadTodayEvents() }, [loadTodayEvents])
   useEffect(() => {
     if (habits.length === 0) {
       fetch('/api/habits').then((r) => r.json()).then(setHabits).catch(() => {})
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  const handleImportEvent = async (ev: CalendarEvent) => {
-    const res = await fetch('/api/tasks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: ev.title,
-        importance: 5,
-        urgency: 5,
-        scheduledStart: ev.start,
-        scheduledEnd: ev.end,
-        calendarAccountId: ev.calendarAccountId,
-        calendarEventId: ev.id,
-      }),
-    })
-    if (res.ok) {
-      const created = await res.json()
-      setTasks([...tasks, created])
-      setImportedEventIds((prev) => new Set([...prev, ev.id]))
-      toast({ title: language === 'fr' ? 'Tâche créée depuis l\'événement' : language === 'zh' ? '已從活動建立任務' : 'Task created from event', variant: 'success' })
-    } else {
-      toast({ title: language === 'fr' ? 'Erreur lors de l\'import' : language === 'zh' ? '匯入活動失敗' : 'Failed to import event', variant: 'error' })
-    }
-  }
-
-  const handleImportEventAsHabit = async (ev: CalendarEvent) => {
-    const acc = calendarAccounts.find((a) => a.id === ev.calendarAccountId)
-    const color = ev.color ?? acc?.color ?? '#10B981'
-    const scheduledTime = ev.start
-      ? `${String(new Date(ev.start).getHours()).padStart(2, '0')}:${String(new Date(ev.start).getMinutes()).padStart(2, '0')}`
-      : undefined
-    const durationMinutes = ev.start && ev.end
-      ? Math.max(5, Math.round((new Date(ev.end).getTime() - new Date(ev.start).getTime()) / 60000))
-      : undefined
-    const res = await fetch('/api/habits', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: ev.title,
-        color,
-        frequency: 'DAILY',
-        scheduledTime,
-        durationMinutes,
-      }),
-    })
-    if (res.ok) {
-      const created = await res.json()
-      setHabits([...habits, created])
-      setImportedHabitEventIds((prev) => new Set([...prev, ev.id]))
-      toast({ title: language === 'fr' ? 'Habitude créée depuis l\'événement' : language === 'zh' ? '已從活動建立習慣' : 'Habit created from event', variant: 'success' })
-    } else {
-      toast({ title: language === 'fr' ? 'Erreur lors de l\'import' : language === 'zh' ? '匯入活動失敗' : 'Failed to import event', variant: 'error' })
-    }
-  }
 
   const handleTaskUpdate = async (id: string, importance: number, urgency: number) => {
     const res = await fetch(`/api/tasks/${id}`, {
@@ -244,100 +163,104 @@ export default function MatrixPage() {
             </select>
           )}
         </div>
-        <Button size="sm" onClick={() => setShowTaskForm(true)}>
-          <Plus className="h-4 w-4" />
-          {t('addTask', language)}
-        </Button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setSettingsPanelOpen((o) => !o)}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm border transition-all',
+              settingsPanelOpen
+                ? 'bg-[#f3ecdd] border-[#cba968] text-[#5c5347]'
+                : 'border-[#e2d6bc] text-[#8a7a5e] hover:bg-[#f3ecdd]'
+            )}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            {language === 'fr' ? 'Règles' : language === 'zh' ? '規則' : 'Rules'}
+          </button>
+          <Button size="sm" onClick={() => setShowTaskForm(true)}>
+            <Plus className="h-4 w-4" />
+            {t('addTask', language)}
+          </Button>
+        </div>
       </div>
+
+      {/* Settings panel: filters + keyword rules */}
+      {settingsPanelOpen && (
+        <div className="border-b border-[#ece2cb] bg-[#f8f4ea] px-6 py-4 flex flex-col gap-5">
+          {/* Exclude patterns */}
+          <div>
+            <p className="text-xs font-semibold text-[#5c5347] mb-2 flex items-center gap-1.5">
+              <span>🚫</span>
+              {language === 'fr' ? 'Masquer de la Matrice' : language === 'zh' ? '從矩陣隱藏' : 'Hide from Matrix'}
+            </p>
+            <div className="flex flex-wrap gap-2 items-center">
+              {matrixExcludePatterns.map((p) => (
+                <span key={p} className="flex items-center gap-1 rounded-lg bg-[#f3ecdd] border border-[#e2d6bc] px-2.5 py-1 text-xs text-[#5c5347]">
+                  {p}
+                  <button onClick={() => setMatrixExcludePatterns(matrixExcludePatterns.filter((x) => x !== p))} className="text-[#a99873] hover:text-red-500 ml-0.5">×</button>
+                </span>
+              ))}
+              <div className="flex items-center gap-1.5">
+                <input
+                  value={newExcludePattern}
+                  onChange={(e) => setNewExcludePattern(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && newExcludePattern.trim()) { setMatrixExcludePatterns([...matrixExcludePatterns, newExcludePattern.trim()]); setNewExcludePattern('') } }}
+                  placeholder={language === 'fr' ? 'ex: Meeting' : language === 'zh' ? '例：會議' : 'e.g. Meeting'}
+                  className="border border-[#e2d6bc] rounded-lg px-2.5 py-1 text-xs w-32 focus:outline-none focus:ring-1 focus:ring-red-300 bg-[#fbf7ee]"
+                />
+                <button
+                  onClick={() => { if (newExcludePattern.trim()) { setMatrixExcludePatterns([...matrixExcludePatterns, newExcludePattern.trim()]); setNewExcludePattern('') } }}
+                  className="text-xs px-2 py-1 rounded-lg bg-[#c44a3a] text-white hover:bg-[#ab3326]"
+                >+</button>
+              </div>
+            </div>
+          </div>
+
+          {/* Keyword rules */}
+          <div>
+            <p className="text-xs font-semibold text-[#5c5347] mb-2 flex items-center gap-1.5">
+              <Wand2 className="h-3.5 w-3.5 text-[#a87f3e]" />
+              {language === 'fr' ? 'Règles par mot-clé' : language === 'zh' ? '關鍵字規則' : 'Keyword rules'}
+            </p>
+            <div className="flex flex-wrap gap-2 items-center mb-2">
+              {keywordRules.map((rule) => (
+                <span key={rule.id} className="flex items-center gap-1.5 rounded-lg bg-[#f3ecdd] border border-[#e2d6bc] px-2.5 py-1 text-xs text-[#5c5347]">
+                  <span className="font-mono bg-white rounded px-1">{rule.keyword}</span>
+                  I:{rule.importance} U:{rule.urgence}
+                  <button onClick={() => syncRules(keywordRules.filter((r) => r.id !== rule.id))} className="text-[#a99873] hover:text-red-500">
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2 items-end">
+              <input
+                value={newRuleKeyword}
+                onChange={(e) => setNewRuleKeyword(e.target.value)}
+                placeholder="Keyword"
+                className="border border-[#e2d6bc] rounded-lg px-2.5 py-1.5 text-xs w-24 focus:outline-none focus:ring-1 focus:ring-red-300 bg-[#fbf7ee]"
+              />
+              <div className="flex flex-col gap-0.5">
+                <label className="text-[10px] text-[#8a7a5e]">Imp. ({newRuleImportance})</label>
+                <input type="range" min={1} max={10} value={newRuleImportance} onChange={(e) => setNewRuleImportance(Number(e.target.value))} className="w-20 accent-red-600" />
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <label className="text-[10px] text-[#8a7a5e]">Urg. ({newRuleUrgence})</label>
+                <input type="range" min={1} max={10} value={newRuleUrgence} onChange={(e) => setNewRuleUrgence(Number(e.target.value))} className="w-20 accent-amber-600" />
+              </div>
+              <button
+                disabled={!newRuleKeyword.trim()}
+                onClick={() => { if (!newRuleKeyword.trim()) return; syncRules([...keywordRules, { id: Date.now().toString(), keyword: newRuleKeyword.trim(), importance: newRuleImportance, urgence: newRuleUrgence }]); setNewRuleKeyword(''); setNewRuleImportance(5); setNewRuleUrgence(5) }}
+                className="flex items-center gap-1 rounded-lg bg-[#c44a3a] text-white px-2.5 py-1.5 text-xs font-medium hover:bg-[#ab3326] disabled:opacity-50"
+              >
+                <Plus className="h-3 w-3" />{language === 'fr' ? 'Ajouter' : language === 'zh' ? '新增' : 'Add'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto p-6">
         <GoalsSection lang={language} />
-
-        {/* Feature 2: CalendarImport panel */}
-        {calendarAccounts.length > 0 && (
-          <div className="mb-6 border border-[#e2d6bc] rounded-2xl bg-[#fbf7ee] overflow-hidden">
-            <button
-              onClick={() => setCalendarPanelOpen((o) => !o)}
-              className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#f3ecdd] transition-colors"
-            >
-              <div className="flex items-center gap-2 text-sm font-medium text-[#5c5347]">
-                <CalendarDays className="h-4 w-4 text-red-500" />
-                {language === 'fr' ? "Événements d'aujourd'hui" : language === 'zh' ? '今日活動' : "Today's events"}
-                {todayEventsLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-[#a99873]" />}
-                {!todayEventsLoading && (
-                  <span className="text-xs font-normal text-[#a99873]">
-                    ({todayEvents.length - importedEventIds.size > 0
-                      ? `${todayEvents.length - importedEventIds.size} ${language === 'fr' ? 'à importer' : language === 'zh' ? '待匯入' : 'to import'}`
-                      : language === 'fr' ? 'aucun' : language === 'zh' ? '無' : 'none'})
-                  </span>
-                )}
-              </div>
-              {calendarPanelOpen
-                ? <ChevronUp className="h-4 w-4 text-[#a99873]" />
-                : <ChevronDown className="h-4 w-4 text-[#a99873]" />}
-            </button>
-
-            {calendarPanelOpen && (
-              <div className="px-4 pb-4 border-t border-[#ece2cb]">
-                {todayEvents.length === 0 && !todayEventsLoading && (
-                  <p className="text-sm text-[#a99873] py-3 text-center">
-                    {language === 'fr' ? 'Aucun événement aujourd\'hui' : language === 'zh' ? '今日沒有活動' : 'No events today'}
-                  </p>
-                )}
-                <div className="flex flex-wrap gap-2 pt-3">
-                  {todayEvents.map((ev) => {
-                    const isImported = importedEventIds.has(ev.id)
-                    const isImportedHabit = importedHabitEventIds.has(ev.id)
-                    const acc = calendarAccounts.find((a) => a.id === ev.calendarAccountId)
-                    const color = ev.color ?? acc?.color ?? '#6366F1'
-                    const bothImported = isImported && isImportedHabit
-                    return (
-                      <div
-                        key={ev.id}
-                        className={cn(
-                          'flex items-center gap-2 border rounded-xl px-3 py-2 text-xs transition-all',
-                          bothImported
-                            ? 'border-[#ece2cb] bg-[#f3ecdd] opacity-60'
-                            : 'border-[#e2d6bc] bg-[#fbf7ee]'
-                        )}
-                      >
-                        <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                        <span className="font-medium text-[#3a3326] max-w-[140px] truncate">{ev.title}</span>
-                        <span className="text-[#a99873] whitespace-nowrap text-[10px] italic">
-                          {language === 'fr' ? 'Journée' : language === 'zh' ? '整天' : 'All day'}
-                        </span>
-                        {isImported ? (
-                          <span className="text-green-600 font-medium">
-                            {language === 'fr' ? '✓ tâche' : language === 'zh' ? '✓ 任務' : '✓ task'}
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => handleImportEvent(ev)}
-                            className="text-[#ab3326] font-medium hover:underline whitespace-nowrap"
-                          >
-                            {language === 'fr' ? '+ tâche' : language === 'zh' ? '+ 任務' : '+ task'}
-                          </button>
-                        )}
-                        {isImportedHabit ? (
-                          <span className="text-emerald-600 font-medium">
-                            {language === 'fr' ? '✓ habitude' : language === 'zh' ? '✓ 習慣' : '✓ habit'}
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => handleImportEventAsHabit(ev)}
-                            className="text-[#8a6a32] font-medium hover:underline whitespace-nowrap"
-                          >
-                            {language === 'fr' ? '+ habitude' : language === 'zh' ? '+ 習慣' : '+ habit'}
-                          </button>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Habits panel */}
         {todayHabits.length > 0 && (

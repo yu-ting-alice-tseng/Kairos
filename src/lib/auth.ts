@@ -43,9 +43,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
   callbacks: {
     async signIn({ user, account, profile }) {
-      // On Google sign-in, upsert a CalendarAccount using the OAuth profile email as unique key.
-      // Must use profile.email (the actual Google account email), NOT user.email
-      // (which is the DB User's email and may belong to a different linked account).
+      // On Google sign-in, upsert the CalendarAccount tokens.
+      // Search by email globally (no userId filter) because B/C/D accounts
+      // are sub-calendars stored under User A's userId, not their own userId.
       if (!user?.id || !account?.access_token) return true
       if (account.provider !== 'google') return true
       const email = (profile as { email?: string } | undefined)?.email ?? (user as { email?: string }).email
@@ -56,41 +56,41 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           ...(account.refresh_token ? { refreshToken: account.refresh_token } : {}),
           ...(account.expires_at ? { expiresAt: new Date(account.expires_at * 1000) } : {}),
         }
-        // Find by the specific email so different Google accounts never overwrite each other
+        // Search globally by email — sub-calendar accounts live under the primary user's userId
         const exactMatch = await prisma.calendarAccount.findFirst({
-          where: { userId: user.id, provider: 'GOOGLE', name: email },
+          where: { provider: 'GOOGLE', name: email },
         })
         if (exactMatch) {
-          // Refresh tokens for this specific account
           await prisma.calendarAccount.update({ where: { id: exactMatch.id }, data: tokenData })
         } else {
-          // Check if there is a legacy placeholder record ("Google Calendar") with no real email yet
-          const placeholder = await prisma.calendarAccount.findFirst({
-            where: { userId: user.id, provider: 'GOOGLE', name: 'Google Calendar' },
+          // No CalendarAccount for this email yet — create one under the current sign-in user
+          await prisma.calendarAccount.create({
+            data: { userId: user.id, provider: 'GOOGLE', name: email, color: '#4285F4', ...tokenData },
           })
-          if (placeholder) {
-            // Claim the placeholder for this email
-            await prisma.calendarAccount.update({ where: { id: placeholder.id }, data: { name: email, ...tokenData } })
-          } else {
-            // Create a fresh CalendarAccount for this Google account
-            await prisma.calendarAccount.create({
-              data: {
-                userId: user.id,
-                provider: 'GOOGLE',
-                name: email,
-                color: '#4285F4',
-                ...tokenData,
-              },
-            })
-          }
         }
       } catch (err) {
         console.error('[auth] CalendarAccount sync failed:', err)
       }
       return true
     },
-    jwt({ token, user }) {
+    async jwt({ token, user, account, profile }) {
       if (user?.id) token.sub = user.id
+      // On Google sign-in: if this email is a sub-calendar of a different primary user,
+      // redirect the session to that primary user so all data loads correctly.
+      if (account?.provider === 'google') {
+        const email = (profile as { email?: string } | undefined)?.email
+        if (email) {
+          try {
+            const calAccount = await prisma.calendarAccount.findFirst({
+              where: { provider: 'GOOGLE', name: email },
+              select: { userId: true },
+            })
+            if (calAccount && calAccount.userId !== token.sub) {
+              token.sub = calAccount.userId
+            }
+          } catch { /* non-fatal — keep the default sub */ }
+        }
+      }
       return token
     },
     session({ session, token }) {

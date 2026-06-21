@@ -46,13 +46,15 @@ export function TaskForm({ open, onClose, onSave, onDelete, task, calendarAccoun
   const [title, setTitle] = useState(task?.title ?? '')
   const [description, setDescription] = useState(task?.description ?? '')
   const [retroplanOpen, setRetroplanOpen] = useState(false)
-  const [importance, setImportance] = useState(task?.importance ?? 5)
-  const [urgency, setUrgency] = useState(task?.urgency ?? 5)
+  const [importance, setImportance] = useState(task?.importance ?? 10)
+  const [urgency, setUrgency] = useState(task?.urgency ?? 10)
   const [estimatedMinutes, setEstimatedMinutes] = useState(task?.estimatedMinutes ?? 60)
   const [deadline, setDeadline] = useState(
     task?.deadline ? new Date(task.deadline).toISOString().split('T')[0] : ''
   )
-  const [calendarAccountId, setCalendarAccountId] = useState(task?.calendarAccountId ?? '')
+  // Auto-select the only available calendar for new tasks
+  const defaultCalendarId = task?.calendarAccountId ?? (calendarAccounts.length === 1 ? calendarAccounts[0].id : '')
+  const [calendarAccountId, setCalendarAccountId] = useState(defaultCalendarId)
   const [notes, setNotes] = useState(task?.notes ?? '')
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -62,15 +64,15 @@ export function TaskForm({ open, onClose, onSave, onDelete, task, calendarAccoun
   useEffect(() => {
     setTitle(task?.title ?? '')
     setDescription(task?.description ?? '')
-    setImportance(task?.importance ?? 5)
-    setUrgency(task?.urgency ?? 5)
+    setImportance(task?.importance ?? 10)
+    setUrgency(task?.urgency ?? 10)
     setEstimatedMinutes(task?.estimatedMinutes ?? 60)
     setDeadline(task?.deadline ? new Date(task.deadline).toISOString().split('T')[0] : '')
-    setCalendarAccountId(task?.calendarAccountId ?? '')
+    setCalendarAccountId(task?.calendarAccountId ?? (calendarAccounts.length === 1 ? calendarAccounts[0].id : ''))
     setNotes(task?.notes ?? '')
     setRuleApplied(null)
     ruleAppliedRef.current = false
-  }, [task?.id])
+  }, [task?.id, calendarAccounts.length])
 
   const handleTitleChange = (value: string) => {
     setTitle(value)
@@ -218,18 +220,16 @@ export function TaskForm({ open, onClose, onSave, onDelete, task, calendarAccoun
 
           {calendarAccounts.length > 0 && (
             <div className="flex flex-col gap-1.5">
-              <Label>{t('calendar', lang)}</Label>
+              <Label>
+                {t('calendar', lang)}
+                <span className="text-red-500 ml-0.5">*</span>
+              </Label>
+              {!calendarAccountId && (
+                <p className="text-xs text-red-500">
+                  {lang === 'fr' ? 'Veuillez choisir un calendrier.' : lang === 'zh' ? '請選擇一個日曆。' : 'Please select a calendar.'}
+                </p>
+              )}
               <div className="flex gap-2 flex-wrap">
-                <button
-                  onClick={() => setCalendarAccountId('')}
-                  className={`flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm border transition-all ${
-                    !calendarAccountId
-                      ? 'bg-red-50 border-red-300 text-red-900'
-                      : 'border-[#e2d6bc] text-[#6e6147] hover:bg-[#f3ecdd]'
-                  }`}
-                >
-                  Aucun
-                </button>
                 {calendarAccounts.map((acc) => (
                   <button
                     key={acc.id}
@@ -289,7 +289,7 @@ export function TaskForm({ open, onClose, onSave, onDelete, task, calendarAccoun
             </Button>
           )}
           <Button variant="outline" onClick={onClose}>{t('cancel', lang)}</Button>
-          <Button onClick={handleSave} disabled={!title.trim() || isSaving}>
+          <Button onClick={handleSave} disabled={!title.trim() || isSaving || (calendarAccounts.length > 0 && !calendarAccountId)}>
             {isSaving ? t('loading', lang) : t('save', lang)}
           </Button>
         </DialogFooter>
