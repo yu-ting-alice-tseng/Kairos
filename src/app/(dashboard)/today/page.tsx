@@ -20,6 +20,94 @@ import {
 import { format } from 'date-fns'
 import { fr, enUS, zhTW } from 'date-fns/locale'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
+import {
+  DndContext, DragEndEvent, DragOverlay,
+  useDraggable, useDroppable,
+} from '@dnd-kit/core'
+
+const SCHEDULE_HOURS = Array.from({ length: 16 }, (_, i) => i + 7) // 07–22
+
+function DraggableTaskRow({ task, index, onComplete, onEdit, onDelete, onBreakdown, onReschedule, lang }: {
+  task: Task; index: number
+  onComplete: (id: string) => Promise<void>
+  onEdit: (t: Task) => void
+  onDelete: (id: string) => Promise<void>
+  onBreakdown: (t: Task) => void
+  onReschedule: (t: Task) => void
+  lang: 'fr' | 'en' | 'zh'
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id })
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: transform ? `translate(${transform.x}px,${transform.y}px)` : undefined, opacity: isDragging ? 0.4 : 1 }}
+      className="flex items-start gap-3"
+    >
+      <span className="h-6 w-6 flex items-center justify-center rounded-full bg-red-50 text-xs font-bold text-red-400 shrink-0 mt-3 border border-red-100">
+        {index + 1}
+      </span>
+      <div
+        {...listeners}
+        {...attributes}
+        className="mt-3 cursor-grab text-[#c9b89a] hover:text-[#ab3326] shrink-0"
+        title="Glisser pour planifier"
+      >
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="9" cy="5" r="1" fill="currentColor" /><circle cx="15" cy="5" r="1" fill="currentColor" />
+          <circle cx="9" cy="12" r="1" fill="currentColor" /><circle cx="15" cy="12" r="1" fill="currentColor" />
+          <circle cx="9" cy="19" r="1" fill="currentColor" /><circle cx="15" cy="19" r="1" fill="currentColor" />
+        </svg>
+      </div>
+      <div className="flex-1 min-w-0">
+        <TaskCard task={task} onComplete={onComplete} onEdit={onEdit} onDelete={onDelete} onBreakdown={onBreakdown} onReschedule={onReschedule} lang={lang} />
+      </div>
+    </div>
+  )
+}
+
+function ScheduleHourSlot({ hour, events, calendarAccounts, isActive }: {
+  hour: number
+  events: CalendarEvent[]
+  calendarAccounts: { id: string; color: string }[]
+  isActive: boolean
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `hour-${hour}` })
+  const label = `${String(hour).padStart(2, '0')}:00`
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex gap-2 min-h-[36px] rounded-xl px-2 py-1.5 border transition-all text-xs ${
+        isOver
+          ? 'border-red-400 bg-red-50 shadow-sm'
+          : events.length > 0
+            ? 'border-[#e2d6bc] bg-[#fbf7ee]'
+            : 'border-dashed border-[#e2d6bc] bg-transparent'
+      }`}
+    >
+      <span className={`w-11 shrink-0 font-mono ${isActive ? 'text-red-500 font-bold' : 'text-[#a99873]'}`}>{label}</span>
+      <div className="flex-1 flex flex-col gap-0.5">
+        {events.map((ev) => {
+          const acc = calendarAccounts.find((a) => a.id === ev.calendarAccountId)
+          const color = ev.color ?? acc?.color ?? '#6366F1'
+          return (
+            <div key={ev.id} className="flex items-center gap-1.5 leading-tight">
+              <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+              <span className="truncate text-[#3a3326]">{ev.title}</span>
+              {ev.start && ev.end && (
+                <span className="text-[#a99873] shrink-0 ml-auto">{formatTime(ev.start)}</span>
+              )}
+            </div>
+          )
+        })}
+        {isOver && (
+          <div className="text-red-400 italic">
+            {`→ ${label}`}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === 'true'
 
@@ -243,6 +331,30 @@ export default function TodayPage() {
     }
   }
 
+  const handleScheduleTask = async (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || !active) return
+    const overId = String(over.id)
+    if (!overId.startsWith('hour-')) return
+    const hour = parseInt(overId.replace('hour-', ''), 10)
+    const now = new Date()
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, 0, 0)
+    const end = new Date(start.getTime() + 60 * 60 * 1000)
+    const res = await fetch(`/api/tasks/${active.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduledStart: start.toISOString(), scheduledEnd: end.toISOString() }),
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setTasks(tasks.map((t) => t.id === active.id ? updated : t))
+      toast({
+        title: language === 'fr' ? `Planifié à ${String(hour).padStart(2,'0')}:00` : language === 'zh' ? `已排定於 ${String(hour).padStart(2,'0')}:00` : `Scheduled at ${String(hour).padStart(2,'0')}:00`,
+        variant: 'success',
+      })
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center bg-[#f7f6ff]">
@@ -335,64 +447,6 @@ export default function TodayPage() {
             </div>
           )}
 
-          {todayEvents.length > 0 && (
-            <div className="rounded-2xl border border-[#e2d6bc] bg-[#fbf7ee] overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-[#ece2cb]">
-                <CalendarDays className="h-4 w-4 text-red-500" />
-                <span className="text-sm font-semibold text-[#5c5347]">
-                  {language === 'fr' ? "Agenda du jour" : language === 'zh' ? '今日行程' : "Today's schedule"}
-                </span>
-              </div>
-              <div className="p-3 flex flex-col gap-1.5">
-                {todayEvents
-                  .filter(ev => !ev.allDay)
-                  .sort((a, b) => new Date(a.start ?? 0).getTime() - new Date(b.start ?? 0).getTime())
-                  .map(ev => {
-                    const acc = calendarAccounts.find(a => a.id === ev.calendarAccountId)
-                    const color = ev.color ?? acc?.color ?? '#6366F1'
-                    return (
-                      <div key={ev.id} className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm border border-[#ece2cb] bg-white/40">
-                        <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                        <span className="font-medium text-[#2a2420] flex-1 truncate">{ev.title}</span>
-                        {ev.start && ev.end && (
-                          <span className="text-xs text-[#8a7a5e] shrink-0">{formatTime(ev.start)} – {formatTime(ev.end)}</span>
-                        )}
-                      </div>
-                    )
-                  })}
-              </div>
-            </div>
-          )}
-
-          {tomorrowEvents.filter(ev => !ev.allDay).length > 0 && (
-            <div className="rounded-2xl border border-[#e2d6bc] bg-[#fbf7ee] overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-[#ece2cb]">
-                <CalendarDays className="h-4 w-4 text-[#a99873]" />
-                <span className="text-sm font-semibold text-[#5c5347]">
-                  {language === 'fr' ? 'Demain' : language === 'zh' ? '明日行程' : "Tomorrow's schedule"}
-                </span>
-              </div>
-              <div className="p-3 flex flex-col gap-1.5">
-                {tomorrowEvents
-                  .filter(ev => !ev.allDay)
-                  .sort((a, b) => new Date(a.start ?? 0).getTime() - new Date(b.start ?? 0).getTime())
-                  .map(ev => {
-                    const acc = calendarAccounts.find(a => a.id === ev.calendarAccountId)
-                    const color = ev.color ?? acc?.color ?? '#6366F1'
-                    return (
-                      <div key={ev.id} className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm border border-[#ece2cb] bg-white/40">
-                        <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                        <span className="font-medium text-[#2a2420] flex-1 truncate">{ev.title}</span>
-                        {ev.start && ev.end && (
-                          <span className="text-xs text-[#8a7a5e] shrink-0">{formatTime(ev.start)} – {formatTime(ev.end)}</span>
-                        )}
-                      </div>
-                    )
-                  })}
-              </div>
-            </div>
-          )}
-
           <div className="grid grid-cols-3 gap-4 stagger">
             {[
               {
@@ -474,38 +528,69 @@ export default function TodayPage() {
             </div>
           )}
 
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-[#4a4866] flex items-center gap-2">
-                <Clock className="h-4 w-4 text-red-500" />
-                {language === 'fr' ? 'Tâches prioritaires' : language === 'zh' ? '優先任務' : 'Priority tasks'}
-                <Badge variant="default" className="text-xs bg-red-100 text-red-900 border-0">{prioritizedTasks.length}</Badge>
-              </h2>
-            </div>
-
-            {prioritizedTasks.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#ebe8f8] py-12 text-center bg-[#fbf7ee]/60">
-                <div className="h-14 w-14 rounded-2xl bg-[#f7f6ff] border border-[#ebe8f8] flex items-center justify-center mb-4">
-                  <CheckCircle2 className="h-7 w-7 text-red-300" />
+          {/* Two-column split: left = today's schedule, right = priority tasks */}
+          <DndContext onDragEnd={handleScheduleTask}>
+            <div className="flex gap-4 min-h-0">
+              {/* Left: Today's schedule timeline */}
+              <div className="w-[240px] shrink-0 rounded-2xl border border-[#e2d6bc] bg-[#fbf7ee] overflow-hidden flex flex-col">
+                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#ece2cb]">
+                  <CalendarDays className="h-3.5 w-3.5 text-red-500" />
+                  <span className="text-xs font-semibold text-[#5c5347]">
+                    {language === 'fr' ? "Agenda du jour" : language === 'zh' ? '今日行程' : "Today's schedule"}
+                  </span>
+                  <span className="text-[10px] text-[#a99873] ml-auto">
+                    {language === 'fr' ? 'Déposer pour planifier' : language === 'zh' ? '拖入以排程' : 'Drop to schedule'}
+                  </span>
                 </div>
-                <p className="text-sm font-medium text-[#9896a8]">{t('noTasks', language)}</p>
-                <Button variant="outline" size="sm"
-                  className="mt-4 border-[#ebe8f8] text-[#4a4866] hover:bg-[#f7f6ff] hover:border-red-200"
-                  onClick={() => setShowTaskForm(true)}>
-                  <Plus className="h-4 w-4" />
-                  {t('addTask', language)}
-                </Button>
+                <div className="overflow-y-auto p-2 flex flex-col gap-0.5">
+                  {SCHEDULE_HOURS.map((hour) => {
+                    const nowHour = new Date().getHours()
+                    const eventsAtHour = todayEvents
+                      .filter((ev) => !ev.allDay && ev.start)
+                      .filter((ev) => new Date(ev.start!).getHours() === hour)
+                    return (
+                      <ScheduleHourSlot
+                        key={hour}
+                        hour={hour}
+                        events={eventsAtHour}
+                        calendarAccounts={calendarAccounts}
+                        isActive={hour === nowHour}
+                      />
+                    )
+                  })}
+                </div>
               </div>
-            ) : (
-              <div className="flex flex-col gap-2.5 stagger">
-                {prioritizedTasks.map((task, index) => (
-                  <div key={task.id} className="flex items-start gap-3">
-                    <span className="h-6 w-6 flex items-center justify-center rounded-full bg-red-50 text-xs font-bold text-red-400 shrink-0 mt-3 border border-red-100">
-                      {index + 1}
-                    </span>
-                    <div className="flex-1">
-                      <TaskCard
+
+              {/* Right: Priority tasks (draggable) */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-sm font-semibold text-[#4a4866] flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-red-500" />
+                    {language === 'fr' ? 'Tâches prioritaires' : language === 'zh' ? '優先任務' : 'Priority tasks'}
+                    <Badge variant="default" className="text-xs bg-red-100 text-red-900 border-0">{prioritizedTasks.length}</Badge>
+                  </h2>
+                </div>
+
+                {prioritizedTasks.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#ebe8f8] py-12 text-center bg-[#fbf7ee]/60">
+                    <div className="h-14 w-14 rounded-2xl bg-[#f7f6ff] border border-[#ebe8f8] flex items-center justify-center mb-4">
+                      <CheckCircle2 className="h-7 w-7 text-red-300" />
+                    </div>
+                    <p className="text-sm font-medium text-[#9896a8]">{t('noTasks', language)}</p>
+                    <Button variant="outline" size="sm"
+                      className="mt-4 border-[#ebe8f8] text-[#4a4866] hover:bg-[#f7f6ff] hover:border-red-200"
+                      onClick={() => setShowTaskForm(true)}>
+                      <Plus className="h-4 w-4" />
+                      {t('addTask', language)}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2.5 stagger">
+                    {prioritizedTasks.map((task, index) => (
+                      <DraggableTaskRow
+                        key={task.id}
                         task={task}
+                        index={index}
                         onComplete={handleComplete}
                         onEdit={(t) => { setEditingTask(t); setShowTaskForm(true) }}
                         onDelete={handleDelete}
@@ -513,12 +598,12 @@ export default function TodayPage() {
                         onReschedule={handleReschedule}
                         lang={language}
                       />
-                    </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
-            )}
-          </div>
+            </div>
+          </DndContext>
 
           {completedToday.length > 0 && (
             <div>

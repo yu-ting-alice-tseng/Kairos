@@ -56,9 +56,10 @@ export default function MatrixPage() {
       const res = await fetch(`/api/calendar/events?start=${start}&end=${end}`)
       if (res.ok) {
         const events: CalendarEvent[] = await res.json()
-        setTodayEvents(events)
-        setCalendarPanelOpen(events.length > 0)
-        setImportedEventIds(new Set(events.map((e) => e.id)))
+        // Only show all-day events in the import panel; timed events are already scheduled
+        setTodayEvents(events.filter((e) => e.allDay))
+        setCalendarPanelOpen(events.filter((e) => e.allDay).length > 0)
+        setImportedEventIds(new Set())
 
       }
     } catch {
@@ -288,34 +289,46 @@ export default function MatrixPage() {
                     const isImportedHabit = importedHabitEventIds.has(ev.id)
                     const acc = calendarAccounts.find((a) => a.id === ev.calendarAccountId)
                     const color = ev.color ?? acc?.color ?? '#6366F1'
+                    const bothImported = isImported && isImportedHabit
                     return (
                       <div
                         key={ev.id}
                         className={cn(
                           'flex items-center gap-2 border rounded-xl px-3 py-2 text-xs transition-all',
-                          isImported && isImportedHabit
+                          bothImported
                             ? 'border-[#ece2cb] bg-[#f3ecdd] opacity-60'
-                            : 'border-[#e2d6bc] bg-[#fbf7ee] hover:border-red-200 hover:shadow-sm'
+                            : 'border-[#e2d6bc] bg-[#fbf7ee]'
                         )}
                       >
-                        <span
-                          className="h-2 w-2 rounded-full shrink-0"
-                          style={{ backgroundColor: color }}
-                        />
-                        <span className="font-medium text-[#3a3326] max-w-[160px] truncate">{ev.title}</span>
-                        {ev.allDay ? (
-                          <span className="text-[#a99873] whitespace-nowrap text-[10px] italic">
-                            {language === 'fr' ? 'Journée' : language === 'zh' ? '整天' : 'All day'}
-                          </span>
-                        ) : ev.start && ev.end && (
-                          <span className="text-[#a99873] whitespace-nowrap">
-                            {formatTime(ev.start)} – {formatTime(ev.end)}
-                          </span>
-                        )}
-
-                        <span className="text-green-500 font-medium ml-1">
-                          {language === 'fr' ? '✓ Auto-importé' : language === 'zh' ? '✓ 已自動匯入' : '✓ Auto-imported'}
+                        <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                        <span className="font-medium text-[#3a3326] max-w-[140px] truncate">{ev.title}</span>
+                        <span className="text-[#a99873] whitespace-nowrap text-[10px] italic">
+                          {language === 'fr' ? 'Journée' : language === 'zh' ? '整天' : 'All day'}
                         </span>
+                        {isImported ? (
+                          <span className="text-green-600 font-medium">
+                            {language === 'fr' ? '✓ tâche' : language === 'zh' ? '✓ 任務' : '✓ task'}
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleImportEvent(ev)}
+                            className="text-[#ab3326] font-medium hover:underline whitespace-nowrap"
+                          >
+                            {language === 'fr' ? '+ tâche' : language === 'zh' ? '+ 任務' : '+ task'}
+                          </button>
+                        )}
+                        {isImportedHabit ? (
+                          <span className="text-emerald-600 font-medium">
+                            {language === 'fr' ? '✓ habitude' : language === 'zh' ? '✓ 習慣' : '✓ habit'}
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleImportEventAsHabit(ev)}
+                            className="text-[#8a6a32] font-medium hover:underline whitespace-nowrap"
+                          >
+                            {language === 'fr' ? '+ habitude' : language === 'zh' ? '+ 習慣' : '+ habit'}
+                          </button>
+                        )}
                       </div>
                     )
                   })}

@@ -2,47 +2,78 @@
 
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useAppStore } from '@/stores/useAppStore'
-import { Task, CalendarEvent, Habit } from '@/types'
+import { Task, CalendarEvent, Habit, RetroTemplate } from '@/types'
 import { t } from '@/lib/i18n'
 import { TaskForm } from '@/components/tasks/TaskForm'
 import { Button } from '@/components/ui/button'
 import { cn, formatTime, getQuadrant, EISENHOWER_QUADRANTS } from '@/lib/utils'
 import {
   ChevronLeft, ChevronRight, Calendar, Plus, Clock, Loader2, Pencil, Trash2, X,
-  MapPin, ExternalLink, GitBranch, AlignLeft,
+  MapPin, ExternalLink, GitBranch, AlignLeft, CheckCircle2, Check, Sparkles, Undo2,
 } from 'lucide-react'
 import {
-  format, startOfWeek, endOfWeek, addDays, isSameDay, addWeeks, subWeeks,
-  isToday,
+  format, startOfWeek, endOfWeek, addDays, isSameDay, addWeeks, subWeeks, isToday,
 } from 'date-fns'
 import { fr, enUS, zhTW } from 'date-fns/locale'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
 
 const HOURS = Array.from({ length: 14 }, (_, i) => i + 7)
-const ROW_HEIGHT = 60 // px per hour — 1px per minute, keeps every hour row identical
 const GRID_START_HOUR = HOURS[0]
 const GRID_TOTAL_MIN = HOURS.length * 60
-const MIN_BLOCK_HEIGHT = 20 // px — floor so very short/zero-duration items stay visible
+const MIN_BLOCK_HEIGHT = 20
 
-interface DragState {
+// ─── Built-in templates for auto-detection ────────────────────────────────────
+
+const RETRO_BUILTIN = [
+  {
+    id: '__study',
+    keywords: ['exam', 'examen', 'test', 'study', 'étude', 'quiz', '考試', 'final', 'midterm', 'homework', 'devoir', '作業'],
+    stages: [
+      { name: 'Course review', nameFr: 'Révision du cours', nameZh: '複習課程', daysBeforeDeadline: 7 },
+      { name: 'Practice problems', nameFr: 'Exercices pratiques', nameZh: '練習題', daysBeforeDeadline: 3 },
+      { name: 'Past papers', nameFr: 'Annales', nameZh: '考古題', daysBeforeDeadline: 1 },
+    ],
+  },
+  {
+    id: '__project',
+    keywords: ['project', 'projet', 'report', 'rapport', 'essay', 'dissertation', 'presentation', 'présentation'],
+    stages: [
+      { name: 'Research', nameFr: 'Recherche', nameZh: '資料蒐集', daysBeforeDeadline: 14 },
+      { name: 'Outline', nameFr: 'Plan', nameZh: '大綱', daysBeforeDeadline: 10 },
+      { name: 'First draft', nameFr: 'Première ébauche', nameZh: '初稿', daysBeforeDeadline: 5 },
+      { name: 'Review & polish', nameFr: 'Révision finale', nameZh: '最終審閱', daysBeforeDeadline: 1 },
+    ],
+  },
+] as const
+
+type BuiltinStage = { name: string; nameFr: string; nameZh: string; daysBeforeDeadline: number }
+
+interface RetroSuggestion {
   event: CalendarEvent
-  startMouseY: number
-  startMouseX: number
-  eventDurationMs: number
+  templateId: string
+  matchedKeyword: string
+  stages: Array<{ name: string; daysBeforeDeadline: number }>
 }
 
-/**
- * Greedy interval-partitioning layout (the standard "calendar overlap" algorithm):
- * assigns each item a column index + the total column count of its overlap
- * cluster, so concurrent items sit side-by-side instead of stacking and
- * inflating the row height.
- */
+// ─── Name inheritance helper ──────────────────────────────────────────────────
+
+function buildStageTitle(parentTitle: string, matchedKeyword: string, stageName: string): string {
+  const lower = parentTitle.toLowerCase()
+  const kwIdx = lower.indexOf(matchedKeyword.toLowerCase())
+  if (kwIdx > 0) {
+    const prefix = parentTitle.substring(0, kwIdx).trim().replace(/[|\-:,\s]+$/, '').trim()
+    if (prefix) return `${prefix} | ${stageName}`
+  }
+  return stageName
+}
+
+// ─── Column layout ────────────────────────────────────────────────────────────
+
 function assignColumns<T extends { id: string; start: number; end: number }>(
   items: T[]
 ): Map<string, { col: number; cols: number }> {
   const sorted = [...items].sort((a, b) => a.start - b.start || a.end - b.end)
   const result = new Map<string, { col: number; cols: number }>()
-
   let clusterIds: string[] = []
   let columnEnds: number[] = []
   let clusterEnd = -Infinity
@@ -61,18 +92,13 @@ function assignColumns<T extends { id: string; start: number; end: number }>(
   for (const item of sorted) {
     if (clusterIds.length > 0 && item.start >= clusterEnd) flush()
     let colIdx = columnEnds.findIndex((end) => end <= item.start)
-    if (colIdx === -1) {
-      colIdx = columnEnds.length
-      columnEnds.push(item.end)
-    } else {
-      columnEnds[colIdx] = item.end
-    }
+    if (colIdx === -1) { colIdx = columnEnds.length; columnEnds.push(item.end) }
+    else columnEnds[colIdx] = item.end
     result.set(item.id, { col: colIdx, cols: 0 })
     clusterIds.push(item.id)
     clusterEnd = Math.max(clusterEnd, item.end)
   }
   flush()
-
   return result
 }
 
@@ -82,6 +108,22 @@ type DayBlock =
   | { id: string; kind: 'habit'; start: number; end: number; col: number; cols: number; data: Habit }
 
 const toGridMinutes = (d: Date) => d.getHours() * 60 + d.getMinutes() - GRID_START_HOUR * 60
+
+interface DragState {
+  event: CalendarEvent
+  startMouseY: number
+  startMouseX: number
+  eventDurationMs: number
+}
+
+interface UndoItem {
+  event: CalendarEvent
+  prevStart: string
+  prevEnd: string
+  prevAllDay?: boolean
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
   const { language, tasks, setTasks, calendarAccounts, habits, setHabits } = useAppStore()
@@ -95,14 +137,33 @@ export default function CalendarPage() {
   const [eventsLoading, setEventsLoading] = useState(false)
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
   const [eventSaving, setEventSaving] = useState(false)
+  const [userTemplates, setUserTemplates] = useState<RetroTemplate[]>([])
+  const [retroSuggestion, setRetroSuggestion] = useState<RetroSuggestion | null>(null)
+  const [retroSuggestionSaving, setRetroSuggestionSaving] = useState(false)
+  const [hiddenAccountIds, setHiddenAccountIds] = useState<Set<string>>(new Set())
 
-  // Drag state — use refs for drag internals to avoid re-renders during drag
+  const toggleAccount = (id: string) =>
+    setHiddenAccountIds((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+
+  // Drag state
   const dragRef = useRef<DragState | null>(null)
   const [draggingEventId, setDraggingEventId] = useState<string | null>(null)
   const [dragPreview, setDragPreview] = useState<{ dayIdx: number; hour: number } | null>(null)
   const gridRef = useRef<HTMLDivElement>(null)
 
-  // Stable refs so closures inside event listeners always read the latest values
+  // Undo stack for drag moves
+  const undoStackRef = useRef<UndoItem[]>([])
+
+  // Dismissed suggestion IDs (session-only)
+  const dismissedRef = useRef<Set<string>>(new Set())
+
+  // Touch swipe refs
+  const touchStartXRef = useRef<number | null>(null)
+
   const weekDaysRef = useRef<Date[]>([])
   const dragPreviewRef = useRef<{ dayIdx: number; hour: number } | null>(null)
   dragPreviewRef.current = dragPreview
@@ -128,9 +189,7 @@ export default function CalendarPage() {
         `/api/calendar/events?start=${weekStart.toISOString()}&end=${weekEnd.toISOString()}`
       )
       if (res.ok) setExternalEvents(await res.json())
-    } catch {
-      // External events are best-effort
-    }
+    } catch { /* best-effort */ }
     setEventsLoading(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calendarAccounts.length, weekStart.toISOString(), weekEnd.toISOString()])
@@ -144,6 +203,66 @@ export default function CalendarPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Load user retro templates for auto-detection
+  useEffect(() => {
+    fetch('/api/retro-templates')
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => setUserTemplates(Array.isArray(data) ? data : []))
+      .catch(() => {})
+  }, [])
+
+  // Ctrl+Z undo handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && undoStackRef.current.length > 0) {
+        e.preventDefault()
+        const item = undoStackRef.current.pop()!
+        handleSaveEventRef.current(item.event, item.event.title, item.prevStart, item.prevEnd, item.prevAllDay)
+        toast({ title: language === 'fr' ? 'Action annulée' : language === 'zh' ? '已復原' : 'Undone', variant: 'success' })
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [language])
+
+  // Auto-detect retroplanning suggestions
+  useEffect(() => {
+    if (externalEvents.length === 0) return
+
+    const allTemplates = [
+      ...RETRO_BUILTIN.map((t) => ({ id: t.id, keywords: t.keywords, stages: t.stages as unknown as BuiltinStage[] })),
+      ...userTemplates.map((t) => ({ id: t.id, keywords: t.keywords, stages: t.stages.map((s) => ({ name: s.name, nameFr: s.name, nameZh: s.name, daysBeforeDeadline: s.daysBeforeDeadline })) })),
+    ]
+
+    for (const ev of externalEvents) {
+      if (dismissedRef.current.has(ev.id)) continue
+
+      // Check if retro tasks already exist for this event (parent task matches event title)
+      const parentTask = tasks.find(
+        (t) => t.parentTaskId === null && t.title.toLowerCase() === ev.title.toLowerCase()
+      )
+      if (parentTask && tasks.some((t) => t.parentTaskId === parentTask.id)) continue
+
+      const lower = ev.title.toLowerCase()
+      for (const tmpl of allTemplates) {
+        const matchedKw = tmpl.keywords.find((kw) => lower.includes(kw.toLowerCase()))
+        if (matchedKw) {
+          const langKey = language === 'fr' ? 'nameFr' : language === 'zh' ? 'nameZh' : 'name'
+          const stages = tmpl.stages.map((s) => ({
+            name: buildStageTitle(ev.title, matchedKw, (s as unknown as Record<string, string>)[langKey] ?? s.name),
+            daysBeforeDeadline: s.daysBeforeDeadline,
+          }))
+          setRetroSuggestion({ event: ev, templateId: tmpl.id, matchedKeyword: matchedKw, stages })
+          return
+        }
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalEvents, userTemplates, tasks, language])
+
+  // ─── Derived data ───────────────────────────────────────────────────────────
+
   const scheduledTasks = tasks.filter((task) => task.scheduledStart && task.scheduledEnd)
 
   const getDeadlineTasksForDay = (day: Date) =>
@@ -155,7 +274,7 @@ export default function CalendarPage() {
     })
 
   const getAllDayEventsForDay = (day: Date) =>
-    externalEvents.filter((ev) => ev.allDay && ev.start && isSameDay(new Date(ev.start), day))
+    externalEvents.filter((ev) => ev.allDay && ev.start && isSameDay(new Date(ev.start), day) && !hiddenAccountIds.has(ev.calendarAccountId ?? ''))
 
   const isHabitActiveOnDay = (h: { isActive: boolean; frequency: string }, day: Date) => {
     if (!h.isActive) return false
@@ -169,13 +288,13 @@ export default function CalendarPage() {
   const getHabitsAllDayForDay = (day: Date) =>
     habits.filter((h) => !h.scheduledTime && isHabitActiveOnDay(h, day))
 
-  // Builds the duration-proportional, side-by-side-on-overlap blocks for one day column.
   const getDayBlocks = (day: Date): DayBlock[] => {
     type Raw = { id: string; kind: DayBlock['kind']; start: number; end: number; data: CalendarEvent | Task | Habit }
     const raw: Raw[] = []
 
     externalEvents.forEach((ev) => {
       if (ev.allDay || !ev.start) return
+      if (hiddenAccountIds.has(ev.calendarAccountId ?? '')) return
       const s = new Date(ev.start)
       if (!isSameDay(s, day)) return
       const e = ev.end ? new Date(ev.end) : new Date(s.getTime() + 30 * 60000)
@@ -204,6 +323,8 @@ export default function CalendarPage() {
     return visible.map((it) => ({ ...it, ...(cols.get(it.id) ?? { col: 0, cols: 1 }) })) as DayBlock[]
   }
 
+  // ─── Event handlers ─────────────────────────────────────────────────────────
+
   const handleSaveEvent = useCallback(async (
     ev: CalendarEvent,
     title: string,
@@ -216,9 +337,7 @@ export default function CalendarPage() {
       eventId: ev.id,
       calendarAccountId: ev.calendarAccountId,
       calendarId: ev.calendarId,
-      title,
-      start,
-      end,
+      title, start, end,
     }
     if (allDay !== undefined) body.allDay = allDay
     const res = await fetch('/api/calendar/events', {
@@ -227,6 +346,15 @@ export default function CalendarPage() {
       body: JSON.stringify(body),
     })
     if (res.ok) {
+      // Push old state to undo stack (only for position changes, not title edits)
+      if (ev.start !== start || ev.end !== end) {
+        undoStackRef.current.push({
+          event: ev,
+          prevStart: new Date(ev.start).toISOString(),
+          prevEnd: new Date(ev.end).toISOString(),
+          prevAllDay: ev.allDay,
+        })
+      }
       setExternalEvents((prev) =>
         prev.map((e) =>
           e.id === ev.id
@@ -237,13 +365,12 @@ export default function CalendarPage() {
       toast({ title: language === 'fr' ? 'Événement mis à jour' : language === 'zh' ? '活動已更新' : 'Event updated', variant: 'success' })
       setEditingEvent(null)
     } else {
-      toast({ title: language === 'fr' ? 'Erreur lors de la mise à jour' : language === 'zh' ? '更新失敗' : 'Failed to update event', variant: 'error' })
+      toast({ title: language === 'fr' ? 'Erreur lors de la mise à jour' : language === 'zh' ? '更新失敗' : 'Failed to update', variant: 'error' })
     }
     setEventSaving(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [language])
 
-  // Stable ref so drag mouseup closures can always call the latest handleSaveEvent
   const handleSaveEventRef = useRef(handleSaveEvent)
   handleSaveEventRef.current = handleSaveEvent
 
@@ -259,9 +386,37 @@ export default function CalendarPage() {
       toast({ title: language === 'fr' ? 'Événement supprimé' : language === 'zh' ? '活動已刪除' : 'Event deleted', variant: 'success' })
       setEditingEvent(null)
     } else {
-      toast({ title: language === 'fr' ? 'Erreur lors de la suppression' : language === 'zh' ? '刪除失敗' : 'Failed to delete event', variant: 'error' })
+      toast({ title: language === 'fr' ? 'Erreur lors de la suppression' : language === 'zh' ? '刪除失敗' : 'Failed to delete', variant: 'error' })
     }
   }
+
+  const handleCompleteTask = useCallback(async (task: Task) => {
+    const isCompleted = task.status === 'COMPLETED'
+    const newStatus = isCompleted ? 'PENDING' : 'COMPLETED'
+    setTasks(tasks.map((t) => t.id === task.id ? { ...t, status: newStatus, completedAt: isCompleted ? null : new Date().toISOString() } : t))
+    await fetch(`/api/tasks/${task.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus, completedAt: isCompleted ? null : new Date().toISOString() }),
+    })
+  }, [tasks, setTasks])
+
+  const handleCompleteHabit = useCallback(async (habit: Habit) => {
+    const alreadyDone = (habit.completions?.length ?? 0) > 0
+    if (alreadyDone) return
+    const res = await fetch('/api/habits/complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ habitId: habit.id }),
+    })
+    if (res.ok) {
+      const { streak } = await res.json()
+      setHabits(habits.map((h) => h.id === habit.id
+        ? { ...h, streak, completions: [{ id: 'tmp', habitId: habit.id, completedAt: new Date().toISOString() }] }
+        : h
+      ))
+    }
+  }, [habits, setHabits])
 
   const handleSaveTask = async (data: Partial<Task>) => {
     const payload = {
@@ -280,7 +435,7 @@ export default function CalendarPage() {
       if (res.ok) {
         const updated = await res.json()
         setTasks(tasks.map((task) => task.id === editingTask.id ? updated : task))
-        toast({ title: language === 'fr' ? 'Événement modifié' : language === 'zh' ? '活動已更新' : 'Event updated', variant: 'success' })
+        toast({ title: language === 'fr' ? 'Tâche modifiée' : language === 'zh' ? '任務已更新' : 'Task updated', variant: 'success' })
       }
     } else {
       const res = await fetch('/api/tasks', {
@@ -291,7 +446,7 @@ export default function CalendarPage() {
       if (res.ok) {
         const created = await res.json()
         setTasks([...tasks, created])
-        toast({ title: language === 'fr' ? 'Événement créé !' : language === 'zh' ? '活動已建立！' : 'Event created!', variant: 'success' })
+        toast({ title: language === 'fr' ? 'Tâche créée !' : language === 'zh' ? '任務已建立！' : 'Task created!', variant: 'success' })
       }
     }
     setEditingTask(null)
@@ -316,23 +471,74 @@ export default function CalendarPage() {
     setShowTaskForm(true)
   }
 
-  // --- Drag helpers ---
+  // Retro suggestion actions
+  const handleApplyRetroSuggestion = async (suggestion: RetroSuggestion, adjustedStages: Array<{ name: string; daysBeforeDeadline: number }>) => {
+    setRetroSuggestionSaving(true)
+    try {
+      // Create parent task from event
+      const deadlineDate = new Date(suggestion.event.start)
+      const parentRes = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: suggestion.event.title,
+          calendarAccountId: suggestion.event.calendarAccountId,
+          calendarEventId: suggestion.event.id,
+          importance: 8,
+          urgency: 7,
+          deadline: deadlineDate.toISOString(),
+        }),
+      })
+      if (!parentRes.ok) throw new Error('Failed to create parent task')
+      const parentTask = await parentRes.json()
+
+      // Create sub-tasks for each stage
+      await Promise.all(
+        adjustedStages.filter((s) => s.name.trim()).map((s) => {
+          const stageDeadline = new Date(deadlineDate)
+          stageDeadline.setDate(stageDeadline.getDate() - s.daysBeforeDeadline)
+          return fetch('/api/tasks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: s.name.trim(),
+              parentTaskId: parentTask.id,
+              calendarAccountId: suggestion.event.calendarAccountId,
+              importance: parentTask.importance,
+              urgency: parentTask.urgency,
+              deadline: stageDeadline.toISOString(),
+            }),
+          })
+        })
+      )
+      await loadTasks()
+      toast({ title: language === 'fr' ? 'Rétroplanning créé !' : language === 'zh' ? '逆向規劃已建立！' : 'Retroplanning created!', variant: 'success' })
+    } catch {
+      toast({ title: language === 'fr' ? 'Erreur' : language === 'zh' ? '建立失敗' : 'Failed to create', variant: 'error' })
+    } finally {
+      setRetroSuggestionSaving(false)
+      dismissedRef.current.add(suggestion.event.id)
+      setRetroSuggestion(null)
+    }
+  }
+
+  const handleDismissRetroSuggestion = () => {
+    if (retroSuggestion) dismissedRef.current.add(retroSuggestion.event.id)
+    setRetroSuggestion(null)
+  }
+
+  // ─── Drag helpers ────────────────────────────────────────────────────────────
 
   const finalizeDrop = useCallback((drag: DragState, preview: { dayIdx: number; hour: number } | null) => {
     if (!preview) return
     const targetDay = weekDaysRef.current[preview.dayIdx]
     if (!targetDay) return
-
     if (preview.hour < 7) {
-      // Dropped into all-day row
-      const newStart = new Date(targetDay)
-      newStart.setHours(0, 0, 0, 0)
-      const newEnd = new Date(newStart)
-      newEnd.setHours(23, 59, 59, 999)
+      const newStart = new Date(targetDay); newStart.setHours(0, 0, 0, 0)
+      const newEnd = new Date(newStart); newEnd.setHours(23, 59, 59, 999)
       handleSaveEventRef.current(drag.event, drag.event.title, newStart.toISOString(), newEnd.toISOString(), true)
     } else {
-      const newStart = new Date(targetDay)
-      newStart.setHours(preview.hour, 0, 0, 0)
+      const newStart = new Date(targetDay); newStart.setHours(preview.hour, 0, 0, 0)
       const newEnd = new Date(newStart.getTime() + drag.eventDurationMs)
       handleSaveEventRef.current(drag.event, drag.event.title, newStart.toISOString(), newEnd.toISOString(), false)
     }
@@ -340,26 +546,16 @@ export default function CalendarPage() {
 
   const startDrag = useCallback((e: React.MouseEvent, ev: CalendarEvent) => {
     if (!ev.editable) return
-    e.preventDefault()
-    e.stopPropagation()
+    e.preventDefault(); e.stopPropagation()
     const durationMs = ev.start && ev.end
       ? new Date(ev.end as string).getTime() - new Date(ev.start as string).getTime()
       : 60 * 60 * 1000
-    dragRef.current = {
-      event: ev,
-      startMouseY: e.clientY,
-      startMouseX: e.clientX,
-      eventDurationMs: durationMs,
-    }
+    dragRef.current = { event: ev, startMouseY: e.clientY, startMouseX: e.clientX, eventDurationMs: durationMs }
     setDraggingEventId(ev.id)
-
     const onMouseUp = () => {
       document.removeEventListener('mouseup', onMouseUp)
-      const drag = dragRef.current
-      const preview = dragPreviewRef.current
-      dragRef.current = null
-      setDraggingEventId(null)
-      setDragPreview(null)
+      const drag = dragRef.current; const preview = dragPreviewRef.current
+      dragRef.current = null; setDraggingEventId(null); setDragPreview(null)
       if (drag) finalizeDrop(drag, preview)
     }
     document.addEventListener('mouseup', onMouseUp)
@@ -367,24 +563,13 @@ export default function CalendarPage() {
 
   const startAllDayDrag = useCallback((e: React.MouseEvent, ev: CalendarEvent) => {
     if (!ev.editable) return
-    e.preventDefault()
-    e.stopPropagation()
-    dragRef.current = {
-      event: ev,
-      startMouseY: e.clientY,
-      startMouseX: e.clientX,
-      eventDurationMs: 60 * 60 * 1000,
-    }
+    e.preventDefault(); e.stopPropagation()
+    dragRef.current = { event: ev, startMouseY: e.clientY, startMouseX: e.clientX, eventDurationMs: 60 * 60 * 1000 }
     setDraggingEventId(ev.id)
-
     const onMouseUp = () => {
       document.removeEventListener('mouseup', onMouseUp)
-      const drag = dragRef.current
-      const preview = dragPreviewRef.current
-      dragRef.current = null
-      setDraggingEventId(null)
-      setDragPreview(null)
-      // Only drop if user dragged into time grid (hour >= 7)
+      const drag = dragRef.current; const preview = dragPreviewRef.current
+      dragRef.current = null; setDraggingEventId(null); setDragPreview(null)
       if (drag && preview && preview.hour >= 7) finalizeDrop(drag, preview)
     }
     document.addEventListener('mouseup', onMouseUp)
@@ -395,8 +580,10 @@ export default function CalendarPage() {
   }, [])
 
   const handleAllDayCellMouseMove = useCallback((dayIdx: number) => {
-    if (dragRef.current) setDragPreview({ dayIdx, hour: 0 }) // hour < 7 → all-day
+    if (dragRef.current) setDragPreview({ dayIdx, hour: 0 })
   }, [])
+
+  const isDragging = draggingEventId !== null
 
   if (loading) {
     return (
@@ -406,10 +593,11 @@ export default function CalendarPage() {
     )
   }
 
-  const isDragging = draggingEventId !== null
+  // ─── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col h-full">
+      {/* Header */}
       <div className="flex items-center justify-between px-6 py-5 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
@@ -432,17 +620,43 @@ export default function CalendarPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {undoStackRef.current.length > 0 && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              title={language === 'fr' ? 'Annuler (Ctrl+Z)' : language === 'zh' ? '復原 (Ctrl+Z)' : 'Undo (Ctrl+Z)'}
+              onClick={() => {
+                const item = undoStackRef.current.pop()
+                if (item) handleSaveEventRef.current(item.event, item.event.title, item.prevStart, item.prevEnd, item.prevAllDay)
+              }}
+            >
+              <Undo2 className="h-4 w-4" />
+            </Button>
+          )}
           {eventsLoading && <Loader2 className="h-4 w-4 animate-spin text-[#a99873]" />}
           {calendarAccounts.length > 0 && (
-            <div className="flex items-center gap-1.5" title={language === 'fr' ? 'Calendriers connectés' : language === 'zh' ? '已連接的日曆' : 'Connected calendars'}>
-              {calendarAccounts.map((acc) => (
-                <div
-                  key={acc.id}
-                  className="h-2.5 w-2.5 rounded-full ring-1 ring-white"
-                  style={{ backgroundColor: acc.color }}
-                  title={acc.name}
-                />
-              ))}
+            <div className="flex items-center gap-1.5">
+              {calendarAccounts.map((acc) => {
+                const hidden = hiddenAccountIds.has(acc.id)
+                return (
+                  <button
+                    key={acc.id}
+                    title={hidden ? acc.name + ' (masqué)' : acc.name}
+                    onClick={() => toggleAccount(acc.id)}
+                    className="flex items-center gap-1.5 rounded-full px-2 py-0.5 border transition-all text-xs hover:opacity-80"
+                    style={{
+                      borderColor: hidden ? '#d1c9b8' : acc.color,
+                      backgroundColor: hidden ? 'transparent' : acc.color + '20',
+                      color: hidden ? '#a99873' : acc.color,
+                      textDecoration: hidden ? 'line-through' : 'none',
+                      opacity: hidden ? 0.5 : 1,
+                    }}
+                  >
+                    <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: hidden ? '#a99873' : acc.color }} />
+                    <span className="max-w-[80px] truncate">{acc.name}</span>
+                  </button>
+                )
+              })}
             </div>
           )}
           <Button size="sm" onClick={() => { setSelectedDate(new Date()); setShowTaskForm(true) }}>
@@ -452,7 +666,30 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      <div className={cn('flex-1 overflow-auto', isDragging && 'cursor-grabbing select-none')}>
+      {/* Retroplanning suggestion banner */}
+      {retroSuggestion && (
+        <RetroSuggestionBanner
+          suggestion={retroSuggestion}
+          lang={language}
+          saving={retroSuggestionSaving}
+          onApply={handleApplyRetroSuggestion}
+          onDismiss={handleDismissRetroSuggestion}
+        />
+      )}
+
+      {/* Calendar grid — swipe to change week */}
+      <div
+        className={cn('flex-1 overflow-auto', isDragging && 'cursor-grabbing select-none')}
+        style={{ touchAction: 'pan-y' }}
+        onTouchStart={(e) => { touchStartXRef.current = e.touches[0].clientX }}
+        onTouchEnd={(e) => {
+          if (touchStartXRef.current === null) return
+          const delta = e.changedTouches[0].clientX - touchStartXRef.current
+          if (delta > 60) setCurrentWeek((w) => subWeeks(w, 1))
+          else if (delta < -60) setCurrentWeek((w) => addWeeks(w, 1))
+          touchStartXRef.current = null
+        }}
+      >
         <div className="min-w-[700px]">
           {/* Day headers */}
           <div className="grid grid-cols-8 border-b border-[#ece2cb] bg-[#fbf7ee] sticky top-0 z-10">
@@ -460,10 +697,7 @@ export default function CalendarPage() {
             {weekDays.map((day) => (
               <div
                 key={day.toISOString()}
-                className={cn(
-                  'py-3 px-2 text-center border-r border-[#ece2cb]',
-                  isToday(day) && 'bg-red-50'
-                )}
+                className={cn('py-3 px-2 text-center border-r border-[#ece2cb]', isToday(day) && 'bg-red-50')}
               >
                 <p className="text-xs text-[#8a7a5e] uppercase">{format(day, 'EEE', { locale })}</p>
                 <p className={cn('text-sm font-semibold mt-0.5', isToday(day) ? 'text-red-800' : 'text-[#2a2420]')}>
@@ -487,11 +721,7 @@ export default function CalendarPage() {
               return (
                 <div
                   key={day.toISOString()}
-                  className={cn(
-                    'border-r border-[#e2d6bc] px-1 py-1 min-h-[32px]',
-                    isToday(day) && 'bg-red-50/40',
-                    isPreviewHere && 'bg-red-100/60'
-                  )}
+                  className={cn('border-r border-[#e2d6bc] px-1 py-1 min-h-[32px]', isToday(day) && 'bg-red-50/40', isPreviewHere && 'bg-red-100/60')}
                   onMouseMove={() => handleAllDayCellMouseMove(dayIdx)}
                 >
                   {allDayEvs.map((ev) => {
@@ -500,11 +730,7 @@ export default function CalendarPage() {
                     return (
                       <div
                         key={ev.id}
-                        className={cn(
-                          'rounded px-1.5 py-0.5 text-xs mb-0.5 truncate border border-dashed',
-                          ev.editable && !isDragging ? 'cursor-grab' : '',
-                          isDraggingThis && 'opacity-40'
-                        )}
+                        className={cn('rounded px-1.5 py-0.5 text-xs mb-0.5 truncate border border-dashed', ev.editable && !isDragging ? 'cursor-grab' : '', isDraggingThis && 'opacity-40')}
                         style={{ backgroundColor: color + '22', borderColor: color }}
                         title={ev.title}
                         onMouseDown={(e) => { if (ev.editable) startAllDayDrag(e, ev) }}
@@ -519,11 +745,16 @@ export default function CalendarPage() {
                     return (
                       <div
                         key={habit.id}
-                        className={cn('rounded px-1.5 py-0.5 text-xs mb-0.5 truncate border border-dashed select-none', doneToday && 'opacity-60')}
+                        className={cn('rounded px-1.5 py-0.5 text-xs mb-0.5 truncate border border-dashed select-none flex items-center gap-1 cursor-pointer', doneToday && 'opacity-60')}
                         style={{ backgroundColor: habit.color + '18', borderColor: habit.color, color: habit.color }}
                         title={habit.title}
+                        onClick={() => isToday(day) && handleCompleteHabit(habit)}
                       >
-                        <span className={cn(doneToday && 'line-through')}>{habit.icon ?? '🔁'} {habit.title}</span>
+                        {doneToday
+                          ? <CheckCircle2 className="h-2.5 w-2.5 shrink-0" />
+                          : <span className="h-2 w-2 rounded-full border shrink-0" style={{ borderColor: habit.color }} />
+                        }
+                        <span className={cn('truncate', doneToday && 'line-through')}>{habit.icon ?? '🔁'} {habit.title}</span>
                       </div>
                     )
                   })}
@@ -532,30 +763,28 @@ export default function CalendarPage() {
                     const q = EISENHOWER_QUADRANTS.find((q) => q.id === qId)
                     const acc = calendarAccounts.find((a) => a.id === task.calendarAccountId)
                     const done = task.status === 'COMPLETED'
+                    const isRetro = !!task.parentTaskId
                     return (
                       <div
                         key={task.id}
-                        onClick={() => handleTaskClick(task)}
                         title={task.title}
                         className={cn(
-                          'rounded px-1.5 py-0.5 text-xs cursor-pointer mb-0.5 truncate border transition-all hover:shadow-sm',
-                          done ? 'bg-emerald-50 border-emerald-200 text-emerald-700 opacity-70 line-through' : cn(q?.bgColor, q?.color)
+                          'rounded px-1.5 py-0.5 text-xs cursor-pointer mb-0.5 truncate border transition-all hover:shadow-sm flex items-center gap-1',
+                          done ? 'bg-emerald-50 border-emerald-200 text-emerald-700 opacity-70' : isRetro ? 'border-dashed border-purple-300 bg-purple-50/60 text-purple-800' : cn(q?.bgColor, q?.color)
                         )}
-                        style={!done && acc ? { borderLeftColor: acc.color, borderLeftWidth: 3 } : {}}
+                        style={!done && !isRetro && acc ? { borderLeftColor: acc.color, borderLeftWidth: 3 } : {}}
+                        onClick={() => handleCompleteTask(task)}
                       >
-                        {task.title}
+                        {isRetro && <GitBranch className="h-2.5 w-2.5 shrink-0" />}
+                        {done ? <CheckCircle2 className="h-2.5 w-2.5 shrink-0 text-emerald-500" /> : null}
+                        <span className={cn('truncate', done && 'line-through')}>{task.title}</span>
                       </div>
                     )
                   })}
                   {deadlineTasks.length > 3 && (
-                    <p className="text-xs text-[#a99873] px-1 leading-tight">
-                      +{deadlineTasks.length - 3}
-                    </p>
+                    <p className="text-xs text-[#a99873] px-1 leading-tight">+{deadlineTasks.length - 3}</p>
                   )}
-                  {total === 0 && !isPreviewHere && (
-                    <div className="h-5" />
-                  )}
-                  {/* Ghost preview in all-day row */}
+                  {total === 0 && !isPreviewHere && <div className="h-5" />}
                   {isPreviewHere && dragRef.current && (() => {
                     const drag = dragRef.current!
                     const evColor = drag.event.color ?? calendarAccounts.find((a) => a.id === drag.event.calendarAccountId)?.color ?? '#6366F1'
@@ -573,8 +802,7 @@ export default function CalendarPage() {
             })}
           </div>
 
-          {/* Time grid — fixed-height hour rows (uniform spacing) with an absolutely
-              positioned overlay whose blocks are sized proportionally to actual duration */}
+          {/* Time grid */}
           <div className="relative" ref={gridRef}>
             {HOURS.map((hour) => (
               <div key={hour} className="grid grid-cols-8 border-b border-[#f3ecdd] h-[60px]">
@@ -586,11 +814,7 @@ export default function CalendarPage() {
                   return (
                     <div
                       key={day.toISOString()}
-                      className={cn(
-                        'border-r border-[#ece2cb] cursor-pointer hover:bg-[#f3ecdd] transition-colors',
-                        isToday(day) && 'bg-red-50/30',
-                        isPreviewHere && 'bg-red-100/40'
-                      )}
+                      className={cn('border-r border-[#ece2cb] cursor-pointer hover:bg-[#f3ecdd] transition-colors', isToday(day) && 'bg-red-50/30', isPreviewHere && 'bg-red-100/40')}
                       onClick={() => handleCellClick(day, hour)}
                       onMouseMove={() => handleCellMouseMove(dayIdx, hour)}
                     />
@@ -599,6 +823,7 @@ export default function CalendarPage() {
               </div>
             ))}
 
+            {/* Absolutely positioned event blocks */}
             <div className="absolute inset-0 grid grid-cols-8 pointer-events-none">
               <div className="w-12 shrink-0" />
               {weekDays.map((day, dayIdx) => {
@@ -629,7 +854,8 @@ export default function CalendarPage() {
                             onClick={(e) => { e.stopPropagation(); if (ev.editable && !isDragging) setEditingEvent(ev) }}
                             onMouseDown={(e) => { if (ev.editable) startDrag(e, ev) }}
                             className={cn(
-                              'pointer-events-auto rounded-lg px-2 py-1 text-xs border border-dashed overflow-hidden',
+                              'rounded-lg px-2 py-1 text-xs border border-dashed overflow-hidden group',
+                              isDragging ? 'pointer-events-none' : 'pointer-events-auto',
                               ev.editable ? 'cursor-grab hover:brightness-95' : 'select-none',
                               isDraggingThis && 'opacity-40'
                             )}
@@ -652,16 +878,23 @@ export default function CalendarPage() {
                         const q = EISENHOWER_QUADRANTS.find((q) => q.id === qId)
                         const acc = calendarAccounts.find((a) => a.id === task.calendarAccountId)
                         const done = task.status === 'COMPLETED'
+                        const isRetro = !!task.parentTaskId
                         return (
                           <div
                             key={block.id}
                             onClick={(e) => { e.stopPropagation(); handleTaskClick(task) }}
                             className={cn(
-                              'pointer-events-auto rounded-lg px-2 py-1 text-xs cursor-pointer border transition-all hover:shadow-sm overflow-hidden',
-                              done ? 'bg-emerald-50 border-emerald-200 text-emerald-700 opacity-70' : cn(q?.bgColor, q?.color)
+                              'rounded-lg px-2 py-1 text-xs cursor-pointer border transition-all hover:shadow-sm overflow-hidden group relative',
+                              isDragging ? 'pointer-events-none' : 'pointer-events-auto',
+                              done
+                                ? 'bg-emerald-50 border-emerald-200 text-emerald-700 opacity-70'
+                                : isRetro
+                                ? 'border-dashed border-purple-300 bg-purple-50/80 text-purple-900'
+                                : cn(q?.bgColor, q?.color)
                             )}
-                            style={{ ...boxStyle, ...(!done && acc ? { borderLeftColor: acc.color, borderLeftWidth: 3 } : {}) }}
+                            style={{ ...boxStyle, ...(!done && !isRetro && acc ? { borderLeftColor: acc.color, borderLeftWidth: 3 } : {}) }}
                           >
+                            {isRetro && <GitBranch className="h-2.5 w-2.5 absolute top-1 right-1 opacity-50" />}
                             <p className={cn('font-medium truncate', done && 'line-through')}>{task.title}</p>
                             {task.scheduledStart && task.scheduledEnd && (
                               <p className="opacity-70 flex items-center gap-1">
@@ -669,33 +902,53 @@ export default function CalendarPage() {
                                 {formatTime(task.scheduledStart)} – {formatTime(task.scheduledEnd)}
                               </p>
                             )}
+                            {/* Completion toggle */}
+                            <button
+                              className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 h-4 w-4 rounded-full flex items-center justify-center bg-white/80 hover:bg-emerald-50 transition-all"
+                              onClick={(e) => { e.stopPropagation(); handleCompleteTask(task) }}
+                              title={done ? (language === 'zh' ? '標為未完成' : 'Mark pending') : (language === 'zh' ? '標為完成' : 'Mark done')}
+                            >
+                              <Check className="h-2.5 w-2.5 text-emerald-600" />
+                            </button>
                           </div>
                         )
                       }
 
+                      // habit block
                       const habit = block.data
-                      const doneToday = habit.completions?.length ?? 0
+                      const doneToday = (habit.completions?.length ?? 0) > 0
                       return (
                         <div
                           key={block.id}
                           title={habit.title}
                           className={cn(
-                            'pointer-events-auto rounded-lg px-2 py-1 text-xs border select-none overflow-hidden',
-                            doneToday > 0 ? 'border-emerald-200 opacity-60' : 'border-dashed'
+                            'rounded-lg px-2 py-1 text-xs border overflow-hidden group relative',
+                            isDragging ? 'pointer-events-none' : 'pointer-events-auto',
+                            doneToday ? 'border-emerald-200 opacity-60' : 'border-dashed cursor-pointer hover:brightness-95'
                           )}
                           style={{ ...boxStyle, backgroundColor: habit.color + '18', borderColor: habit.color, color: habit.color }}
+                          onClick={() => !doneToday && handleCompleteHabit(habit)}
                         >
-                          <p className={cn('font-medium truncate', doneToday > 0 && 'line-through')}>
+                          <p className={cn('font-medium truncate', doneToday && 'line-through')}>
                             {habit.icon ?? '🔁'} {habit.title}
                           </p>
                           {habit.durationMinutes && (
                             <p className="opacity-70 text-[10px]">{habit.durationMinutes} min</p>
                           )}
+                          {!doneToday && (
+                            <button
+                              className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 h-4 w-4 rounded-full flex items-center justify-center bg-white/80 hover:bg-emerald-50 transition-all"
+                              onClick={(e) => { e.stopPropagation(); handleCompleteHabit(habit) }}
+                              title={language === 'zh' ? '完成習慣' : language === 'fr' ? 'Valider' : 'Complete'}
+                            >
+                              <Check className="h-2.5 w-2.5 text-emerald-600" />
+                            </button>
+                          )}
                         </div>
                       )
                     })}
 
-                    {/* Ghost preview for the event currently being dragged */}
+                    {/* Ghost preview */}
                     {isPreviewHere && dragRef.current && (() => {
                       const drag = dragRef.current!
                       const top = (dragPreview!.hour - GRID_START_HOUR) * 60
@@ -728,7 +981,6 @@ export default function CalendarPage() {
         lang={language}
       />
 
-      {/* Edit Google Calendar event modal */}
       {editingEvent && (
         <EditEventModal
           event={editingEvent}
@@ -743,6 +995,107 @@ export default function CalendarPage() {
     </div>
   )
 }
+
+// ─── Retroplanning suggestion banner ─────────────────────────────────────────
+
+function RetroSuggestionBanner({
+  suggestion,
+  lang,
+  saving,
+  onApply,
+  onDismiss,
+}: {
+  suggestion: RetroSuggestion
+  lang: 'fr' | 'en' | 'zh'
+  saving: boolean
+  onApply: (s: RetroSuggestion, stages: Array<{ name: string; daysBeforeDeadline: number }>) => void
+  onDismiss: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [stages, setStages] = useState(suggestion.stages)
+
+  const eventDate = new Date(suggestion.event.start)
+  const dateStr = eventDate.toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+
+  return (
+    <div className="border-b border-amber-200 bg-amber-50 px-6 py-3">
+      <div className="flex items-start gap-3">
+        <Sparkles className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-amber-900">
+            {lang === 'fr' ? 'Rétroplanning détecté' : lang === 'zh' ? '偵測到逆向規劃機會' : 'Retroplanning detected'}
+          </p>
+          <p className="text-xs text-amber-700 mt-0.5 truncate">
+            <span className="font-medium">{suggestion.event.title}</span>
+            {' — '}{dateStr}
+          </p>
+
+          {expanded && (
+            <div className="mt-3 flex flex-col gap-1.5">
+              {stages.map((s, i) => {
+                const stageDate = new Date(eventDate)
+                stageDate.setDate(stageDate.getDate() - s.daysBeforeDeadline)
+                const stageDateStr = stageDate.toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })
+                return (
+                  <div key={i} className="flex items-center gap-2 bg-white/70 rounded-lg px-3 py-2 border border-amber-200">
+                    <span className="h-5 w-5 rounded-full bg-amber-100 text-amber-800 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+                    <input
+                      className="flex-1 bg-transparent text-xs text-amber-900 outline-none min-w-0"
+                      value={s.name}
+                      onChange={(e) => setStages((prev) => prev.map((st, idx) => idx === i ? { ...st, name: e.target.value } : st))}
+                    />
+                    <div className="flex items-center gap-1 shrink-0">
+                      <input
+                        type="number"
+                        min={1}
+                        className="w-10 text-center text-xs border border-amber-200 rounded px-1 py-0.5 bg-white"
+                        value={s.daysBeforeDeadline}
+                        onChange={(e) => setStages((prev) => prev.map((st, idx) => idx === i ? { ...st, daysBeforeDeadline: Math.max(1, Number(e.target.value)) } : st))}
+                      />
+                      <span className="text-xs text-amber-600">{lang === 'fr' ? 'j av.' : lang === 'zh' ? '天前' : 'd before'}</span>
+                      <span className="text-xs text-amber-500 ml-1">{stageDateStr}</span>
+                    </div>
+                  </div>
+                )
+              })}
+              <button
+                onClick={() => setStages((prev) => [...prev, { name: '', daysBeforeDeadline: 3 }])}
+                className="text-xs text-amber-600 hover:text-amber-800 flex items-center gap-1 px-3 py-1"
+              >
+                <Plus className="h-3 w-3" />
+                {lang === 'fr' ? 'Ajouter une étape' : lang === 'zh' ? '新增階段' : 'Add stage'}
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="text-xs text-amber-700 hover:text-amber-900 underline"
+          >
+            {expanded ? (lang === 'fr' ? 'Réduire' : lang === 'zh' ? '收起' : 'Collapse') : (lang === 'fr' ? 'Modifier' : lang === 'zh' ? '調整' : 'Adjust')}
+          </button>
+          <button
+            onClick={() => onApply(suggestion, stages)}
+            disabled={saving}
+            className="flex items-center gap-1 text-xs bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-3 py-1.5 disabled:opacity-60 transition-colors"
+          >
+            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+            {lang === 'fr' ? 'Créer' : lang === 'zh' ? '建立' : 'Create'}
+          </button>
+          <button
+            onClick={onDismiss}
+            className="p-1.5 rounded-lg hover:bg-amber-100 text-amber-600 transition-colors"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Edit event modal ─────────────────────────────────────────────────────────
 
 function EditEventModal({
   event, lang, saving, tasks, onSave, onDelete, onClose,
@@ -765,16 +1118,11 @@ function EditEventModal({
   const [start, setStart] = React.useState(toLocal(event.start))
   const [end, setEnd] = React.useState(toLocal(event.end))
 
-  // Find retroplanning chains linked to this event by title keywords
   const relatedChains = React.useMemo(() => {
     const words = event.title.toLowerCase().split(/\s+/).filter((w) => w.length > 2)
-    return tasks.filter((t) =>
-      t.parentTaskId &&
-      words.some((w) => t.title.toLowerCase().includes(w))
-    )
+    return tasks.filter((t) => t.parentTaskId && words.some((w) => t.title.toLowerCase().includes(w)))
   }, [event.title, tasks])
 
-  // Extract URLs from description
   const links = React.useMemo(() => {
     if (!event.description) return []
     const urlRe = /https?:\/\/[^\s<>"]+/g
@@ -808,29 +1156,16 @@ function EditEventModal({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-[#8a7a5e] mb-1 block">{lang === 'fr' ? 'Début' : lang === 'zh' ? '開始' : 'Start'}</label>
-                <input
-                  type="datetime-local"
-                  className="w-full border border-[#e2d6bc] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300 bg-white"
-                  value={start}
-                  onChange={(e) => setStart(e.target.value)}
-                />
+                <input type="datetime-local" className="w-full border border-[#e2d6bc] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300 bg-white" value={start} onChange={(e) => setStart(e.target.value)} />
               </div>
               <div>
                 <label className="text-xs font-medium text-[#8a7a5e] mb-1 block">{lang === 'fr' ? 'Fin' : lang === 'zh' ? '結束' : 'End'}</label>
-                <input
-                  type="datetime-local"
-                  className="w-full border border-[#e2d6bc] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300 bg-white"
-                  value={end}
-                  onChange={(e) => setEnd(e.target.value)}
-                />
+                <input type="datetime-local" className="w-full border border-[#e2d6bc] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300 bg-white" value={end} onChange={(e) => setEnd(e.target.value)} />
               </div>
             </div>
           </div>
           <div className="flex gap-2 mt-5">
-            <button
-              onClick={() => onDelete(event)}
-              className="flex-1 rounded-xl border border-red-200 text-red-600 text-sm py-2 hover:bg-red-50 transition-colors"
-            >
+            <button onClick={() => onDelete(event)} className="flex-1 rounded-xl border border-red-200 text-red-600 text-sm py-2 hover:bg-red-50 transition-colors">
               <Trash2 className="h-4 w-4 inline mr-1" />
               {lang === 'fr' ? 'Supprimer' : lang === 'zh' ? '刪除' : 'Delete'}
             </button>
@@ -847,11 +1182,9 @@ function EditEventModal({
     )
   }
 
-  // Detail view (default)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
       <div className="bg-[#fbf7ee] rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        {/* Colour accent bar */}
         <div className="h-1.5 w-full" style={{ backgroundColor: evColor }} />
         <div className="p-5">
           <div className="flex items-start justify-between gap-3 mb-4">
@@ -862,7 +1195,6 @@ function EditEventModal({
           </div>
 
           <div className="flex flex-col gap-3 text-sm">
-            {/* Time */}
             {!event.allDay && event.start && event.end && (
               <div className="flex items-center gap-2 text-[#5c5347]">
                 <Clock className="h-4 w-4 text-[#a99873] shrink-0" />
@@ -875,57 +1207,34 @@ function EditEventModal({
                 <span>{lang === 'fr' ? 'Toute la journée' : lang === 'zh' ? '整天' : 'All day'}</span>
               </div>
             )}
-
-            {/* Location */}
             {event.location && (
               <div className="flex items-start gap-2 text-[#5c5347]">
                 <MapPin className="h-4 w-4 text-[#a99873] shrink-0 mt-0.5" />
                 <span className="break-words">{event.location}</span>
               </div>
             )}
-
-            {/* Description */}
             {event.description && (
               <div className="flex items-start gap-2">
                 <AlignLeft className="h-4 w-4 text-[#a99873] shrink-0 mt-0.5" />
-                <p className="text-[#5c5347] text-xs leading-relaxed whitespace-pre-wrap break-words line-clamp-6">
-                  {event.description}
-                </p>
+                <p className="text-[#5c5347] text-xs leading-relaxed whitespace-pre-wrap break-words line-clamp-6">{event.description}</p>
               </div>
             )}
-
-            {/* Extracted links */}
             {links.length > 0 && (
               <div className="flex flex-col gap-1">
                 {links.map((url) => (
-                  <a
-                    key={url}
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-xs text-[#ab3326] hover:underline truncate"
-                  >
+                  <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-[#ab3326] hover:underline truncate">
                     <ExternalLink className="h-3 w-3 shrink-0" />
                     {url.replace(/^https?:\/\//, '').split('/')[0]}
                   </a>
                 ))}
               </div>
             )}
-
-            {/* Open in Google Calendar */}
             {event.htmlLink && (
-              <a
-                href={event.htmlLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-xs text-[#8a7a5e] hover:text-[#ab3326] transition-colors"
-              >
+              <a href={event.htmlLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-[#8a7a5e] hover:text-[#ab3326] transition-colors">
                 <ExternalLink className="h-3.5 w-3.5" />
                 {lang === 'fr' ? 'Ouvrir dans Google Calendar' : lang === 'zh' ? '在 Google 日曆中開啟' : 'Open in Google Calendar'}
               </a>
             )}
-
-            {/* Related retroplanning chains */}
             {relatedChains.length > 0 && (
               <div className="border-t border-[#ece2cb] pt-3 mt-1">
                 <p className="text-xs font-semibold text-[#8a7a5e] flex items-center gap-1.5 mb-2">
@@ -948,20 +1257,13 @@ function EditEventModal({
             )}
           </div>
 
-          {/* Actions */}
           {event.editable && (
             <div className="flex gap-2 mt-4 pt-4 border-t border-[#ece2cb]">
-              <button
-                onClick={() => onDelete(event)}
-                className="flex items-center gap-1.5 rounded-xl border border-red-200 text-red-600 text-xs px-3 py-2 hover:bg-red-50 transition-colors"
-              >
+              <button onClick={() => onDelete(event)} className="flex items-center gap-1.5 rounded-xl border border-red-200 text-red-600 text-xs px-3 py-2 hover:bg-red-50 transition-colors">
                 <Trash2 className="h-3.5 w-3.5" />
                 {lang === 'fr' ? 'Supprimer' : lang === 'zh' ? '刪除' : 'Delete'}
               </button>
-              <button
-                onClick={() => setEditing(true)}
-                className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-[#ab3326] text-white text-xs px-3 py-2 hover:bg-[#861f17] transition-colors"
-              >
+              <button onClick={() => setEditing(true)} className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-[#ab3326] text-white text-xs px-3 py-2 hover:bg-[#861f17] transition-colors">
                 <Pencil className="h-3.5 w-3.5" />
                 {lang === 'fr' ? 'Modifier' : lang === 'zh' ? '編輯' : 'Edit'}
               </button>
@@ -971,5 +1273,4 @@ function EditEventModal({
       </div>
     </div>
   )
-
 }
