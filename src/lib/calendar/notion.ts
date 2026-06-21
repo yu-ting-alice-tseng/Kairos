@@ -5,7 +5,7 @@ export async function listNotionDatabases(accessToken: string) {
   const notion = new Client({ auth: accessToken })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const res = await (notion.search as any)({
-    filter: { value: 'database', property: 'object' },
+    filter: { value: 'data_source', property: 'object' },
   })
   return res.results ?? []
 }
