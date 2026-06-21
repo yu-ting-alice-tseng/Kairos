@@ -88,6 +88,7 @@ export default function MatrixPage() {
         scheduledStart: ev.start,
         scheduledEnd: ev.end,
         calendarAccountId: ev.calendarAccountId,
+        calendarEventId: ev.id,
       }),
     })
     if (res.ok) {
