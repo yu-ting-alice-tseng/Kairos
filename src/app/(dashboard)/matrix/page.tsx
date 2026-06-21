@@ -11,7 +11,6 @@ import { BreakdownDialog } from '@/components/ai/BreakdownDialog'
 import { Button } from '@/components/ui/button'
 import { Plus, LayoutGrid, Loader2, Repeat2, CheckCircle2, Circle, Settings, Wand2, Trash2, SlidersHorizontal, ChevronUp, ChevronDown } from 'lucide-react'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
-import { InkLoader } from '@/components/ui/InkLoader'
 import { cn } from '@/lib/utils'
 
 const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === 'true'
@@ -138,7 +137,7 @@ const [habitPanelOpen, setHabitPanelOpen] = useState(true)
   const filteredTasks = tasks
     .filter((t) => !t.calendarEventId && (!t.scheduledStart || isScheduledToday(t.scheduledStart)) && !isExcludedFromMatrix(t.title))
 
-  if (loading) return <InkLoader size="page" />
+  if (loading) return <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#a87f3e]" /></div>
 
   return (
     <div className="flex flex-col h-full">
