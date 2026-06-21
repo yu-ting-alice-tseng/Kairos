@@ -48,11 +48,20 @@ for (const dir of dirs) {
   }
 
   console.log(`Applying migration: ${dir}`)
-  // Split on semicolons, skip empty/comment-only lines
-  const statements = sql
+  // Strip comment lines first, then split on semicolons
+  const cleanSql = sql
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('--'))
+    .join('\n')
+  const statements = cleanSql
     .split(';')
     .map((s) => s.trim())
-    .filter((s) => s.length > 0 && !s.startsWith('--'))
+    .filter((s) => s.length > 0)
+
+  if (statements.length === 0) {
+    console.log(`  (no statements — skipping)`)
+    continue
+  }
 
   for (const stmt of statements) {
     await client.execute(stmt)
