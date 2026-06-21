@@ -135,7 +135,7 @@ const [habitPanelOpen, setHabitPanelOpen] = useState(true)
   // Filter tasks: exclude calendar-imported events and tasks scheduled for future/past days.
   // Tasks with no scheduledStart OR scheduledStart on today are included (today's unscheduled items).
   const filteredTasks = tasks
-    .filter((t) => !t.calendarEventId && (!t.scheduledStart || isScheduledToday(t.scheduledStart)) && !isExcludedFromMatrix(t.title))
+    .filter((t) => (!t.scheduledStart || isScheduledToday(t.scheduledStart)) && !isExcludedFromMatrix(t.title))
 
   if (loading) return <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#a87f3e]" /></div>
 
