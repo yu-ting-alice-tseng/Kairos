@@ -7,9 +7,14 @@ import { InkMountains } from '@/components/ui/InkMountains'
 
 export default async function SignInPage() {
   const session = await auth()
-  // Only redirect if already logged in AND not coming from a switch-account flow.
-  // We check for ?switch=1 to allow signing in as a different account.
   if (session?.user) redirect('/today')
+
+  // Fetch CSRF token required by NextAuth for form-based sign-in
+  const csrfRes = await fetch(
+    `${process.env.AUTH_URL ?? process.env.NEXTAUTH_URL ?? 'http://localhost:3000'}/api/auth/csrf`,
+    { cache: 'no-store' }
+  )
+  const { csrfToken } = csrfRes.ok ? await csrfRes.json() : { csrfToken: '' }
 
   const features = [
     { icon: Target,      label: 'Matrice Eisenhower interactive' },
@@ -76,6 +81,7 @@ export default async function SignInPage() {
               which do not reliably set cookies in Next.js 16 */}
           <div className="flex flex-col gap-3 mb-3">
             <form method="POST" action="/api/auth/signin/google">
+              <input type="hidden" name="csrfToken" value={csrfToken} />
               <input type="hidden" name="callbackUrl" value="/today" />
               <button
                 type="submit"
@@ -92,6 +98,7 @@ export default async function SignInPage() {
             </form>
 
             <form method="POST" action="/api/auth/signin/notion">
+              <input type="hidden" name="csrfToken" value={csrfToken} />
               <input type="hidden" name="callbackUrl" value="/today" />
               <button
                 type="submit"
