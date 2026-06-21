@@ -51,30 +51,38 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       const email = (profile as { email?: string } | undefined)?.email ?? (user as { email?: string }).email
       if (!email) return true
       try {
-        const existing = await prisma.calendarAccount.findFirst({
+        const tokenData = {
+          accessToken: account.access_token,
+          ...(account.refresh_token ? { refreshToken: account.refresh_token } : {}),
+          ...(account.expires_at ? { expiresAt: new Date(account.expires_at * 1000) } : {}),
+        }
+        // Find by the specific email so different Google accounts never overwrite each other
+        const exactMatch = await prisma.calendarAccount.findFirst({
           where: { userId: user.id, provider: 'GOOGLE', name: email },
         })
-        if (!existing) {
-          await prisma.calendarAccount.create({
-            data: {
-              userId: user.id,
-              provider: 'GOOGLE',
-              name: email,
-              color: '#4285F4',
-              accessToken: account.access_token,
-              refreshToken: account.refresh_token ?? null,
-              expiresAt: account.expires_at ? new Date(account.expires_at * 1000) : null,
-            },
-          })
+        if (exactMatch) {
+          // Refresh tokens for this specific account
+          await prisma.calendarAccount.update({ where: { id: exactMatch.id }, data: tokenData })
         } else {
-          await prisma.calendarAccount.update({
-            where: { id: existing.id },
-            data: {
-              accessToken: account.access_token,
-              ...(account.refresh_token ? { refreshToken: account.refresh_token } : {}),
-              ...(account.expires_at ? { expiresAt: new Date(account.expires_at * 1000) } : {}),
-            },
+          // Check if there is a legacy placeholder record ("Google Calendar") with no real email yet
+          const placeholder = await prisma.calendarAccount.findFirst({
+            where: { userId: user.id, provider: 'GOOGLE', name: 'Google Calendar' },
           })
+          if (placeholder) {
+            // Claim the placeholder for this email
+            await prisma.calendarAccount.update({ where: { id: placeholder.id }, data: { name: email, ...tokenData } })
+          } else {
+            // Create a fresh CalendarAccount for this Google account
+            await prisma.calendarAccount.create({
+              data: {
+                userId: user.id,
+                provider: 'GOOGLE',
+                name: email,
+                color: '#4285F4',
+                ...tokenData,
+              },
+            })
+          }
         }
       } catch (err) {
         console.error('[auth] CalendarAccount sync failed:', err)
