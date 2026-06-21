@@ -22,7 +22,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
               prompt: 'select_account',
             },
           },
-          checks: ['state'],
+          checks: [],
         })]
       : []),
     ...(process.env.NOTION_CLIENT_ID && process.env.NOTION_CLIENT_SECRET
