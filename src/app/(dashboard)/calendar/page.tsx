@@ -11,8 +11,9 @@ import {
   ChevronLeft, ChevronRight, Calendar, Plus, Clock, Loader2, Pencil, Trash2, X,
   MapPin, ExternalLink, GitBranch, AlignLeft, CheckCircle2, Check, Sparkles, Undo2,
 } from 'lucide-react'
+import { InkLoader } from '@/components/ui/InkLoader'
 import {
-  format, startOfWeek, endOfWeek, addDays, isSameDay, addWeeks, subWeeks, isToday,
+  format, addDays, isSameDay, isToday,
 } from 'date-fns'
 import { fr, enUS, zhTW } from 'date-fns/locale'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
@@ -128,7 +129,14 @@ interface UndoItem {
 export default function CalendarPage() {
   const { language, tasks, setTasks, calendarAccounts, habits, setHabits } = useAppStore()
   const { toast } = useGlobalToast()
-  const [currentWeek, setCurrentWeek] = useState(new Date())
+  // startDate is always Monday of the current week (Sunday → next Monday)
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date(); d.setHours(0, 0, 0, 0)
+    const dow = d.getDay() // 0=Sun
+    const toMon = dow === 0 ? 1 : 1 - dow
+    d.setDate(d.getDate() + toMon)
+    return d
+  })
   const [showTaskForm, setShowTaskForm] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
@@ -158,8 +166,14 @@ export default function CalendarPage() {
   // Undo stack for drag moves
   const undoStackRef = useRef<UndoItem[]>([])
 
-  // Dismissed suggestion IDs (session-only)
-  const dismissedRef = useRef<Set<string>>(new Set())
+  // Dismissed suggestion IDs — persisted in sessionStorage so navigation re-mounts don't re-show them
+  const dismissedRef = useRef<Set<string>>(new Set<string>())
+  if (dismissedRef.current.size === 0) {
+    try {
+      const raw = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('retro_dismissed') : null
+      if (raw) JSON.parse(raw).forEach((id: string) => dismissedRef.current.add(id))
+    } catch { /* ignore */ }
+  }
 
   // Touch swipe refs
   const touchStartXRef = useRef<number | null>(null)
@@ -169,9 +183,9 @@ export default function CalendarPage() {
   dragPreviewRef.current = dragPreview
 
   const locale = language === 'fr' ? fr : language === 'zh' ? zhTW : enUS
-  const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 })
-  const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 })
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  const weekStart = startDate
+  const weekEnd = addDays(startDate, 6)
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(startDate, i))
   weekDaysRef.current = weekDays
 
   const loadTasks = useCallback(async () => {
@@ -517,13 +531,20 @@ export default function CalendarPage() {
       toast({ title: language === 'fr' ? 'Erreur' : language === 'zh' ? '建立失敗' : 'Failed to create', variant: 'error' })
     } finally {
       setRetroSuggestionSaving(false)
-      dismissedRef.current.add(suggestion.event.id)
+      persistDismissed(suggestion.event.id)
       setRetroSuggestion(null)
     }
   }
 
+  const persistDismissed = (id: string) => {
+    dismissedRef.current.add(id)
+    try {
+      sessionStorage.setItem('retro_dismissed', JSON.stringify([...dismissedRef.current]))
+    } catch { /* ignore */ }
+  }
+
   const handleDismissRetroSuggestion = () => {
-    if (retroSuggestion) dismissedRef.current.add(retroSuggestion.event.id)
+    if (retroSuggestion) persistDismissed(retroSuggestion.event.id)
     setRetroSuggestion(null)
   }
 
@@ -586,11 +607,7 @@ export default function CalendarPage() {
   const isDragging = draggingEventId !== null
 
   if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-red-800" />
-      </div>
-    )
+    return <InkLoader size="page" />
   }
 
   // ─── Render ──────────────────────────────────────────────────────────────────
@@ -605,16 +622,16 @@ export default function CalendarPage() {
             <h1 className="text-2xl font-brush text-[#2a2420]">{t('calendar', language)}</h1>
           </div>
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon-sm" onClick={() => setCurrentWeek(subWeeks(currentWeek, 1))}>
+            <Button variant="ghost" size="icon-sm" onClick={() => setStartDate((d) => addDays(d, -1))}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <span className="text-sm font-medium text-[#5c5347] px-2 min-w-[160px] text-center">
               {format(weekStart, 'dd MMM', { locale })} – {format(weekEnd, 'dd MMM yyyy', { locale })}
             </span>
-            <Button variant="ghost" size="icon-sm" onClick={() => setCurrentWeek(addWeeks(currentWeek, 1))}>
+            <Button variant="ghost" size="icon-sm" onClick={() => setStartDate((d) => addDays(d, 1))}>
               <ChevronRight className="h-4 w-4" />
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setCurrentWeek(new Date())}>
+            <Button variant="outline" size="sm" onClick={() => { const d = new Date(); d.setHours(0,0,0,0); const dow = d.getDay(); d.setDate(d.getDate() + (dow === 0 ? 1 : 1 - dow)); setStartDate(d) }}>
               {t('today', language)}
             </Button>
           </div>
@@ -685,14 +702,14 @@ export default function CalendarPage() {
         onTouchEnd={(e) => {
           if (touchStartXRef.current === null) return
           const delta = e.changedTouches[0].clientX - touchStartXRef.current
-          if (delta > 60) setCurrentWeek((w) => subWeeks(w, 1))
-          else if (delta < -60) setCurrentWeek((w) => addWeeks(w, 1))
+          if (delta > 40) setStartDate((d) => addDays(d, -1))
+          else if (delta < -40) setStartDate((d) => addDays(d, 1))
           touchStartXRef.current = null
         }}
       >
         <div className="min-w-[700px]">
           {/* Day headers */}
-          <div className="grid grid-cols-8 border-b border-[#ece2cb] bg-[#fbf7ee] sticky top-0 z-10">
+          <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-[#ece2cb] bg-[#fbf7ee] sticky top-0 z-10">
             <div className="py-3 px-2 text-xs text-[#a99873] border-r border-[#ece2cb]" />
             {weekDays.map((day) => (
               <div
@@ -707,16 +724,13 @@ export default function CalendarPage() {
             ))}
           </div>
 
-          {/* All-day / deadline row */}
-          <div className="grid grid-cols-8 border-b-2 border-[#e2d6bc] bg-[#f3ecdd]/60">
-            <div className="px-2 py-1.5 text-xs text-[#a99873] text-right border-r border-[#e2d6bc] flex items-start justify-end pt-2 shrink-0">
-              {language === 'fr' ? 'Dû' : language === 'zh' ? '到期' : 'Due'}
-            </div>
+          {/* All-day row (habits + all-day events only, no deadline column) */}
+          <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b-2 border-[#e2d6bc] bg-[#f3ecdd]/60">
+            <div className="border-r border-[#e2d6bc]" />
             {weekDays.map((day, dayIdx) => {
-              const deadlineTasks = getDeadlineTasksForDay(day)
               const allDayEvs = getAllDayEventsForDay(day)
               const allDayHabits = getHabitsAllDayForDay(day)
-              const total = deadlineTasks.length + allDayEvs.length + allDayHabits.length
+              const total = allDayEvs.length + allDayHabits.length
               const isPreviewHere = isDragging && dragPreview?.dayIdx === dayIdx && (dragPreview?.hour ?? 7) < 7
               return (
                 <div
@@ -758,32 +772,6 @@ export default function CalendarPage() {
                       </div>
                     )
                   })}
-                  {deadlineTasks.slice(0, 3).map((task) => {
-                    const qId = getQuadrant(task.importance, task.urgency)
-                    const q = EISENHOWER_QUADRANTS.find((q) => q.id === qId)
-                    const acc = calendarAccounts.find((a) => a.id === task.calendarAccountId)
-                    const done = task.status === 'COMPLETED'
-                    const isRetro = !!task.parentTaskId
-                    return (
-                      <div
-                        key={task.id}
-                        title={task.title}
-                        className={cn(
-                          'rounded px-1.5 py-0.5 text-xs cursor-pointer mb-0.5 truncate border transition-all hover:shadow-sm flex items-center gap-1',
-                          done ? 'bg-emerald-50 border-emerald-200 text-emerald-700 opacity-70' : isRetro ? 'border-dashed border-purple-300 bg-purple-50/60 text-purple-800' : cn(q?.bgColor, q?.color)
-                        )}
-                        style={!done && !isRetro && acc ? { borderLeftColor: acc.color, borderLeftWidth: 3 } : {}}
-                        onClick={() => handleCompleteTask(task)}
-                      >
-                        {isRetro && <GitBranch className="h-2.5 w-2.5 shrink-0" />}
-                        {done ? <CheckCircle2 className="h-2.5 w-2.5 shrink-0 text-emerald-500" /> : null}
-                        <span className={cn('truncate', done && 'line-through')}>{task.title}</span>
-                      </div>
-                    )
-                  })}
-                  {deadlineTasks.length > 3 && (
-                    <p className="text-xs text-[#a99873] px-1 leading-tight">+{deadlineTasks.length - 3}</p>
-                  )}
                   {total === 0 && !isPreviewHere && <div className="h-5" />}
                   {isPreviewHere && dragRef.current && (() => {
                     const drag = dragRef.current!
@@ -805,7 +793,7 @@ export default function CalendarPage() {
           {/* Time grid */}
           <div className="relative" ref={gridRef}>
             {HOURS.map((hour) => (
-              <div key={hour} className="grid grid-cols-8 border-b border-[#f3ecdd] h-[60px]">
+              <div key={hour} className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-[#f3ecdd] h-[60px]">
                 <div className="px-2 py-1 text-xs text-[#a99873] text-right border-r border-[#ece2cb] w-12 shrink-0">
                   {hour}:00
                 </div>
@@ -824,7 +812,7 @@ export default function CalendarPage() {
             ))}
 
             {/* Absolutely positioned event blocks */}
-            <div className="absolute inset-0 grid grid-cols-8 pointer-events-none">
+            <div className="absolute inset-0 grid grid-cols-[60px_repeat(7,1fr)] pointer-events-none">
               <div className="w-12 shrink-0" />
               {weekDays.map((day, dayIdx) => {
                 const blocks = getDayBlocks(day)
@@ -851,7 +839,7 @@ export default function CalendarPage() {
                         return (
                           <div
                             key={block.id}
-                            onClick={(e) => { e.stopPropagation(); if (ev.editable && !isDragging) setEditingEvent(ev) }}
+                            onClick={(e) => { e.stopPropagation(); if (!isDragging) setEditingEvent(ev) }}
                             onMouseDown={(e) => { if (ev.editable) startDrag(e, ev) }}
                             className={cn(
                               'rounded-lg px-2 py-1 text-xs border border-dashed overflow-hidden group',
