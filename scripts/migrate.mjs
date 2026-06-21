@@ -64,11 +64,21 @@ for (const dir of dirs) {
   }
 
   for (const stmt of statements) {
-    await client.execute(stmt)
+    try {
+      await client.execute(stmt)
+    } catch (err) {
+      const msg = String(err?.message ?? err)
+      // Ignore "already exists" errors — migration is idempotent
+      if (msg.includes('duplicate column') || msg.includes('already exists') || msg.includes('table') && msg.includes('exists')) {
+        console.log(`  (idempotent — already applied: ${msg.split('\n')[0]})`)
+      } else {
+        throw err
+      }
+    }
   }
 
   await client.execute({
-    sql: 'INSERT INTO _migrations (name) VALUES (?)',
+    sql: 'INSERT OR IGNORE INTO _migrations (name) VALUES (?)',
     args: [dir],
   })
   ran++
