@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { prisma } from '@/lib/prisma'
-import { auth } from '@/lib/auth'
-
-const resend = new Resend(process.env.RESEND_API_KEY)
 
 // Called by Vercel Cron every day at midnight UTC
 export async function GET(request: Request) {
+  const resend = new Resend(process.env.RESEND_API_KEY)
   // Verify this is called by Vercel Cron (or an authorized admin request)
   const authHeader = request.headers.get('authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
