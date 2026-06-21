@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { calculatePriority } from '@/lib/utils'
+import { updateGoogleEvent } from '@/lib/calendar/google'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
@@ -37,6 +38,29 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     data: updateData,
     include: { subTasks: true, calendarAccount: true },
   })
+
+  // If scheduledStart/End changed and task is linked to a Google Calendar event, sync back
+  const scheduleChanged = 'scheduledStart' in body || 'scheduledEnd' in body
+  if (scheduleChanged && existing.calendarEventId && existing.calendarAccountId) {
+    try {
+      const account = await prisma.calendarAccount.findUnique({ where: { id: existing.calendarAccountId } })
+      if (account?.accessToken && account.provider === 'GOOGLE') {
+        const newStart = task.scheduledStart ?? existing.scheduledStart
+        const newEnd = task.scheduledEnd ?? existing.scheduledEnd
+        if (newStart && newEnd) {
+          await updateGoogleEvent(
+            account.id, account.accessToken,
+            'primary', existing.calendarEventId,
+            { start: new Date(String(newStart)), end: new Date(String(newEnd)) },
+            account.refreshToken, account.expiresAt
+          )
+        }
+      }
+    } catch (err) {
+      console.error('[task PATCH] Google Calendar sync failed:', err)
+      // Non-fatal — task was already updated locally
+    }
+  }
 
   return NextResponse.json(task)
 }

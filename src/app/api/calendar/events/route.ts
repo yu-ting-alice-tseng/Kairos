@@ -73,6 +73,28 @@ export async function GET(req: NextRequest) {
     })
   )
 
+  // Delete tasks whose linked calendar event no longer exists in this time window.
+  // Only checks tasks that have both calendarEventId and scheduledStart within the range.
+  try {
+    const fetchedEventIds = new Set(allEvents.map((e) => e.id))
+    const linkedTasks = await prisma.task.findMany({
+      where: {
+        userId,
+        calendarEventId: { not: null },
+        scheduledStart: { gte: timeMin, lte: timeMax },
+      },
+      select: { id: true, calendarEventId: true },
+    })
+    const orphanIds = linkedTasks
+      .filter((t) => t.calendarEventId && !fetchedEventIds.has(t.calendarEventId))
+      .map((t) => t.id)
+    if (orphanIds.length > 0) {
+      await prisma.task.deleteMany({ where: { id: { in: orphanIds } } })
+    }
+  } catch (err) {
+    console.error('[calendar/events] orphan task cleanup failed:', err)
+  }
+
   return NextResponse.json(allEvents)
 }
 
