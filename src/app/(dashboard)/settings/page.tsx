@@ -15,19 +15,74 @@ import { DEMO_USER_ID } from '@/lib/demo-data'
 import {
   Settings, Plus, Trash2, Globe, Calendar, Check,
   MonitorSmartphone, Loader2, AlertTriangle, ChevronDown, ChevronUp, RefreshCw,
-  Pencil, KeyRound, LogOut,
+  Pencil, KeyRound, LogOut, User, LayoutGrid, Sun, Wand2, SlidersHorizontal,
 } from 'lucide-react'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
 import { cn } from '@/lib/utils'
 
 // oauthKey  → OAuth via NextAuth signIn() + session-restore so the current session is preserved
 // connectProvider → dedicated /api/calendar/connect flow (Notion only)
-const PROVIDER_CONFIG: Record<CalendarProvider, { label: string; icon: string; color: string; oauthKey?: string; connectProvider?: string }> = {
-  GOOGLE: { label: 'Google Calendar', icon: '🔵', color: '#4285F4', oauthKey: 'google' },
-  OUTLOOK: { label: 'Outlook Calendar', icon: '🟦', color: '#0078D4', oauthKey: 'microsoft-entra-id' },
-  APPLE: { label: 'Apple Calendar', icon: '⚫', color: '#1C1C1E' },
-  NOTION: { label: 'Notion', icon: '⬜', color: '#000000', connectProvider: 'notion' },
-  LOCAL: { label: 'Local', icon: '📅', color: '#6366F1' },
+const PROVIDER_CONFIG: Record<CalendarProvider, { label: string; icon: React.ReactNode; color: string; oauthKey?: string; connectProvider?: string }> = {
+  GOOGLE: {
+    label: 'Google Calendar',
+    color: '#4285F4',
+    connectProvider: 'google',
+    icon: (
+      <svg viewBox="0 0 48 48" className="h-5 w-5" xmlns="http://www.w3.org/2000/svg">
+        <path fill="#4285F4" d="M44.5 20H24v8.5h11.8C34.7 33.9 30.1 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22c11 0 21-8 21-22 0-1.3-.2-2.7-.5-4z"/>
+        <path fill="#34A853" d="M6.3 14.7l7 5.1C15.1 16.1 19.2 13 24 13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 16.3 2 9.7 7.4 6.3 14.7z"/>
+        <path fill="#FBBC05" d="M24 46c5.5 0 10.5-1.9 14.4-5l-6.7-5.5C29.7 37 27 38 24 38c-6.1 0-10.7-3.1-11.8-8.5l-7 5.4C8.8 42.2 15.9 46 24 46z"/>
+        <path fill="#EA4335" d="M44.5 20H24v8.5h11.8c-.6 2.9-2.4 5.4-4.9 7l6.7 5.5C41.8 37.5 44.5 31.5 44.5 26c0-1.3-.2-2.7-.5-4h.5z"/>
+      </svg>
+    ),
+  },
+  OUTLOOK: {
+    label: 'Outlook Calendar',
+    color: '#0078D4',
+    oauthKey: 'microsoft-entra-id',
+    icon: (
+      <svg viewBox="0 0 48 48" className="h-5 w-5" xmlns="http://www.w3.org/2000/svg">
+        <path fill="#0078D4" d="M28 8h16v8H28z"/>
+        <path fill="#28A8E8" d="M28 18h16v8H28z"/>
+        <path fill="#0078D4" d="M28 28h16v8H28z"/>
+        <path fill="#0058AD" d="M28 38h16v8H28z"/>
+        <path fill="#14447D" d="M4 8h22v32H4z"/>
+        <ellipse fill="#fff" cx="15" cy="24" rx="7" ry="9"/>
+        <ellipse fill="#14447D" cx="15" cy="24" rx="5" ry="7"/>
+      </svg>
+    ),
+  },
+  APPLE: {
+    label: 'Apple Calendar',
+    color: '#1C1C1E',
+    icon: (
+      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+      </svg>
+    ),
+  },
+  NOTION: {
+    label: 'Notion',
+    color: '#000000',
+    connectProvider: 'notion',
+    icon: (
+      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L17.86 1.968c-.42-.326-.981-.7-2.055-.607L3.01 2.295c-.466.046-.56.28-.374.466zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.841-.046.935-.56.935-1.167V6.354c0-.606-.233-.933-.748-.887l-15.177.887c-.56.047-.747.327-.747.933zm14.337.745c.093.42 0 .84-.42.888l-.7.14v10.264c-.608.327-1.168.514-1.635.514-.748 0-.935-.234-1.495-.933l-4.577-7.186v6.952L12.21 19s0 .84-1.168.84l-3.222.186c-.093-.186 0-.653.327-.746l.84-.233V9.854L7.822 9.76c-.094-.42.14-1.026.793-1.073l3.456-.233 4.764 7.279v-6.44l-1.215-.14c-.093-.514.28-.887.747-.933zM1.936 1.035l13.31-.98c1.634-.14 2.055-.047 3.082.7l4.249 2.986c.7.513.934.653.934 1.213v16.378c0 1.026-.373 1.634-1.68 1.726l-15.458.934c-.98.047-1.448-.093-1.962-.747l-3.129-4.06c-.56-.747-.793-1.306-.793-1.96V2.667c0-.839.374-1.54 1.447-1.632z"/>
+      </svg>
+    ),
+  },
+  LOCAL: {
+    label: 'Local',
+    color: '#6366F1',
+    icon: (
+      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" xmlns="http://www.w3.org/2000/svg">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+    ),
+  },
 }
 
 const COLORS = ['#4285F4', '#4F46E5', '#7C3AED', '#DC2626', '#16A34A', '#D97706', '#0891B2', '#DB2777']
@@ -332,8 +387,8 @@ function CalendarAccountRow({
     <div className="rounded-2xl border border-[#ece2cb] bg-[#fbf7ee] overflow-hidden">
       <div className="flex items-center justify-between p-4">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl flex items-center justify-center text-lg" style={{ backgroundColor: (config?.color ?? '#6366F1') + '15' }}>
-            {config?.icon ?? '📅'}
+          <div className="h-9 w-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: (config?.color ?? '#6366F1') + '15', color: config?.color ?? '#6366F1' }}>
+            {config?.icon ?? <span className="text-lg">📅</span>}
           </div>
           <div>
             <p className="text-sm font-medium text-[#2a2420]">{account.name}</p>
@@ -457,7 +512,7 @@ function AddCalendarDialog({ open, onClose, onAdd, lang, isDemo }: {
                     provider === p ? 'border-red-300 bg-red-50 text-red-900' : 'border-[#e2d6bc] hover:bg-[#f3ecdd]'
                   }`}
                 >
-                  <span>{PROVIDER_CONFIG[p].icon}</span>
+                  <span className="flex items-center justify-center" style={{ color: PROVIDER_CONFIG[p].color }}>{PROVIDER_CONFIG[p].icon}</span>
                   <span className="font-medium">{PROVIDER_CONFIG[p].label}</span>
                 </button>
               ))}
@@ -514,10 +569,27 @@ function AddCalendarDialog({ open, onClose, onAdd, lang, isDemo }: {
   )
 }
 
+// ── Tag chip helper ───────────────────────────────────────────────────────────
+
+function TagChip({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <span className="flex items-center gap-1 rounded-lg bg-[#f3ecdd] border border-[#e2d6bc] px-2.5 py-1 text-xs text-[#5c5347]">
+      {label}
+      <button onClick={onRemove} className="text-[#a99873] hover:text-red-500 ml-0.5 leading-none">×</button>
+    </span>
+  )
+}
+
 // ── Settings page ─────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const { language, setLanguage, calendarAccounts, setCalendarAccounts } = useAppStore()
+  const {
+    language, setLanguage,
+    calendarAccounts, setCalendarAccounts,
+    matrixExcludePatterns, setMatrixExcludePatterns,
+    todayExcludePatterns, setTodayExcludePatterns,
+    keywordRules, setKeywordRules,
+  } = useAppStore()
   const { data: session } = useSession()
   const isDemo = session?.user?.id === DEMO_USER_ID
   const { toast } = useGlobalToast()
@@ -525,7 +597,22 @@ export default function SettingsPage() {
   const [showAddCalendar, setShowAddCalendar] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [editAccount, setEditAccount] = useState<CalendarAccount | null>(null)
-  // Surface OAuth result toasts — use window.location.search to avoid Suspense requirement
+
+  // Filter inputs
+  const [newMatrixPattern, setNewMatrixPattern] = useState('')
+  const [newTodayPattern, setNewTodayPattern] = useState('')
+
+  // Keyword rule inputs
+  const [newRuleKeyword, setNewRuleKeyword] = useState('')
+  const [newRuleImportance, setNewRuleImportance] = useState(5)
+  const [newRuleUrgence, setNewRuleUrgence] = useState(5)
+
+  const syncRules = async (rules: typeof keywordRules) => {
+    setKeywordRules(rules)
+    await fetch('/api/keyword-rules', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rules) })
+  }
+
+  // Surface OAuth result toasts
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const success = params.get('cal_success')
@@ -591,111 +678,297 @@ export default function SettingsPage() {
     toast({ title: language === 'fr' ? 'Calendrier supprimé' : language === 'zh' ? '日曆已移除' : 'Calendar removed', variant: 'info' })
   }
 
+  const addMatrixPattern = () => {
+    if (!newMatrixPattern.trim()) return
+    setMatrixExcludePatterns([...matrixExcludePatterns, newMatrixPattern.trim()])
+    setNewMatrixPattern('')
+  }
+
+  const addTodayPattern = () => {
+    if (!newTodayPattern.trim()) return
+    setTodayExcludePatterns([...todayExcludePatterns, newTodayPattern.trim()])
+    setNewTodayPattern('')
+  }
+
+  const addKeywordRule = () => {
+    if (!newRuleKeyword.trim()) return
+    syncRules([...keywordRules, { id: Date.now().toString(), keyword: newRuleKeyword.trim(), importance: newRuleImportance, urgence: newRuleUrgence }])
+    setNewRuleKeyword('')
+    setNewRuleImportance(5)
+    setNewRuleUrgence(5)
+  }
+
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center px-6 py-5 border-b border-[#ece2cb] bg-[#fbf7ee]">
+      {/* Header */}
+      <div className="flex items-center px-6 py-5 border-b border-[#ece2cb] bg-[#fbf7ee] sticky top-0 z-10">
         <Settings className="h-5 w-5 text-red-800 mr-2" />
         <h1 className="text-xl font-bold text-[#2a2420]">{t('settings', language)}</h1>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 max-w-2xl flex flex-col gap-8">
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
 
-        {/* Language */}
-        <section>
-          <h2 className="text-sm font-semibold text-[#5c5347] mb-4 flex items-center gap-2">
-            <Globe className="h-4 w-4 text-red-500" />
-            {t('language', language)}
-          </h2>
-          <div className="flex gap-3">
-            {(['fr', 'en', 'zh'] as const).map((lang) => (
-              <button
-                key={lang}
-                onClick={() => setLanguage(lang)}
-                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium border transition-all ${
-                  language === lang ? 'bg-red-50 border-red-300 text-red-900' : 'border-[#e2d6bc] text-[#6e6147] hover:bg-[#f3ecdd]'
-                }`}
-              >
-                {language === lang && <Check className="h-3.5 w-3.5" />}
-                {lang === 'fr' ? '🇫🇷 Français' : lang === 'zh' ? '🇹🇼 繁體中文' : '🇬🇧 English'}
-              </button>
-            ))}
-          </div>
-        </section>
+          {/* ── LEFT COLUMN ── */}
+          <div className="flex flex-col gap-6">
 
-        {/* Connected calendars */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-[#5c5347] flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-red-500" />
-              {t('connectedAccounts', language)}
-              <Badge variant="secondary">{calendarAccounts.length}</Badge>
-            </h2>
-            <Button size="sm" onClick={() => setShowAddCalendar(true)}>
-              <Plus className="h-4 w-4" />
-              {t('connectCalendar', language)}
-            </Button>
-          </div>
+            {/* Profile */}
+            <section className="rounded-2xl border border-[#ece2cb] bg-[#fbf7ee] p-5">
+              <h2 className="text-sm font-semibold text-[#5c5347] mb-4 flex items-center gap-2">
+                <User className="h-4 w-4 text-red-500" />
+                {language === 'fr' ? 'Profil' : language === 'zh' ? '個人資料' : 'Profile'}
+              </h2>
+              <div className="flex items-center gap-4">
+                {session?.user?.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={session.user.image} alt="avatar" className="h-14 w-14 rounded-2xl object-cover border border-[#ece2cb]" />
+                ) : (
+                  <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-red-100 to-amber-100 border border-[#ece2cb] flex items-center justify-center">
+                    <User className="h-6 w-6 text-red-400" />
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm font-semibold text-[#2a2420]">{session?.user?.name ?? '—'}</p>
+                  <p className="text-xs text-[#8a7a5e] mt-0.5">{session?.user?.email ?? '—'}</p>
+                  {isDemo && (
+                    <span className="mt-1 inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-700">
+                      {language === 'fr' ? 'Mode démo' : language === 'zh' ? '示範模式' : 'Demo mode'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </section>
 
-          {loading ? (
-            <Loader2 className="h-5 w-5 animate-spin text-[#a99873]" />
-          ) : calendarAccounts.length === 0 ? (
-            <div className="rounded-2xl border-2 border-dashed border-[#e2d6bc] p-8 text-center">
-              <Calendar className="h-8 w-8 text-[#cbb98e] mx-auto mb-3" />
-              <p className="text-sm text-[#8a7a5e]">{language === 'fr' ? 'Aucun calendrier connecté' : language === 'zh' ? '尚未連結任何日曆' : 'No calendar connected'}</p>
-              <p className="text-xs text-[#a99873] mt-1">
-                {language === 'fr' ? 'Connectez Google, Outlook, Apple ou Notion' : language === 'zh' ? '連結 Google、Outlook、Apple 或 Notion' : 'Connect Google, Outlook, Apple, or Notion'}
+            {/* Language */}
+            <section className="rounded-2xl border border-[#ece2cb] bg-[#fbf7ee] p-5">
+              <h2 className="text-sm font-semibold text-[#5c5347] mb-4 flex items-center gap-2">
+                <Globe className="h-4 w-4 text-red-500" />
+                {t('language', language)}
+              </h2>
+              <div className="flex gap-3 flex-wrap">
+                {(['fr', 'en', 'zh'] as const).map((lang) => (
+                  <button
+                    key={lang}
+                    onClick={() => setLanguage(lang)}
+                    className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium border transition-all ${
+                      language === lang ? 'bg-red-50 border-red-300 text-red-900' : 'border-[#e2d6bc] text-[#6e6147] hover:bg-[#f3ecdd]'
+                    }`}
+                  >
+                    {language === lang && <Check className="h-3.5 w-3.5" />}
+                    {lang === 'fr' ? '🇫🇷 Français' : lang === 'zh' ? '🇹🇼 繁體中文' : '🇬🇧 English'}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            {/* Filters — Matrix */}
+            <section className="rounded-2xl border border-[#ece2cb] bg-[#fbf7ee] p-5">
+              <h2 className="text-sm font-semibold text-[#5c5347] mb-1 flex items-center gap-2">
+                <LayoutGrid className="h-4 w-4 text-red-500" />
+                {language === 'fr' ? 'Masquer de la Matrice' : language === 'zh' ? '矩陣隱藏規則' : 'Hide from Matrix'}
+              </h2>
+              <p className="text-xs text-[#a99873] mb-3">
+                {language === 'fr' ? 'Les tâches contenant ces mots seront masquées de la Matrice.' : language === 'zh' ? '包含這些關鍵字的任務將不顯示在矩陣中。' : 'Tasks containing these words will be hidden from the Matrix.'}
               </p>
-              <Button variant="outline" size="sm" className="mt-4" onClick={() => setShowAddCalendar(true)}>
-                <Plus className="h-4 w-4" />
-                {t('connectCalendar', language)}
-              </Button>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {calendarAccounts.map((account) => (
-                <CalendarAccountRow
-                  key={account.id}
-                  account={account}
-                  lang={language}
-                  onDelete={() => setDeleteConfirm(account.id)}
-                  onEdit={() => setEditAccount(account)}
+              <div className="flex flex-wrap gap-2 mb-3">
+                {matrixExcludePatterns.map((p) => (
+                  <TagChip key={p} label={p} onRemove={() => setMatrixExcludePatterns(matrixExcludePatterns.filter((x) => x !== p))} />
+                ))}
+                {matrixExcludePatterns.length === 0 && (
+                  <span className="text-xs text-[#c4b49a] italic">{language === 'fr' ? 'Aucun filtre actif' : language === 'zh' ? '無篩選條件' : 'No filters active'}</span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  value={newMatrixPattern}
+                  onChange={(e) => setNewMatrixPattern(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addMatrixPattern()}
+                  placeholder={language === 'fr' ? 'ex: Meeting' : language === 'zh' ? '例：會議' : 'e.g. Meeting'}
+                  className="flex-1 border border-[#e2d6bc] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-red-300 bg-white"
                 />
-              ))}
-            </div>
-          )}
-        </section>
+                <button onClick={addMatrixPattern} className="px-3 py-1.5 rounded-lg bg-[#c44a3a] text-white text-xs hover:bg-[#ab3326]">
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </section>
 
-        {/* App info */}
-        <section>
-          <h2 className="text-sm font-semibold text-[#5c5347] mb-4 flex items-center gap-2">
-            <MonitorSmartphone className="h-4 w-4 text-red-500" />
-            {language === 'fr' ? 'Application' : language === 'zh' ? '應用程式' : 'Application'}
-          </h2>
-          <div className="rounded-2xl border border-[#ece2cb] bg-[#fbf7ee] p-4">
-            <p className="text-sm font-medium text-[#2a2420]">FlowPlan</p>
-            <p className="text-xs text-[#8a7a5e] mt-0.5">v0.1.0 — {language === 'fr' ? 'Planification intelligente' : language === 'zh' ? '智能規劃' : 'Smart planning'}</p>
-            <div className="mt-3 flex items-center gap-2 text-xs text-red-800">
-              <Check className="h-3.5 w-3.5" />
-              {language === 'fr' ? 'PWA — Installable sur mobile' : language === 'zh' ? 'PWA — 可安裝至手機' : 'PWA — Installable on mobile'}
-            </div>
+            {/* Filters — Today */}
+            <section className="rounded-2xl border border-[#ece2cb] bg-[#fbf7ee] p-5">
+              <h2 className="text-sm font-semibold text-[#5c5347] mb-1 flex items-center gap-2">
+                <Sun className="h-4 w-4 text-amber-500" />
+                {language === 'fr' ? "Masquer d'Aujourd'hui" : language === 'zh' ? '今日頁面隱藏規則' : "Hide from Today"}
+              </h2>
+              <p className="text-xs text-[#a99873] mb-3">
+                {language === 'fr' ? "Les tâches contenant ces mots seront masquées de la vue Aujourd'hui." : language === 'zh' ? '包含這些關鍵字的任務將不顯示在今日頁面中。' : "Tasks containing these words will be hidden from the Today view."}
+              </p>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {todayExcludePatterns.map((p) => (
+                  <TagChip key={p} label={p} onRemove={() => setTodayExcludePatterns(todayExcludePatterns.filter((x) => x !== p))} />
+                ))}
+                {todayExcludePatterns.length === 0 && (
+                  <span className="text-xs text-[#c4b49a] italic">{language === 'fr' ? 'Aucun filtre actif' : language === 'zh' ? '無篩選條件' : 'No filters active'}</span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  value={newTodayPattern}
+                  onChange={(e) => setNewTodayPattern(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addTodayPattern()}
+                  placeholder={language === 'fr' ? 'ex: Réunion' : language === 'zh' ? '例：會議' : 'e.g. Meeting'}
+                  className="flex-1 border border-[#e2d6bc] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-red-300 bg-white"
+                />
+                <button onClick={addTodayPattern} className="px-3 py-1.5 rounded-lg bg-[#c44a3a] text-white text-xs hover:bg-[#ab3326]">
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </section>
+
+            {/* Keyword Rules */}
+            <section className="rounded-2xl border border-[#ece2cb] bg-[#fbf7ee] p-5">
+              <h2 className="text-sm font-semibold text-[#5c5347] mb-1 flex items-center gap-2">
+                <Wand2 className="h-4 w-4 text-[#a87f3e]" />
+                {language === 'fr' ? 'Règles par mot-clé' : language === 'zh' ? '關鍵字優先規則' : 'Keyword priority rules'}
+              </h2>
+              <p className="text-xs text-[#a99873] mb-3">
+                {language === 'fr' ? "Applique automatiquement un score d'importance et d'urgence aux tâches contenant le mot-clé." : language === 'zh' ? '自動為包含關鍵字的任務套用重要度與緊急度分數。' : 'Automatically apply importance and urgency scores to tasks containing the keyword.'}
+              </p>
+
+              {keywordRules.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {keywordRules.map((rule) => (
+                    <span key={rule.id} className="flex items-center gap-1.5 rounded-lg bg-[#f3ecdd] border border-[#e2d6bc] px-2.5 py-1 text-xs text-[#5c5347]">
+                      <span className="font-mono bg-white rounded px-1">{rule.keyword}</span>
+                      <span className="text-[#a99873]">I:{rule.importance} U:{rule.urgence}</span>
+                      <button onClick={() => syncRules(keywordRules.filter((r) => r.id !== rule.id))} className="text-[#a99873] hover:text-red-500 ml-0.5">
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-2 items-end">
+                <input
+                  value={newRuleKeyword}
+                  onChange={(e) => setNewRuleKeyword(e.target.value)}
+                  placeholder={language === 'fr' ? 'Mot-clé' : language === 'zh' ? '關鍵字' : 'Keyword'}
+                  className="border border-[#e2d6bc] rounded-lg px-3 py-1.5 text-xs w-28 focus:outline-none focus:ring-1 focus:ring-red-300 bg-white"
+                />
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-[10px] text-[#8a7a5e]">{language === 'fr' ? 'Importance' : language === 'zh' ? '重要度' : 'Importance'} ({newRuleImportance})</label>
+                  <input type="range" min={1} max={10} value={newRuleImportance} onChange={(e) => setNewRuleImportance(Number(e.target.value))} className="w-24 accent-red-600" />
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-[10px] text-[#8a7a5e]">{language === 'fr' ? 'Urgence' : language === 'zh' ? '緊急度' : 'Urgency'} ({newRuleUrgence})</label>
+                  <input type="range" min={1} max={10} value={newRuleUrgence} onChange={(e) => setNewRuleUrgence(Number(e.target.value))} className="w-24 accent-amber-600" />
+                </div>
+                <button
+                  disabled={!newRuleKeyword.trim()}
+                  onClick={addKeywordRule}
+                  className="flex items-center gap-1 rounded-lg bg-[#c44a3a] text-white px-3 py-1.5 text-xs font-medium hover:bg-[#ab3326] disabled:opacity-50"
+                >
+                  <Plus className="h-3 w-3" />
+                  {language === 'fr' ? 'Ajouter' : language === 'zh' ? '新增' : 'Add'}
+                </button>
+              </div>
+            </section>
+
           </div>
-        </section>
 
-        {/* Sign out */}
-        <section>
-          <h2 className="text-sm font-semibold text-[#5c5347] mb-4 flex items-center gap-2">
-            <LogOut className="h-4 w-4 text-red-400" />
-            {language === 'fr' ? 'Session' : language === 'zh' ? '登入狀態' : 'Session'}
-          </h2>
-          <a
-            href="/auth/signout"
-            className="inline-flex items-center gap-2 rounded-xl border border-red-100 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors"
-          >
-            <LogOut className="h-4 w-4" />
-            {language === 'fr' ? 'Se déconnecter' : language === 'zh' ? '登出' : 'Sign out'}
-          </a>
-        </section>
+          {/* ── RIGHT COLUMN ── */}
+          <div className="flex flex-col gap-6">
 
+            {/* Connected calendars */}
+            <section className="rounded-2xl border border-[#ece2cb] bg-[#fbf7ee] p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold text-[#5c5347] flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-red-500" />
+                  {t('connectedAccounts', language)}
+                  <Badge variant="secondary">{calendarAccounts.length}</Badge>
+                </h2>
+                <Button size="sm" onClick={() => setShowAddCalendar(true)}>
+                  <Plus className="h-4 w-4" />
+                  {t('connectCalendar', language)}
+                </Button>
+              </div>
+
+              {loading ? (
+                <Loader2 className="h-5 w-5 animate-spin text-[#a99873]" />
+              ) : calendarAccounts.length === 0 ? (
+                <div className="rounded-2xl border-2 border-dashed border-[#e2d6bc] p-8 text-center">
+                  <Calendar className="h-8 w-8 text-[#cbb98e] mx-auto mb-3" />
+                  <p className="text-sm text-[#8a7a5e]">{language === 'fr' ? 'Aucun calendrier connecté' : language === 'zh' ? '尚未連結任何日曆' : 'No calendar connected'}</p>
+                  <p className="text-xs text-[#a99873] mt-1">
+                    {language === 'fr' ? 'Connectez Google, Outlook, Apple ou Notion' : language === 'zh' ? '連結 Google、Outlook、Apple 或 Notion' : 'Connect Google, Outlook, Apple, or Notion'}
+                  </p>
+                  <Button variant="outline" size="sm" className="mt-4" onClick={() => setShowAddCalendar(true)}>
+                    <Plus className="h-4 w-4" />
+                    {t('connectCalendar', language)}
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {calendarAccounts.map((account) => (
+                    <CalendarAccountRow
+                      key={account.id}
+                      account={account}
+                      lang={language}
+                      onDelete={() => setDeleteConfirm(account.id)}
+                      onEdit={() => setEditAccount(account)}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* App info */}
+            <section className="rounded-2xl border border-[#ece2cb] bg-[#fbf7ee] p-5">
+              <h2 className="text-sm font-semibold text-[#5c5347] mb-4 flex items-center gap-2">
+                <MonitorSmartphone className="h-4 w-4 text-red-500" />
+                {language === 'fr' ? 'Application' : language === 'zh' ? '應用程式' : 'Application'}
+              </h2>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-[#2a2420]">Kairos 墨時</p>
+                    <p className="text-xs text-[#8a7a5e] mt-0.5">v0.1.0 — {language === 'fr' ? 'Planification intelligente' : language === 'zh' ? '智能規劃' : 'Smart planning'}</p>
+                  </div>
+                  <span className="text-xs text-[#8a7a5e] bg-[#f3ecdd] border border-[#e2d6bc] rounded-lg px-2.5 py-1">Beta</span>
+                </div>
+                <div className="border-t border-[#ece2cb] pt-3 flex flex-col gap-2">
+                  <div className="flex items-center gap-2 text-xs text-[#5c5347]">
+                    <Check className="h-3.5 w-3.5 text-emerald-500" />
+                    {language === 'fr' ? 'PWA — Installable sur mobile' : language === 'zh' ? 'PWA — 可安裝至手機' : 'PWA — Installable on mobile'}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-[#5c5347]">
+                    <Check className="h-3.5 w-3.5 text-emerald-500" />
+                    {language === 'fr' ? 'Synchronisation Google Calendar bidirectionnelle' : language === 'zh' ? 'Google Calendar 雙向同步' : 'Google Calendar two-way sync'}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-[#5c5347]">
+                    <Check className="h-3.5 w-3.5 text-emerald-500" />
+                    {language === 'fr' ? 'Matrice d\'Eisenhower avec glisser-déposer' : language === 'zh' ? '拖曳式艾森豪矩陣' : 'Drag-and-drop Eisenhower Matrix'}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Session / Sign out */}
+            <section className="rounded-2xl border border-[#ece2cb] bg-[#fbf7ee] p-5">
+              <h2 className="text-sm font-semibold text-[#5c5347] mb-4 flex items-center gap-2">
+                <SlidersHorizontal className="h-4 w-4 text-red-400" />
+                {language === 'fr' ? 'Session' : language === 'zh' ? '帳號管理' : 'Account'}
+              </h2>
+              <a
+                href="/auth/signout"
+                className="inline-flex items-center gap-2 rounded-xl border border-red-100 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors"
+              >
+                <LogOut className="h-4 w-4" />
+                {language === 'fr' ? 'Se déconnecter' : language === 'zh' ? '登出' : 'Sign out'}
+              </a>
+            </section>
+
+          </div>
+        </div>
       </div>
 
       {/* Delete confirmation dialog */}

@@ -11,19 +11,19 @@ import { BreakdownDialog } from '@/components/ai/BreakdownDialog'
 import { Button } from '@/components/ui/button'
 import { Plus, LayoutGrid, Loader2, Repeat2, CheckCircle2, Circle, Settings, Wand2, Trash2, SlidersHorizontal, ChevronUp, ChevronDown } from 'lucide-react'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
+import { InkLoader } from '@/components/ui/InkLoader'
 import { cn } from '@/lib/utils'
 
 const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === 'true'
 
 export default function MatrixPage() {
-  const { language, tasks, setTasks, calendarAccounts, habits, setHabits, matrixExcludePatterns, setMatrixExcludePatterns, keywordRules, setKeywordRules } = useAppStore()
+  const { language, tasks, setTasks, habits, setHabits, calendarAccounts, matrixExcludePatterns, setMatrixExcludePatterns, keywordRules, setKeywordRules } = useAppStore()
   const { toast } = useGlobalToast()
   const [loading, setLoading] = useState(true)
   const [showTaskForm, setShowTaskForm] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [breakdownTask, setBreakdownTask] = useState<Task | null>(null)
-  const [filterAccountId, setFilterAccountId] = useState<string | 'all'>('all')
-  const [habitPanelOpen, setHabitPanelOpen] = useState(true)
+const [habitPanelOpen, setHabitPanelOpen] = useState(true)
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false)
   const [newRuleKeyword, setNewRuleKeyword] = useState('')
   const [newRuleImportance, setNewRuleImportance] = useState(5)
@@ -126,17 +126,19 @@ export default function MatrixPage() {
   const isExcludedFromMatrix = (title: string) =>
     matrixExcludePatterns.some((p) => p && title.toLowerCase().includes(p.toLowerCase()))
 
-  // Filter tasks: exclude calendar-imported events and exclusion patterns
-  const filteredTasks = (filterAccountId === 'all' ? tasks : tasks.filter((t) => t.calendarAccountId === filterAccountId))
-    .filter((t) => !t.calendarEventId && !t.scheduledStart && !isExcludedFromMatrix(t.title))
-
-  if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-red-800" />
-      </div>
-    )
+  const isScheduledToday = (scheduledStart: Task['scheduledStart']) => {
+    if (!scheduledStart) return false
+    const d = new Date(String(scheduledStart))
+    const now = new Date()
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
   }
+
+  // Filter tasks: exclude calendar-imported events and tasks scheduled for future/past days.
+  // Tasks with no scheduledStart OR scheduledStart on today are included (today's unscheduled items).
+  const filteredTasks = tasks
+    .filter((t) => !t.calendarEventId && (!t.scheduledStart || isScheduledToday(t.scheduledStart)) && !isExcludedFromMatrix(t.title))
+
+  if (loading) return <InkLoader size="page" />
 
   return (
     <div className="flex flex-col h-full">
@@ -149,19 +151,6 @@ export default function MatrixPage() {
           <span className="text-sm text-[#8a7a5e]">
             {language === 'fr' ? 'Glissez les tâches pour les prioriser' : language === 'zh' ? '拖曳任務以排定優先順序' : 'Drag tasks to prioritize'}
           </span>
-          {/* Feature 3: calendar filter dropdown */}
-          {calendarAccounts.length > 0 && (
-            <select
-              value={filterAccountId}
-              onChange={(e) => setFilterAccountId(e.target.value)}
-              className="text-sm border border-[#e2d6bc] rounded-lg px-2 py-1 text-[#5c5347] focus:outline-none focus:ring-2 focus:ring-red-300 bg-[#fbf7ee]"
-            >
-              <option value="all">{language === 'fr' ? 'Tous les calendriers' : language === 'zh' ? '所有日曆' : 'All calendars'}</option>
-              {calendarAccounts.map((acc) => (
-                <option key={acc.id} value={acc.id}>{acc.name}</option>
-              ))}
-            </select>
-          )}
         </div>
         <div className="flex items-center gap-2">
           <button
