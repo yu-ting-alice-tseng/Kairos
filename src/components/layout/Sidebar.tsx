@@ -25,7 +25,7 @@ const navItems = [
 
 export function Sidebar() {
   const pathname    = usePathname()
-  const { language, setLanguage, setTasks, setHabits, setCalendarAccounts } = useAppStore()
+  const { language, setLanguage, setTasks, setHabits, setCalendarAccounts, setKeywordRules } = useAppStore()
   const { data: session } = useSession()
   const [collapsed, setCollapsed] = React.useState(false)
 
@@ -51,7 +51,13 @@ export function Sidebar() {
       .then((r) => r.ok ? r.json() : [])
       .then((data) => setCalendarAccounts(Array.isArray(data) ? data : []))
       .catch(() => {})
-  }, [session?.user?.id, setTasks, setHabits, setCalendarAccounts])
+
+    // Load keyword rules from DB (account-bound)
+    fetch('/api/keyword-rules')
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => setKeywordRules(Array.isArray(data) ? data : []))
+      .catch(() => {})
+  }, [session?.user?.id, setTasks, setHabits, setCalendarAccounts, setKeywordRules])
 
   return (
     <aside

@@ -18,6 +18,8 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  keywordRules     String   @default("[]")
+
   accounts         Account[]
   sessions         Session[]
   tasks            Task[]

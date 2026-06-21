@@ -97,7 +97,7 @@ export const useAppStore = create<AppState>()(
         activeView: state.activeView,
         matrixExcludePatterns: state.matrixExcludePatterns,
         todayExcludePatterns: state.todayExcludePatterns,
-        keywordRules: state.keywordRules,
+        // keywordRules loaded from DB on login — not persisted in localStorage
       }),
     }
   )

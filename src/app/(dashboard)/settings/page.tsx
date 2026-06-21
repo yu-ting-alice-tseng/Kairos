@@ -536,7 +536,7 @@ function ExcludePatternEditor({ label, patterns, onChange }: {
 // ── Settings page ─────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const { language, setLanguage, calendarAccounts, setCalendarAccounts, matrixExcludePatterns, todayExcludePatterns, setMatrixExcludePatterns, setTodayExcludePatterns, keywordRules, addKeywordRule, updateKeywordRule, removeKeywordRule } = useAppStore()
+  const { language, setLanguage, calendarAccounts, setCalendarAccounts, matrixExcludePatterns, todayExcludePatterns, setMatrixExcludePatterns, setTodayExcludePatterns, keywordRules, addKeywordRule, removeKeywordRule, setKeywordRules } = useAppStore()
   const { data: session } = useSession()
   const isDemo = session?.user?.id === DEMO_USER_ID
   const { toast } = useGlobalToast()
@@ -548,6 +548,15 @@ export default function SettingsPage() {
   const [newRuleKeyword, setNewRuleKeyword] = useState('')
   const [newRuleImportance, setNewRuleImportance] = useState(5)
   const [newRuleUrgence, setNewRuleUrgence] = useState(5)
+
+  const syncRules = async (rules: typeof keywordRules) => {
+    setKeywordRules(rules)
+    await fetch('/api/keyword-rules', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rules),
+    })
+  }
 
   // Surface OAuth result toasts — use window.location.search to avoid Suspense requirement
   useEffect(() => {
@@ -757,7 +766,7 @@ export default function SettingsPage() {
                     {language === 'fr' ? 'Urg.' : language === 'zh' ? '緊急' : 'Urg.'} <strong>{rule.urgence}</strong>
                   </span>
                   <button
-                    onClick={() => removeKeywordRule(rule.id)}
+                    onClick={() => syncRules(keywordRules.filter((r) => r.id !== rule.id))}
                     className="text-[#a99873] hover:text-red-500 transition-colors"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -798,7 +807,7 @@ export default function SettingsPage() {
               disabled={!newRuleKeyword.trim()}
               onClick={() => {
                 if (!newRuleKeyword.trim()) return
-                addKeywordRule({ id: Date.now().toString(), keyword: newRuleKeyword.trim(), importance: newRuleImportance, urgence: newRuleUrgence })
+                syncRules([...keywordRules, { id: Date.now().toString(), keyword: newRuleKeyword.trim(), importance: newRuleImportance, urgence: newRuleUrgence }])
                 setNewRuleKeyword('')
                 setNewRuleImportance(5)
                 setNewRuleUrgence(5)
