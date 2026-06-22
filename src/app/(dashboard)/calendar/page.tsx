@@ -1384,63 +1384,65 @@ function EventDetailPanel({
             {lang === 'fr' ? 'Chaîne de tâches' : lang === 'zh' ? '任務鏈' : 'Task chain'}
           </p>
 
-          {chainParent ? (
+          {/* Existing chain display */}
+          {(chainParent || relatedChains.length > 0) && (
             <div className="flex flex-col gap-1">
-              {/* Parent */}
-              <div className="flex items-center gap-2 text-xs rounded-lg px-2.5 py-1.5 bg-red-50 border border-red-200">
-                <GitBranch className="h-3 w-3 text-red-600 shrink-0" />
-                <span className="text-[#3a3326] truncate flex-1 font-medium">{chainParent.title}</span>
-                {chainParent.deadline && (
-                  <span className="text-red-500 shrink-0 text-[10px]">
-                    {new Date(chainParent.deadline).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
-                  </span>
-                )}
-              </div>
-              {/* Siblings */}
-              {chainSiblings.map((t) => (
-                <div key={t.id} className="flex items-center gap-2 text-xs rounded-lg px-2.5 py-1.5 bg-[#f3ecdd] border border-[#ece2cb] ml-3">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#a99873] shrink-0" />
-                  <span className={`truncate flex-1 ${t.calendarEventId === event.id ? 'text-[#ab3326] font-medium' : 'text-[#3a3326]'}`}>{t.title}</span>
-                  {t.deadline && (
-                    <span className="text-[#a99873] shrink-0 text-[10px]">
-                      {new Date(t.deadline).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : relatedChains.length > 0 ? (
-            <div className="flex flex-col gap-1">
-              {relatedChains.map((t) => (
-                <div key={t.id} className="flex items-center justify-between text-xs rounded-lg px-2.5 py-1.5 bg-[#f3ecdd] border border-[#ece2cb]">
-                  <span className="text-[#3a3326] truncate flex-1">{t.title}</span>
-                  {t.deadline && (
-                    <span className="text-[#a99873] ml-2 shrink-0 text-[10px]">
-                      {new Date(t.deadline).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex gap-1.5">
-              <button
-                onClick={() => openLinkDialog('tasks')}
-                className="flex-1 flex items-center justify-center gap-1.5 text-xs text-[#8a7a5e] hover:text-[#ab3326] border border-dashed border-[#e2d6bc] rounded-lg px-3 py-2 hover:border-red-300 transition-colors"
-              >
-                <GitBranch className="h-3 w-3" />
-                {lang === 'fr' ? 'Lier une tâche' : lang === 'zh' ? '連結既有任務' : 'Link task'}
-              </button>
-              <button
-                onClick={handleCreateTask}
-                disabled={newTaskSaving}
-                className="flex-1 flex items-center justify-center gap-1.5 text-xs text-white bg-[#ab3326] hover:bg-[#861f17] rounded-lg px-3 py-2 transition-colors disabled:opacity-50"
-              >
-                {newTaskSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-                {lang === 'fr' ? 'Créer' : lang === 'zh' ? '新增任務' : 'Create task'}
-              </button>
+              {chainParent ? (
+                <>
+                  <div className="flex items-center gap-2 text-xs rounded-lg px-2.5 py-1.5 bg-red-50 border border-red-200">
+                    <GitBranch className="h-3 w-3 text-red-600 shrink-0" />
+                    <span className="text-[#3a3326] truncate flex-1 font-medium">{chainParent.title}</span>
+                    {chainParent.deadline && (
+                      <span className="text-red-500 shrink-0 text-[10px]">
+                        {new Date(chainParent.deadline).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
+                      </span>
+                    )}
+                  </div>
+                  {chainSiblings.map((t) => (
+                    <div key={t.id} className="flex items-center gap-2 text-xs rounded-lg px-2.5 py-1.5 bg-[#f3ecdd] border border-[#ece2cb] ml-3">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#a99873] shrink-0" />
+                      <span className={`truncate flex-1 ${t.calendarEventId === event.id ? 'text-[#ab3326] font-medium' : 'text-[#3a3326]'}`}>{t.title}</span>
+                      {t.deadline && (
+                        <span className="text-[#a99873] shrink-0 text-[10px]">
+                          {new Date(t.deadline).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </>
+              ) : (
+                relatedChains.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between text-xs rounded-lg px-2.5 py-1.5 bg-[#f3ecdd] border border-[#ece2cb]">
+                    <span className="text-[#3a3326] truncate flex-1">{t.title}</span>
+                    {t.deadline && (
+                      <span className="text-[#a99873] ml-2 shrink-0 text-[10px]">
+                        {new Date(t.deadline).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
+                      </span>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
           )}
+
+          {/* Always-visible add buttons */}
+          <div className="flex gap-1.5">
+            <button
+              onClick={() => openLinkDialog('tasks')}
+              className="flex-1 flex items-center justify-center gap-1.5 text-xs text-[#8a7a5e] hover:text-[#ab3326] border border-dashed border-[#e2d6bc] rounded-lg px-3 py-2 hover:border-red-300 transition-colors"
+            >
+              <GitBranch className="h-3 w-3" />
+              {lang === 'fr' ? 'Lier une tâche' : lang === 'zh' ? '連結任務' : 'Link task'}
+            </button>
+            <button
+              onClick={handleCreateTask}
+              disabled={newTaskSaving}
+              className="flex-1 flex items-center justify-center gap-1.5 text-xs text-white bg-[#ab3326] hover:bg-[#861f17] rounded-lg px-3 py-2 transition-colors disabled:opacity-50"
+            >
+              {newTaskSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+              {lang === 'fr' ? 'Créer' : lang === 'zh' ? '新增' : 'New task'}
+            </button>
+          </div>
         </div>
 
         {/* Link chain dialog */}

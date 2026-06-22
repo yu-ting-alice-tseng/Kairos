@@ -140,16 +140,18 @@ function DroppableTasksPanel({ children, isHighlight }: { children: React.ReactN
   return (
     <div
       ref={setNodeRef}
-      className={`flex-1 min-w-0 transition-all rounded-2xl ${
+      className={`flex-1 min-w-0 min-h-0 transition-all rounded-2xl flex flex-col overflow-hidden ${
         isOver ? 'ring-2 ring-red-300 ring-offset-1' : ''
       } ${isHighlight ? 'bg-red-50/30' : ''}`}
     >
       {isOver && (
-        <div className="text-center text-xs text-red-400 mb-2 py-1 rounded-xl border border-dashed border-red-300 bg-red-50">
+        <div className="shrink-0 text-center text-xs text-red-400 mb-2 py-1 rounded-xl border border-dashed border-red-300 bg-red-50">
           ↩ Retirer du planning
         </div>
       )}
-      {children}
+      <div className="flex-1 overflow-y-auto">
+        {children}
+      </div>
     </div>
   )
 }
@@ -529,7 +531,7 @@ export default function TodayPage() {
       )}
 
       <div className="flex-1 flex min-h-0 overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 animate-fade-in">
+        <div className="flex-1 overflow-hidden min-h-0 p-6 flex flex-col gap-4 animate-fade-in">
           {AI_ENABLED && recap && (
             <div className="relative rounded-2xl bg-gradient-to-br from-[#fbeacb] to-[#f3dcb2] border border-[#e7c894] p-5">
               <button onClick={() => setRecap(null)} className="absolute right-3 top-3 p-1 rounded-lg hover:bg-[#e7c894]/30 text-[#a99873]">
@@ -657,7 +659,7 @@ export default function TodayPage() {
 
           {/* Two-column split: left = today's schedule, right = priority tasks */}
           <DndContext onDragEnd={handleScheduleTask}>
-            <div className="flex gap-4 min-h-0">
+            <div className="flex-1 min-h-0 flex gap-4">
               {/* Left: Today's schedule timeline */}
               <div className="w-[400px] shrink-0 rounded-2xl border border-[#e2d6bc] bg-[#fbf7ee] overflow-hidden flex flex-col">
                 <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#ece2cb]">
