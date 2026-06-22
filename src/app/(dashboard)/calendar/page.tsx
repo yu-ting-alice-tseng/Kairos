@@ -11,7 +11,6 @@ import {
   ChevronLeft, ChevronRight, Calendar, Plus, Clock, Loader2, Pencil, Trash2, X,
   MapPin, ExternalLink, GitBranch, AlignLeft, CheckCircle2, Check, Sparkles, Undo2,
 } from 'lucide-react'
-import { InkLoader } from '@/components/ui/InkLoader'
 import {
   format, addDays, isSameDay, isToday,
 } from 'date-fns'
@@ -607,7 +606,7 @@ export default function CalendarPage() {
   const isDragging = draggingEventId !== null
 
   if (loading) {
-    return <InkLoader size="page" />
+    return <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#a87f3e]" /></div>
   }
 
   // ─── Render ──────────────────────────────────────────────────────────────────
@@ -694,9 +693,32 @@ export default function CalendarPage() {
         />
       )}
 
+      {/* Body: calendar grid + detail side panel */}
+      <div className="flex flex-1 min-h-0">
+
+      {/* Left detail panel */}
+      {editingEvent ? (
+        <EventDetailPanel
+          event={editingEvent}
+          lang={language}
+          saving={eventSaving}
+          tasks={tasks}
+          onSave={handleSaveEvent}
+          onDelete={handleDeleteEvent}
+          onClose={() => setEditingEvent(null)}
+        />
+      ) : (
+        <div className="w-72 shrink-0 border-r border-[#e2d6bc] bg-[#fbf7ee] flex items-center justify-center text-[#c9b89a] text-xs p-6 text-center select-none">
+          <div className="flex flex-col items-center gap-3">
+            <Calendar className="h-8 w-8 opacity-30" />
+            <p className="opacity-50">{language === 'fr' ? 'Cliquez sur un événement pour voir les détails' : language === 'zh' ? '點擊活動查看詳情' : 'Click an event to see details'}</p>
+          </div>
+        </div>
+      )}
+
       {/* Calendar grid — swipe to change week */}
       <div
-        className={cn('flex-1 overflow-auto', isDragging && 'cursor-grabbing select-none')}
+        className={cn('flex-1 overflow-auto min-w-0', isDragging && 'cursor-grabbing select-none')}
         style={{ touchAction: 'pan-y' }}
         onTouchStart={(e) => { touchStartXRef.current = e.touches[0].clientX }}
         onTouchEnd={(e) => {
@@ -959,6 +981,8 @@ export default function CalendarPage() {
         </div>
       </div>
 
+      </div>{/* end body row */}
+
       <TaskForm
         open={showTaskForm}
         onClose={() => { setShowTaskForm(false); setEditingTask(null); setSelectedDate(null) }}
@@ -968,18 +992,6 @@ export default function CalendarPage() {
         calendarAccounts={calendarAccounts}
         lang={language}
       />
-
-      {editingEvent && (
-        <EditEventModal
-          event={editingEvent}
-          lang={language}
-          saving={eventSaving}
-          tasks={tasks}
-          onSave={handleSaveEvent}
-          onDelete={handleDeleteEvent}
-          onClose={() => setEditingEvent(null)}
-        />
-      )}
     </div>
   )
 }
@@ -1085,7 +1097,7 @@ function RetroSuggestionBanner({
 
 // ─── Edit event modal ─────────────────────────────────────────────────────────
 
-function EditEventModal({
+function EventDetailPanel({
   event, lang, saving, tasks, onSave, onDelete, onClose,
 }: {
   event: CalendarEvent
@@ -1106,6 +1118,14 @@ function EditEventModal({
   const [start, setStart] = React.useState(toLocal(event.start))
   const [end, setEnd] = React.useState(toLocal(event.end))
 
+  React.useEffect(() => {
+    setEditing(false)
+    setTitle(event.title)
+    setStart(toLocal(event.start))
+    setEnd(toLocal(event.end))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event.id])
+
   const relatedChains = React.useMemo(() => {
     const words = event.title.toLowerCase().split(/\s+/).filter((w) => w.length > 2)
     return tasks.filter((t) => t.parentTaskId && words.some((w) => t.title.toLowerCase().includes(w)))
@@ -1119,146 +1139,159 @@ function EditEventModal({
 
   const evColor = event.color ?? '#ab3326'
 
-  if (editing) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-        <div className="bg-[#fbf7ee] rounded-2xl shadow-xl p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-[#2a2420] flex items-center gap-2">
-              <Pencil className="h-4 w-4 text-red-500" />
-              {lang === 'fr' ? "Modifier l'événement" : lang === 'zh' ? '編輯活動' : 'Edit event'}
-            </h2>
-            <button onClick={() => setEditing(false)} className="p-1 rounded-lg hover:bg-[#ece2cb] text-[#a99873]">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="flex flex-col gap-3">
-            <div>
-              <label className="text-xs font-medium text-[#8a7a5e] mb-1 block">{lang === 'fr' ? 'Titre' : lang === 'zh' ? '標題' : 'Title'}</label>
-              <input
-                className="w-full border border-[#e2d6bc] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300 bg-white"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-[#8a7a5e] mb-1 block">{lang === 'fr' ? 'Début' : lang === 'zh' ? '開始' : 'Start'}</label>
-                <input type="datetime-local" className="w-full border border-[#e2d6bc] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300 bg-white" value={start} onChange={(e) => setStart(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-[#8a7a5e] mb-1 block">{lang === 'fr' ? 'Fin' : lang === 'zh' ? '結束' : 'End'}</label>
-                <input type="datetime-local" className="w-full border border-[#e2d6bc] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300 bg-white" value={end} onChange={(e) => setEnd(e.target.value)} />
-              </div>
-            </div>
-          </div>
-          <div className="flex gap-2 mt-5">
-            <button onClick={() => onDelete(event)} className="flex-1 rounded-xl border border-red-200 text-red-600 text-sm py-2 hover:bg-red-50 transition-colors">
-              <Trash2 className="h-4 w-4 inline mr-1" />
-              {lang === 'fr' ? 'Supprimer' : lang === 'zh' ? '刪除' : 'Delete'}
-            </button>
-            <button
-              onClick={() => onSave(event, title, new Date(start).toISOString(), new Date(end).toISOString())}
-              disabled={saving}
-              className="flex-1 rounded-xl bg-[#ab3326] text-white text-sm py-2 hover:bg-[#861f17] transition-colors disabled:opacity-60"
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin inline" /> : (lang === 'fr' ? 'Enregistrer' : lang === 'zh' ? '儲存' : 'Save')}
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
+  const dateLabel = React.useMemo(() => {
+    const s = new Date(event.start)
+    const e = new Date(event.end)
+    const locale = lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB'
+    const opts: Intl.DateTimeFormatOptions = { weekday: 'short', day: 'numeric', month: 'short' }
+    if (event.allDay) return s.toLocaleDateString(locale, opts)
+    const sameDay = s.toDateString() === e.toDateString()
+    const dayStr = s.toLocaleDateString(locale, opts)
+    const startT = s.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+    const endT = e.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+    return sameDay ? `${dayStr}  ${startT} – ${endT}` : `${dayStr} ${startT} – ${e.toLocaleDateString(locale, opts)} ${endT}`
+  }, [event.start, event.end, event.allDay, lang])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-[#fbf7ee] rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="h-1.5 w-full" style={{ backgroundColor: evColor }} />
-        <div className="p-5">
-          <div className="flex items-start justify-between gap-3 mb-4">
-            <h2 className="text-base font-semibold text-[#2a2420] leading-snug">{event.title}</h2>
-            <button onClick={onClose} className="p-1 rounded-lg hover:bg-[#ece2cb] text-[#a99873] shrink-0">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+    <div className="w-72 shrink-0 border-r border-[#e2d6bc] bg-[#fbf7ee] flex flex-col overflow-hidden">
+      {/* Color bar + header */}
+      <div className="h-1 w-full shrink-0" style={{ backgroundColor: evColor }} />
+      <div className="flex items-center justify-between px-4 pt-4 pb-2 gap-2">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#a99873]">
+          {lang === 'fr' ? 'Événement' : lang === 'zh' ? '活動' : 'Event'}
+        </p>
+        <button onClick={onClose} className="p-1 rounded-lg hover:bg-[#ece2cb] text-[#a99873] transition-colors">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
 
-          <div className="flex flex-col gap-3 text-sm">
-            {!event.allDay && event.start && event.end && (
-              <div className="flex items-center gap-2 text-[#5c5347]">
-                <Clock className="h-4 w-4 text-[#a99873] shrink-0" />
-                <span>{formatTime(event.start)} – {formatTime(event.end)}</span>
-              </div>
-            )}
-            {event.allDay && (
-              <div className="flex items-center gap-2 text-[#5c5347]">
-                <Clock className="h-4 w-4 text-[#a99873] shrink-0" />
-                <span>{lang === 'fr' ? 'Toute la journée' : lang === 'zh' ? '整天' : 'All day'}</span>
-              </div>
-            )}
-            {event.location && (
-              <div className="flex items-start gap-2 text-[#5c5347]">
-                <MapPin className="h-4 w-4 text-[#a99873] shrink-0 mt-0.5" />
-                <span className="break-words">{event.location}</span>
-              </div>
-            )}
-            {event.description && (
-              <div className="flex items-start gap-2">
-                <AlignLeft className="h-4 w-4 text-[#a99873] shrink-0 mt-0.5" />
-                <p className="text-[#5c5347] text-xs leading-relaxed whitespace-pre-wrap break-words line-clamp-6">{event.description}</p>
-              </div>
-            )}
-            {links.length > 0 && (
-              <div className="flex flex-col gap-1">
-                {links.map((url) => (
-                  <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-[#ab3326] hover:underline truncate">
-                    <ExternalLink className="h-3 w-3 shrink-0" />
-                    {url.replace(/^https?:\/\//, '').split('/')[0]}
-                  </a>
-                ))}
-              </div>
-            )}
-            {event.htmlLink && (
-              <a href={event.htmlLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-[#8a7a5e] hover:text-[#ab3326] transition-colors">
-                <ExternalLink className="h-3.5 w-3.5" />
-                {lang === 'fr' ? 'Ouvrir dans Google Calendar' : lang === 'zh' ? '在 Google 日曆中開啟' : 'Open in Google Calendar'}
+      <div className="flex-1 overflow-y-auto px-4 pb-4 flex flex-col gap-4">
+        {/* Title */}
+        {editing ? (
+          <input
+            autoFocus
+            className="w-full border border-[#e2d6bc] rounded-xl px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-red-300 bg-white text-[#2a2420]"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+        ) : (
+          <h2 className="text-sm font-semibold text-[#2a2420] leading-snug">{event.title}</h2>
+        )}
+
+        {/* Date / time */}
+        {editing ? (
+          <div className="flex flex-col gap-2">
+            <div>
+              <label className="text-[10px] font-medium text-[#8a7a5e] mb-1 block uppercase tracking-wide">
+                {lang === 'fr' ? 'Début' : lang === 'zh' ? '開始' : 'Start'}
+              </label>
+              <input type="datetime-local" className="w-full border border-[#e2d6bc] rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-red-300 bg-white" value={start} onChange={(e) => setStart(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-[10px] font-medium text-[#8a7a5e] mb-1 block uppercase tracking-wide">
+                {lang === 'fr' ? 'Fin' : lang === 'zh' ? '結束' : 'End'}
+              </label>
+              <input type="datetime-local" className="w-full border border-[#e2d6bc] rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-red-300 bg-white" value={end} onChange={(e) => setEnd(e.target.value)} />
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-start gap-2 text-[#5c5347]">
+            <Clock className="h-3.5 w-3.5 text-[#a99873] shrink-0 mt-0.5" />
+            <span className="text-xs leading-relaxed">{event.allDay ? (lang === 'fr' ? 'Toute la journée · ' : lang === 'zh' ? '整天 · ' : 'All day · ') + dateLabel : dateLabel}</span>
+          </div>
+        )}
+
+        {/* Location */}
+        {event.location && (
+          <div className="flex items-start gap-2 text-[#5c5347]">
+            <MapPin className="h-3.5 w-3.5 text-[#a99873] shrink-0 mt-0.5" />
+            <span className="text-xs break-words">{event.location}</span>
+          </div>
+        )}
+
+        {/* Description */}
+        {event.description && (
+          <div className="flex flex-col gap-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#a99873]">
+              {lang === 'fr' ? 'Description' : lang === 'zh' ? '說明' : 'Description'}
+            </p>
+            <p className="text-xs text-[#5c5347] leading-relaxed whitespace-pre-wrap break-words">{event.description}</p>
+          </div>
+        )}
+
+        {/* Links */}
+        {links.length > 0 && (
+          <div className="flex flex-col gap-1">
+            {links.map((url) => (
+              <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-[#ab3326] hover:underline truncate">
+                <ExternalLink className="h-3 w-3 shrink-0" />
+                {url.replace(/^https?:\/\//, '').split('/')[0]}
               </a>
-            )}
-            {relatedChains.length > 0 && (
-              <div className="border-t border-[#ece2cb] pt-3 mt-1">
-                <p className="text-xs font-semibold text-[#8a7a5e] flex items-center gap-1.5 mb-2">
-                  <GitBranch className="h-3.5 w-3.5" />
-                  {lang === 'fr' ? 'Rétroplanning lié' : lang === 'zh' ? '關聯逆向規劃' : 'Related retroplanning'}
-                </p>
-                <div className="flex flex-col gap-1">
-                  {relatedChains.slice(0, 5).map((t) => (
-                    <div key={t.id} className="flex items-center justify-between text-xs rounded-lg px-2.5 py-1.5 bg-[#f3ecdd] border border-[#ece2cb]">
-                      <span className="text-[#3a3326] truncate flex-1">{t.title}</span>
-                      {t.deadline && (
-                        <span className="text-[#a99873] ml-2 shrink-0">
-                          {new Date(t.deadline).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            ))}
           </div>
+        )}
 
-          {event.editable && (
-            <div className="flex gap-2 mt-4 pt-4 border-t border-[#ece2cb]">
-              <button onClick={() => onDelete(event)} className="flex items-center gap-1.5 rounded-xl border border-red-200 text-red-600 text-xs px-3 py-2 hover:bg-red-50 transition-colors">
-                <Trash2 className="h-3.5 w-3.5" />
-                {lang === 'fr' ? 'Supprimer' : lang === 'zh' ? '刪除' : 'Delete'}
+        {/* Open in Google Calendar */}
+        {event.htmlLink && (
+          <a href={event.htmlLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-[#8a7a5e] hover:text-[#ab3326] transition-colors">
+            <ExternalLink className="h-3 w-3 shrink-0" />
+            {lang === 'fr' ? 'Ouvrir dans Google Calendar' : lang === 'zh' ? '在 Google 日曆中開啟' : 'Open in Google Calendar'}
+          </a>
+        )}
+
+        {/* Related retroplanning */}
+        {relatedChains.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#a99873] flex items-center gap-1.5">
+              <GitBranch className="h-3 w-3" />
+              {lang === 'fr' ? 'Rétroplanning lié' : lang === 'zh' ? '關聯逆向規劃' : 'Related retroplanning'}
+            </p>
+            <div className="flex flex-col gap-1">
+              {relatedChains.map((t) => (
+                <div key={t.id} className="flex items-center justify-between text-xs rounded-lg px-2.5 py-1.5 bg-[#f3ecdd] border border-[#ece2cb]">
+                  <span className="text-[#3a3326] truncate flex-1 leading-snug">{t.title}</span>
+                  {t.deadline && (
+                    <span className="text-[#a99873] ml-2 shrink-0 text-[10px]">
+                      {new Date(t.deadline).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer actions */}
+      {event.editable && (
+        <div className="shrink-0 border-t border-[#e2d6bc] px-4 py-3 flex gap-2">
+          {editing ? (
+            <>
+              <button onClick={() => setEditing(false)} className="flex-1 rounded-xl border border-[#e2d6bc] text-[#5c5347] text-xs py-2 hover:bg-[#ece2cb] transition-colors">
+                {lang === 'fr' ? 'Annuler' : lang === 'zh' ? '取消' : 'Cancel'}
               </button>
-              <button onClick={() => setEditing(true)} className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-[#ab3326] text-white text-xs px-3 py-2 hover:bg-[#861f17] transition-colors">
-                <Pencil className="h-3.5 w-3.5" />
+              <button
+                onClick={() => { onSave(event, title, new Date(start).toISOString(), new Date(end).toISOString()); setEditing(false) }}
+                disabled={saving}
+                className="flex-1 rounded-xl bg-[#ab3326] text-white text-xs py-2 hover:bg-[#861f17] transition-colors disabled:opacity-60 flex items-center justify-center gap-1"
+              >
+                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : (lang === 'fr' ? 'Enregistrer' : lang === 'zh' ? '儲存' : 'Save')}
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => onDelete(event)} className="flex items-center gap-1 rounded-xl border border-red-200 text-red-600 text-xs px-3 py-2 hover:bg-red-50 transition-colors">
+                <Trash2 className="h-3 w-3" />
+                {lang === 'fr' ? 'Suppr.' : lang === 'zh' ? '刪除' : 'Delete'}
+              </button>
+              <button onClick={() => setEditing(true)} className="flex-1 flex items-center justify-center gap-1 rounded-xl bg-[#ab3326] text-white text-xs py-2 hover:bg-[#861f17] transition-colors">
+                <Pencil className="h-3 w-3" />
                 {lang === 'fr' ? 'Modifier' : lang === 'zh' ? '編輯' : 'Edit'}
               </button>
-            </div>
+            </>
           )}
         </div>
-      </div>
+      )}
     </div>
   )
 }
