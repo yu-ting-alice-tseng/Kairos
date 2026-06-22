@@ -218,16 +218,33 @@ export default function TodayPage() {
   const isExcludedFromToday = (title: string) =>
     todayExcludePatterns.some((p) => p && title.toLowerCase().includes(p.toLowerCase()))
 
+  // All-day calendar events for today
+  const todayAllDayEvents = todayEvents.filter((ev) => ev.allDay)
+  const todayAllDayEventIds = new Set(todayAllDayEvents.map((ev) => ev.id))
+
+  // Tasks linked to today's all-day events (include them alongside regular tasks)
+  const allDayLinkedTaskIds = new Set(
+    tasks
+      .filter((t) => t.calendarEventId && todayAllDayEventIds.has(t.calendarEventId))
+      .map((t) => t.id)
+  )
+
   const prioritizedTasks = generatePriorityList(
     tasks.filter((t) =>
       t.status !== 'COMPLETED' &&
       t.status !== 'CANCELLED' &&
       t.parentTaskId === null &&
-      !t.calendarEventId &&
+      (!t.calendarEventId || allDayLinkedTaskIds.has(t.id)) &&
       !t.scheduledStart &&
       !isExcludedFromToday(t.title)
     )
   )
+
+  // All-day events that aren't linked to any task — shown as calendar entries in the list
+  const linkedCalendarEventIds = new Set(tasks.map((t) => t.calendarEventId).filter(Boolean))
+  const unmatchedAllDayEvents = todayAllDayEvents
+    .filter((ev) => !linkedCalendarEventIds.has(ev.id) && !isExcludedFromToday(ev.title))
+    .sort((a, b) => a.title.localeCompare(b.title))
 
   const scheduledTasks = tasks.filter(
     (t) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && !!t.scheduledStart
@@ -561,7 +578,7 @@ export default function TodayPage() {
             {[
               {
                 label: language === 'fr' ? 'À faire' : language === 'zh' ? '待辦' : 'To do',
-                value: prioritizedTasks.length,
+                value: prioritizedTasks.length + unmatchedAllDayEvents.length,
                 icon: AlarmCheck,
                 gradient: 'from-[#c44a3a] to-[#861f17]',
                 shadow: 'shadow-[#ab3326]/20',
@@ -679,11 +696,11 @@ export default function TodayPage() {
                   <h2 className="text-sm font-semibold text-[#2a1f12] flex items-center gap-2">
                     <Clock className="h-4 w-4 text-red-500" />
                     {language === 'fr' ? 'Tâches prioritaires' : language === 'zh' ? '優先任務' : 'Priority tasks'}
-                    <Badge variant="default" className="text-xs bg-red-100 text-red-900 border-0">{prioritizedTasks.length}</Badge>
+                    <Badge variant="default" className="text-xs bg-red-100 text-red-900 border-0">{prioritizedTasks.length + unmatchedAllDayEvents.length}</Badge>
                   </h2>
                 </div>
 
-                {prioritizedTasks.length === 0 ? (
+                {prioritizedTasks.length === 0 && unmatchedAllDayEvents.length === 0 ? (
                   <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#e7c894]/60 py-12 text-center bg-[#fbeacb]/40">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/logo_v5/empty-task.png" alt="" className="h-20 w-20 mb-4 opacity-70" />
@@ -709,6 +726,15 @@ export default function TodayPage() {
                         onReschedule={handleReschedule}
                         lang={language}
                       />
+                    ))}
+                    {unmatchedAllDayEvents.map((ev) => (
+                      <div key={ev.id} className="flex items-center gap-3 rounded-2xl border border-[#e2d6bc] bg-[#f3ecdd]/60 px-4 py-3">
+                        <CalendarDays className="h-4 w-4 text-[#a99873] shrink-0" />
+                        <p className="text-sm text-[#3a3326] flex-1 truncate">{ev.title}</p>
+                        <span className="text-[10px] text-[#a99873] bg-[#ece2cb] rounded-full px-2 py-0.5 shrink-0">
+                          {language === 'zh' ? '全天行程' : language === 'fr' ? 'Toute la journée' : 'All day'}
+                        </span>
+                      </div>
                     ))}
                   </div>
                 )}
