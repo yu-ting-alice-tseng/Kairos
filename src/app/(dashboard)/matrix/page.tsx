@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react'
 import { useAppStore, AppState, KeywordRule } from '@/stores/useAppStore'
-import { Task, Habit } from '@/types'
+import { Task, Habit, CalendarEvent } from '@/types'
 import { t } from '@/lib/i18n'
 import { EisenhowerMatrix } from '@/components/matrix/EisenhowerMatrix'
 import { GoalsSection } from '@/components/matrix/GoalsSection'
@@ -42,6 +42,44 @@ const [habitPanelOpen, setHabitPanelOpen] = useState(true)
   }, [setTasks])
 
   useEffect(() => { loadTasks() }, [loadTasks])
+
+  // Auto-import today's all-day calendar events as tasks (no scheduled time = belongs in matrix)
+  const importedRef = React.useRef(false)
+  useEffect(() => {
+    if (loading || calendarAccounts.length === 0 || importedRef.current) return
+    importedRef.current = true
+    const run = async () => {
+      try {
+        const today = new Date(); today.setHours(0, 0, 0, 0)
+        const end = new Date(); end.setHours(23, 59, 59, 999)
+        const res = await fetch(`/api/calendar/events?start=${today.toISOString()}&end=${end.toISOString()}`)
+        if (!res.ok) return
+        const events: CalendarEvent[] = await res.json()
+        const allDayEvents = events.filter((e) => e.allDay)
+        if (allDayEvents.length === 0) return
+        const existingCalIds = new Set(tasks.filter((t) => t.calendarEventId).map((t) => t.calendarEventId))
+        const toCreate = allDayEvents.filter((e) => !existingCalIds.has(e.id))
+        if (toCreate.length === 0) return
+        await Promise.all(toCreate.map((e) =>
+          fetch('/api/tasks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: e.title,
+              importance: 5,
+              urgency: 5,
+              calendarEventId: e.id,
+              calendarAccountId: e.calendarAccountId,
+            }),
+          })
+        ))
+        const tasksRes = await fetch('/api/tasks')
+        if (tasksRes.ok) setTasks(await tasksRes.json())
+      } catch { /* best-effort */ }
+    }
+    run()
+  }, [loading, calendarAccounts.length, tasks, setTasks])
+
   useEffect(() => {
     if (habits.length === 0) {
       fetch('/api/habits').then((r) => r.json()).then(setHabits).catch(() => {})

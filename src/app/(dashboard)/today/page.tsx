@@ -106,7 +106,7 @@ function ScheduleHourSlot({ hour, events, scheduledTasks, calendarAccounts, isAc
   return (
     <div
       ref={setNodeRef}
-      className={`flex gap-2 min-h-[34px] rounded-xl px-2 py-1.5 border transition-all text-xs ${
+      className={`flex gap-2 min-h-[40px] rounded-xl px-2 py-2 border transition-all text-xs ${
         isOver
           ? 'border-red-400 bg-red-50 shadow-sm'
           : hasContent
@@ -120,9 +120,9 @@ function ScheduleHourSlot({ hour, events, scheduledTasks, calendarAccounts, isAc
           const acc = calendarAccounts.find((a) => a.id === ev.calendarAccountId)
           const color = ev.color ?? acc?.color ?? '#6366F1'
           return (
-            <div key={ev.id} className="flex items-center gap-1.5 leading-tight">
+            <div key={ev.id} className="flex items-center gap-1.5 leading-tight min-w-0">
               <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-              <span className="truncate text-[#3a3326]">{ev.title}</span>
+              <span className="truncate text-[#3a3326] text-[11px]">{ev.title}</span>
             </div>
           )
         })}
@@ -642,7 +642,7 @@ export default function TodayPage() {
           <DndContext onDragEnd={handleScheduleTask}>
             <div className="flex gap-4 min-h-0">
               {/* Left: Today's schedule timeline */}
-              <div className="w-[320px] shrink-0 rounded-2xl border border-[#e2d6bc] bg-[#fbf7ee] overflow-hidden flex flex-col">
+              <div className="w-[400px] shrink-0 rounded-2xl border border-[#e2d6bc] bg-[#fbf7ee] overflow-hidden flex flex-col">
                 <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#ece2cb]">
                   <CalendarDays className="h-3.5 w-3.5 text-red-500" />
                   <span className="text-xs font-semibold text-[#5c5347]">

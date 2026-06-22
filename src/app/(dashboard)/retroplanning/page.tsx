@@ -393,6 +393,7 @@ export default function RetroplanningPage() {
   }
   const [scanMatches, setScanMatches] = useState<ScanMatch[]>([])
   const [scanCreating, setScanCreating] = useState<string | null>(null)
+  const [previewScan, setPreviewScan] = useState<ScanMatch | null>(null)
 
   const runScan = useCallback(async () => {
     if (calendarAccounts.length === 0) return
@@ -740,13 +741,17 @@ export default function RetroplanningPage() {
               </div>
               <div className="flex flex-col gap-2">
                 {scanMatches.map((m) => (
-                  <div key={m.title} className="flex items-center gap-2 bg-white/60 rounded-xl border border-amber-200 px-3 py-2">
+                  <div
+                    key={m.title}
+                    onClick={() => setPreviewScan(m)}
+                    className="flex items-center gap-2 bg-white/60 rounded-xl border border-amber-200 px-3 py-2 cursor-pointer hover:bg-amber-50 transition-colors"
+                  >
                     <GitBranch className="h-3.5 w-3.5 text-amber-600 shrink-0" />
                     <span className="text-xs font-medium text-amber-900 truncate flex-1">{m.title}</span>
                     <span className="text-[11px] text-amber-500 shrink-0">{m.date}</span>
                     <span className="text-[11px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 shrink-0">{m.templateName}</span>
                     <button
-                      onClick={() => handleCreateFromScan(m)}
+                      onClick={(e) => { e.stopPropagation(); handleCreateFromScan(m) }}
                       disabled={scanCreating === m.title}
                       className="flex items-center gap-1 text-[11px] bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-2.5 py-1 disabled:opacity-60 transition-colors shrink-0"
                     >
@@ -822,7 +827,7 @@ export default function RetroplanningPage() {
           {chains.length === 0 && suggestedTasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#e2d6bc] py-20 text-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo_v5/empty state retroplanning.png" alt="" className="h-28 w-auto mb-5 object-contain opacity-85" />
+              <img src="/logo_v5/empty state retroplanning.png" alt="" className="h-28 w-auto mb-5 object-contain" />
               <p className="text-sm font-medium text-[#8a7a5e] max-w-xs">
                 {lang === 'fr'
                   ? 'Aucune chaîne de tâches. Ouvrez une tâche avec deadline et cliquez sur "Rétroplanifier".'
@@ -947,6 +952,60 @@ export default function RetroplanningPage() {
           onClose={() => { setEditingTemplate(undefined); setForkDraft(null) }}
           lang={lang}
         />
+      )}
+
+      {/* Scan preview dialog */}
+      {previewScan && (
+        <Dialog open onOpenChange={() => setPreviewScan(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <GitBranch className="h-4 w-4 text-amber-600" />
+                {lang === 'fr' ? 'Aperçu du rétroplanning' : lang === 'zh' ? '逆向規劃預覽' : 'Retroplan preview'}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-4">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex flex-col gap-1">
+                <p className="text-sm font-semibold text-amber-900">{previewScan.title}</p>
+                <p className="text-xs text-amber-600 flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {lang === 'fr' ? 'Échéance :' : lang === 'zh' ? '截止：' : 'Deadline:'} {previewScan.date}
+                </p>
+                <p className="text-[11px] text-amber-500">{lang === 'fr' ? 'Modèle :' : lang === 'zh' ? '模板：' : 'Template:'} {previewScan.templateName}</p>
+              </div>
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-semibold uppercase tracking-widest text-[#a99873]">
+                  {lang === 'fr' ? 'Étapes générées' : lang === 'zh' ? '將建立的階段' : 'Stages to create'}
+                </p>
+                {previewScan.stages.map((s, i) => {
+                  const d = new Date(previewScan.start)
+                  d.setDate(d.getDate() - s.daysBeforeDeadline)
+                  const dateStr = d.toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-US', { weekday: 'short', day: 'numeric', month: 'short' })
+                  return (
+                    <div key={i} className="flex items-center gap-3 rounded-xl border border-[#e2d6bc] bg-[#f3ecdd] px-3 py-2">
+                      <span className="h-5 w-5 rounded-full bg-red-100 text-red-900 text-[10px] font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+                      <span className="text-xs text-[#3a3326] flex-1 leading-snug">{s.name}</span>
+                      <span className="text-[11px] text-[#a99873] shrink-0">{dateStr}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPreviewScan(null)}>
+                {lang === 'fr' ? 'Annuler' : lang === 'zh' ? '取消' : 'Cancel'}
+              </Button>
+              <Button
+                onClick={() => { handleCreateFromScan(previewScan); setPreviewScan(null) }}
+                disabled={scanCreating === previewScan.title}
+                className="bg-amber-600 hover:bg-amber-700 text-white"
+              >
+                {scanCreating === previewScan.title ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                {lang === 'fr' ? 'Créer' : lang === 'zh' ? '建立' : 'Create'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Task edit form */}
