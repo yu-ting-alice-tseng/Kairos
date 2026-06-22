@@ -286,8 +286,16 @@ export default function CalendarPage() {
       return isSameDay(new Date(task.deadline), day)
     })
 
-  const getAllDayEventsForDay = (day: Date) =>
-    externalEvents.filter((ev) => ev.allDay && ev.start && isSameDay(new Date(ev.start), day) && !hiddenAccountIds.has(ev.calendarAccountId ?? ''))
+  const getAllDayEventsForDay = (day: Date) => {
+    const evs = externalEvents.filter((ev) => ev.allDay && ev.start && isSameDay(new Date(ev.start), day) && !hiddenAccountIds.has(ev.calendarAccountId ?? ''))
+    // Sort: incomplete first, completed (linked to done tasks) last
+    const completedEventIds = new Set(tasks.filter((t) => t.status === 'COMPLETED' && t.calendarEventId).map((t) => t.calendarEventId!))
+    return [...evs].sort((a, b) => {
+      const aDone = completedEventIds.has(a.id) ? 1 : 0
+      const bDone = completedEventIds.has(b.id) ? 1 : 0
+      return aDone - bDone
+    })
+  }
 
   const isHabitActiveOnDay = (h: { isActive: boolean; frequency: string }, day: Date) => {
     if (!h.isActive) return false
@@ -760,16 +768,17 @@ export default function CalendarPage() {
                   {allDayEvs.map((ev) => {
                     const color = ev.color ?? calendarAccounts.find((a) => a.id === ev.calendarAccountId)?.color ?? '#6366F1'
                     const isDraggingThis = draggingEventId === ev.id
+                    const isLinkedDone = tasks.some((t) => t.calendarEventId === ev.id && t.status === 'COMPLETED')
                     return (
                       <div
                         key={ev.id}
-                        className={cn('rounded px-1.5 py-0.5 text-xs mb-0.5 truncate border border-dashed', ev.editable && !isDragging ? 'cursor-grab' : '', isDraggingThis && 'opacity-40')}
+                        className={cn('rounded px-1.5 py-0.5 text-xs mb-0.5 truncate border border-dashed', ev.editable && !isDragging ? 'cursor-grab' : '', isDraggingThis && 'opacity-40', isLinkedDone && 'opacity-50')}
                         style={{ backgroundColor: color + '22', borderColor: color }}
                         title={ev.title}
                         onMouseDown={(e) => { if (ev.editable) startAllDayDrag(e, ev) }}
                         onClick={(e) => { e.stopPropagation(); if (!isDragging) setEditingEvent(ev) }}
                       >
-                        <span className="text-[#2a2420]">{ev.title}</span>
+                        <span className={cn('text-[#2a2420]', isLinkedDone && 'line-through text-[#a99873]')}>{ev.title}</span>
                       </div>
                     )
                   })}
