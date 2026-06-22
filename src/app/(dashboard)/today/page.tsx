@@ -159,7 +159,7 @@ function DroppableTasksPanel({ children, isHighlight }: { children: React.ReactN
 const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === 'true'
 
 export default function TodayPage() {
-  const { language, tasks, habits, setTasks, setHabits, calendarAccounts, todayExcludePatterns, setTodayExcludePatterns } = useAppStore()
+  const { language, tasks, habits, setTasks, setHabits, calendarAccounts, todayExcludePatterns, setTodayExcludePatterns, keywordRules } = useAppStore()
   const { toast } = useGlobalToast()
 
   const [loading, setLoading] = useState(true)
@@ -237,6 +237,13 @@ export default function TodayPage() {
     return new Date(String(deadline)) <= todayEnd
   }
 
+  const applyKeywordRules = (task: Task): Task => {
+    const title = task.title.toLowerCase()
+    const match = keywordRules.find((r) => title.includes(r.keyword.toLowerCase()))
+    if (!match) return task
+    return { ...task, importance: match.importance, urgency: match.urgence }
+  }
+
   const prioritizedTasks = generatePriorityList(
     tasks.filter((t) =>
       t.status !== 'COMPLETED' &&
@@ -246,7 +253,7 @@ export default function TodayPage() {
       !t.scheduledStart &&
       isDueByToday(t.deadline) &&
       !isExcludedFromToday(t.title)
-    )
+    ).map(applyKeywordRules)
   )
 
   // All-day events that aren't linked to any task — shown as calendar entries in the list

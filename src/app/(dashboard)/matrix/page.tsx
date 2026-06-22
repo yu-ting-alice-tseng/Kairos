@@ -176,6 +176,14 @@ const [habitPanelOpen, setHabitPanelOpen] = useState(true)
     return new Date(String(deadline)) <= todayMidnight
   }
 
+  // Apply keyword rules: override importance/urgency for tasks matching a keyword
+  const applyKeywordRules = (task: Task): Task => {
+    const title = task.title.toLowerCase()
+    const match = keywordRules.find((r) => title.includes(r.keyword.toLowerCase()))
+    if (!match) return task
+    return { ...task, importance: match.importance, urgency: match.urgence }
+  }
+
   // Filter: only show tasks due today or overdue (no deadline = show), and scheduled on today (not future days).
   const filteredTasks = tasks
     .filter((t) =>
@@ -183,6 +191,7 @@ const [habitPanelOpen, setHabitPanelOpen] = useState(true)
       isDueByToday(t.deadline) &&
       !isExcludedFromMatrix(t.title)
     )
+    .map(applyKeywordRules)
 
   if (loading) return <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#a87f3e]" /></div>
 
