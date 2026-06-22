@@ -231,6 +231,12 @@ export default function TodayPage() {
       .map((t) => t.id)
   )
 
+  const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999)
+  const isDueByToday = (deadline: string | null | undefined) => {
+    if (!deadline) return true
+    return new Date(String(deadline)) <= todayEnd
+  }
+
   const prioritizedTasks = generatePriorityList(
     tasks.filter((t) =>
       t.status !== 'COMPLETED' &&
@@ -238,6 +244,7 @@ export default function TodayPage() {
       t.parentTaskId === null &&
       (!t.calendarEventId || allDayLinkedTaskIds.has(t.id)) &&
       !t.scheduledStart &&
+      isDueByToday(t.deadline) &&
       !isExcludedFromToday(t.title)
     )
   )

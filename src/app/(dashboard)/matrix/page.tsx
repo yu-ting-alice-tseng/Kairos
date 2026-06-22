@@ -170,10 +170,19 @@ const [habitPanelOpen, setHabitPanelOpen] = useState(true)
     return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
   }
 
-  // Filter tasks: exclude calendar-imported events and tasks scheduled for future/past days.
-  // Tasks with no scheduledStart OR scheduledStart on today are included (today's unscheduled items).
+  const todayMidnight = new Date(); todayMidnight.setHours(23, 59, 59, 999)
+  const isDueByToday = (deadline: Task['deadline']) => {
+    if (!deadline) return true // no deadline = always show
+    return new Date(String(deadline)) <= todayMidnight
+  }
+
+  // Filter: only show tasks due today or overdue (no deadline = show), and scheduled on today (not future days).
   const filteredTasks = tasks
-    .filter((t) => (!t.scheduledStart || isScheduledToday(t.scheduledStart)) && !isExcludedFromMatrix(t.title))
+    .filter((t) =>
+      (!t.scheduledStart || isScheduledToday(t.scheduledStart)) &&
+      isDueByToday(t.deadline) &&
+      !isExcludedFromMatrix(t.title)
+    )
 
   if (loading) return <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#a87f3e]" /></div>
 
