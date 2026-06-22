@@ -90,10 +90,9 @@ function matchesAnyTemplate(
   userTemplates: RetroTemplate[]
 ): boolean {
   const lower = title.toLowerCase()
-  return (
-    BUILTIN_TEMPLATES.some((t) => t.keywords.some((kw) => lower.includes(kw.toLowerCase()))) ||
-    userTemplates.some((t) => t.keywords.some((kw) => lower.includes(kw.toLowerCase())))
-  )
+  return userTemplates
+    .filter((t) => !t.keywords.includes('__archived'))
+    .some((t) => stripCatKeywords(t.keywords).some((kw) => lower.includes(kw.toLowerCase())))
 }
 
 // ─── Task chain view ──────────────────────────────────────────────────────────
@@ -196,6 +195,7 @@ function TemplateEditor({
   onDelete,
   onClose,
   lang,
+  allTemplates = [],
 }: {
   template: RetroTemplate | null
   /** Pre-fill when forking a built-in template into an editable custom one. */
@@ -204,6 +204,7 @@ function TemplateEditor({
   onDelete?: () => void
   onClose: () => void
   lang: 'fr' | 'en' | 'zh'
+  allTemplates?: RetroTemplate[]
 }) {
   const rawKeywords = template?.keywords ?? initial?.keywords ?? []
   const [name, setName] = useState(template?.name ?? initial?.name ?? '')
@@ -211,12 +212,26 @@ function TemplateEditor({
   const [customCatInput, setCustomCatInput] = useState('')
   const [keywords, setKeywords] = useState<string[]>(stripCatKeywords(rawKeywords))
   const [newKw, setNewKw] = useState('')
+  const [kwConflict, setKwConflict] = useState<string | null>(null)
   const [stages, setStages] = useState<RetroStage[]>(template?.stages ?? initial?.stages ?? [{ name: '', daysBeforeDeadline: 7 }])
   const [saving, setSaving] = useState(false)
 
   const addKeyword = () => {
     const kw = newKw.trim()
-    if (kw && !keywords.includes(kw)) setKeywords((prev) => [...prev, kw])
+    if (!kw) return
+    if (keywords.includes(kw)) { setNewKw(''); return }
+    // Check for conflicts with other templates
+    const conflict = allTemplates.find((t) =>
+      t.id !== template?.id &&
+      !t.keywords.includes('__archived') &&
+      stripCatKeywords(t.keywords).some((k) => k.toLowerCase() === kw.toLowerCase())
+    )
+    if (conflict) {
+      setKwConflict(conflict.name)
+      return
+    }
+    setKwConflict(null)
+    setKeywords((prev) => [...prev, kw])
     setNewKw('')
   }
 
@@ -296,15 +311,24 @@ function TemplateEditor({
             <div className="flex gap-2">
               <Input
                 value={newKw}
-                onChange={(e) => setNewKw(e.target.value)}
+                onChange={(e) => { setNewKw(e.target.value); setKwConflict(null) }}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addKeyword() } }}
                 placeholder={lang === 'fr' ? 'Ajouter un mot-clé...' : lang === 'zh' ? '新增關鍵字...' : 'Add keyword...'}
-                className="h-8 text-sm"
+                className={`h-8 text-sm ${kwConflict ? 'border-red-400 ring-1 ring-red-300' : ''}`}
               />
               <Button size="sm" variant="outline" onClick={addKeyword} disabled={!newKw.trim()}>
                 <Plus className="h-3.5 w-3.5" />
               </Button>
             </div>
+            {kwConflict && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                {lang === 'fr'
+                  ? `⚠ Ce mot-clé est déjà utilisé dans « ${kwConflict} ». Choisissez un mot-clé différent.`
+                  : lang === 'zh'
+                  ? `⚠ 此關鍵字已在「${kwConflict}」中使用，請換一個不同的關鍵字。`
+                  : `⚠ This keyword is already used in "${kwConflict}". Please choose a different keyword.`}
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col gap-2">
@@ -404,22 +428,16 @@ export default function RetroplanningPage() {
       if (!res.ok) return
       const events: { title: string; start: string }[] = await res.json()
 
-      // Build unified template list with id + stages
+      // Build template list from user templates only (no built-ins)
       type AnyTmpl = { id: string; name: string; keywords: string[]; stages: { name: string; daysBeforeDeadline: number }[] }
-      const allTemplates: AnyTmpl[] = [
-        ...BUILTIN_TEMPLATES.map((t) => ({
-          id: t.id,
-          name: lang === 'fr' ? t.nameFr : t.name,
-          keywords: t.keywords,
-          stages: t.stages.map((s) => ({ name: lang === 'fr' ? s.nameFr : s.name, daysBeforeDeadline: s.daysBeforeDeadline })),
-        })),
-        ...userTemplates.map((t) => ({
+      const allTemplates: AnyTmpl[] = userTemplates
+        .filter((t) => !t.keywords.includes('__archived'))
+        .map((t) => ({
           id: t.id,
           name: t.name,
           keywords: stripCatKeywords(t.keywords),
           stages: t.stages,
-        })),
-      ]
+        }))
 
       const matches: ScanMatch[] = []
       for (const ev of events) {
@@ -455,13 +473,15 @@ export default function RetroplanningPage() {
       })
       if (!parentRes.ok) throw new Error()
       const parent = await parentRes.json()
+      const today = new Date(); today.setHours(0, 0, 0, 0)
       await Promise.all(m.stages.map((s) => {
         const d = new Date(deadline)
         d.setDate(d.getDate() - s.daysBeforeDeadline)
+        const finalDate = d < today ? today : d
         return fetch('/api/tasks', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: s.name, parentTaskId: parent.id, importance: 8, urgency: 7, deadline: d.toISOString() }),
+          body: JSON.stringify({ title: s.name, parentTaskId: parent.id, importance: 8, urgency: 7, deadline: finalDate.toISOString() }),
         })
       }))
       const tasksRes = await fetch('/api/tasks')
@@ -548,15 +568,46 @@ export default function RetroplanningPage() {
     setForkDraft(null)
   }
 
+  // Soft delete: add __archived tag, move to bottom
   const handleDeleteTemplate = async (id: string) => {
-    if (!confirm(lang === 'fr' ? 'Supprimer ce modèle ?' : lang === 'zh' ? '確定刪除此模板？' : 'Delete this template?')) return
+    const tmpl = userTemplates.find((t) => t.id === id)
+    if (!tmpl) return
+    const newKeywords = [...tmpl.keywords.filter((k) => k !== '__archived'), '__archived']
+    const res = await fetch('/api/retro-templates', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, keywords: newKeywords }),
+    })
+    if (res.ok) {
+      const updated: RetroTemplate = await res.json()
+      setUserTemplates((prev) => prev.map((t) => t.id === id ? updated : t))
+      toast({ title: lang === 'fr' ? 'Modèle archivé' : lang === 'zh' ? '模板已封存（移至底部）' : 'Template archived', variant: 'success' })
+    }
+  }
+
+  const handleRestoreTemplate = async (id: string) => {
+    const tmpl = userTemplates.find((t) => t.id === id)
+    if (!tmpl) return
+    const newKeywords = tmpl.keywords.filter((k) => k !== '__archived')
+    const res = await fetch('/api/retro-templates', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, keywords: newKeywords }),
+    })
+    if (res.ok) {
+      const updated: RetroTemplate = await res.json()
+      setUserTemplates((prev) => prev.map((t) => t.id === id ? updated : t))
+    }
+  }
+
+  const handlePermanentDeleteTemplate = async (id: string) => {
+    if (!confirm(lang === 'fr' ? 'Supprimer définitivement ?' : lang === 'zh' ? '永久刪除？此操作無法復原。' : 'Delete permanently? This cannot be undone.')) return
     await fetch('/api/retro-templates', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
     })
     setUserTemplates((prev) => prev.filter((t) => t.id !== id))
-    toast({ title: lang === 'fr' ? 'Modèle supprimé' : lang === 'zh' ? '模板已刪除' : 'Template deleted', variant: 'success' })
   }
 
   const handleApplyTemplate = async (task: Task, templateId: string) => {
@@ -574,8 +625,12 @@ export default function RetroplanningPage() {
 
     if (!stages.length) return
 
-    await Promise.all(stages.map((s) =>
-      fetch('/api/tasks', {
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    await Promise.all(stages.map((s) => {
+      const d = new Date(deadline)
+      d.setDate(d.getDate() - s.daysBeforeDeadline)
+      const finalDate = d < today ? today : d
+      return fetch('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -584,10 +639,10 @@ export default function RetroplanningPage() {
           calendarAccountId: task.calendarAccountId,
           importance: task.importance,
           urgency: task.urgency,
-          deadline: stageDate(deadline, s.daysBeforeDeadline).toISOString(),
+          deadline: finalDate.toISOString(),
         }),
       })
-    ))
+    }))
 
     const tasksRes = await fetch('/api/tasks')
     if (tasksRes.ok) setTasks(await tasksRes.json())
@@ -648,76 +703,90 @@ export default function RetroplanningPage() {
           </div>
 
           <div className="flex flex-col gap-0 p-2">
-            {/* All templates unified — built-ins first, then user templates */}
+            {/* Active user templates grouped by category */}
             {(() => {
-              type AnyTmpl = { id: string; name: string; keywords: string[]; stages: { name: string; daysBeforeDeadline: number }[]; isBuiltin: boolean }
-              const all: AnyTmpl[] = [
-                ...BUILTIN_TEMPLATES.map((t) => ({
-                  id: t.id,
-                  name: lang === 'fr' ? t.nameFr : t.name,
-                  keywords: t.keywords,
-                  stages: t.stages.map((s) => ({ name: lang === 'fr' ? s.nameFr : lang === 'zh' ? s.name : s.name, daysBeforeDeadline: s.daysBeforeDeadline })),
-                  isBuiltin: true,
-                })),
-                ...userTemplates.map((t) => ({
-                  id: t.id,
-                  name: t.name,
-                  keywords: stripCatKeywords(t.keywords),
-                  stages: t.stages,
-                  isBuiltin: false,
-                })),
-              ]
-              // Group by category
-              const grouped: Record<string, AnyTmpl[]> = {}
-              for (const tmpl of all) {
-                const cat = tmpl.isBuiltin
-                  ? (tmpl.id === '__study' ? (lang === 'zh' ? '學習' : lang === 'fr' ? 'Études' : 'Study') : (lang === 'zh' ? '工作' : lang === 'fr' ? 'Travail' : 'Work'))
-                  : (getCategory(userTemplates.find((u) => u.id === tmpl.id)?.keywords ?? []) || (lang === 'zh' ? '其他' : lang === 'fr' ? 'Autre' : 'Other'))
+              const active = userTemplates.filter((t) => !t.keywords.includes('__archived'))
+              const archived = userTemplates.filter((t) => t.keywords.includes('__archived'))
+
+              const grouped: Record<string, RetroTemplate[]> = {}
+              for (const tmpl of active) {
+                const cat = getCategory(tmpl.keywords) || (lang === 'zh' ? '其他' : lang === 'fr' ? 'Autre' : 'Other')
                 if (!grouped[cat]) grouped[cat] = []
                 grouped[cat].push(tmpl)
               }
-              return Object.entries(grouped).map(([cat, tmpls]) => (
-                <div key={cat}>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[#a99873] px-3 pt-3 pb-1">{cat}</p>
-                  {tmpls.map((tmpl) => (
-                    <div key={tmpl.id} className="group rounded-xl px-3 py-2.5 hover:bg-[#f3ecdd] transition-colors">
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium text-[#3a3326] flex-1 truncate">{tmpl.name}</p>
-                        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {tmpl.isBuiltin ? (
+
+              const TemplateRow = ({ tmpl, isArchived }: { tmpl: RetroTemplate; isArchived: boolean }) => {
+                const visibleKws = stripCatKeywords(tmpl.keywords).filter((k) => k !== '__archived').slice(0, 4)
+                const totalKws = stripCatKeywords(tmpl.keywords).filter((k) => k !== '__archived').length
+                return (
+                  <div className={`group rounded-xl px-3 py-2.5 hover:bg-[#f3ecdd] transition-colors ${isArchived ? 'opacity-40' : ''}`}>
+                    <div className="flex items-center justify-between">
+                      <p className={`text-sm font-medium flex-1 truncate ${isArchived ? 'text-[#a99873] line-through' : 'text-[#3a3326]'}`}>{tmpl.name}</p>
+                      <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {isArchived ? (
+                          <>
                             <button
-                              onClick={() => { setForkDraft({ name: tmpl.name, keywords: tmpl.keywords, stages: tmpl.stages }); setEditingTemplate('new') }}
-                              title={lang === 'fr' ? 'Personnaliser' : lang === 'zh' ? '自訂' : 'Customize'}
-                              className="p-1 rounded-lg hover:bg-red-100 text-[#a99873] hover:text-red-800"
-                            ><Edit2 className="h-3 w-3" /></button>
-                          ) : (
-                            <>
-                              <button onClick={() => setEditingTemplate(userTemplates.find((u) => u.id === tmpl.id) ?? null)} className="p-1 rounded-lg hover:bg-red-50 text-[#a99873] hover:text-red-800"><Edit2 className="h-3 w-3" /></button>
-                              <button onClick={() => handleDeleteTemplate(tmpl.id)} className="p-1 rounded-lg hover:bg-red-50 text-[#a99873] hover:text-red-500"><Trash2 className="h-3 w-3" /></button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-1 mt-1.5">
-                        {tmpl.keywords.slice(0, 4).map((kw) => (
-                          <span key={kw} className="text-[10px] bg-[#ece2cb] text-[#8a7a5e] rounded-full px-2 py-0.5">{kw}</span>
-                        ))}
-                        {tmpl.keywords.length > 4 && <span className="text-[10px] text-[#a99873]">+{tmpl.keywords.length - 4}</span>}
-                      </div>
-                      <div className="mt-2 flex flex-col gap-0.5">
-                        {tmpl.stages.slice(0, 3).map((s, i) => (
-                          <div key={i} className="flex items-center gap-1.5 text-xs text-[#8a7a5e]">
-                            <span className="h-3.5 w-3.5 rounded-full bg-red-50 text-red-800 text-[9px] font-bold flex items-center justify-center">{i + 1}</span>
-                            <span className="truncate flex-1">{s.name}</span>
-                            <span className="text-[10px] text-[#a99873] shrink-0">−{s.daysBeforeDeadline}j</span>
-                          </div>
-                        ))}
-                        {tmpl.stages.length > 3 && <p className="text-[10px] text-[#a99873] pl-5">+{tmpl.stages.length - 3}</p>}
+                              onClick={() => handleRestoreTemplate(tmpl.id)}
+                              title={lang === 'zh' ? '還原' : lang === 'fr' ? 'Restaurer' : 'Restore'}
+                              className="p-1 rounded-lg hover:bg-green-50 text-[#a99873] hover:text-green-700 text-[10px]"
+                            >↩</button>
+                            <button
+                              onClick={() => handlePermanentDeleteTemplate(tmpl.id)}
+                              title={lang === 'zh' ? '永久刪除' : lang === 'fr' ? 'Supprimer définitivement' : 'Delete permanently'}
+                              className="p-1 rounded-lg hover:bg-red-50 text-[#a99873] hover:text-red-500"
+                            ><Trash2 className="h-3 w-3" /></button>
+                          </>
+                        ) : (
+                          <>
+                            <button onClick={() => setEditingTemplate(tmpl)} className="p-1 rounded-lg hover:bg-red-50 text-[#a99873] hover:text-red-800"><Edit2 className="h-3 w-3" /></button>
+                            <button onClick={() => handleDeleteTemplate(tmpl.id)} className="p-1 rounded-lg hover:bg-red-50 text-[#a99873] hover:text-red-500"><Trash2 className="h-3 w-3" /></button>
+                          </>
+                        )}
                       </div>
                     </div>
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {visibleKws.map((kw) => (
+                        <span key={kw} className="text-[10px] bg-[#ece2cb] text-[#8a7a5e] rounded-full px-2 py-0.5">{kw}</span>
+                      ))}
+                      {totalKws > 4 && <span className="text-[10px] text-[#a99873]">+{totalKws - 4}</span>}
+                    </div>
+                    <div className="mt-2 flex flex-col gap-0.5">
+                      {tmpl.stages.slice(0, 3).map((s, i) => (
+                        <div key={i} className="flex items-center gap-1.5 text-xs text-[#8a7a5e]">
+                          <span className="h-3.5 w-3.5 rounded-full bg-red-50 text-red-800 text-[9px] font-bold flex items-center justify-center">{i + 1}</span>
+                          <span className="truncate flex-1">{s.name}</span>
+                          <span className="text-[10px] text-[#a99873] shrink-0">−{s.daysBeforeDeadline}j</span>
+                        </div>
+                      ))}
+                      {tmpl.stages.length > 3 && <p className="text-[10px] text-[#a99873] pl-5">+{tmpl.stages.length - 3}</p>}
+                    </div>
+                  </div>
+                )
+              }
+
+              return (
+                <>
+                  {Object.entries(grouped).map(([cat, tmpls]) => (
+                    <div key={cat}>
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-[#a99873] px-3 pt-3 pb-1">{cat}</p>
+                      {tmpls.map((tmpl) => <TemplateRow key={tmpl.id} tmpl={tmpl} isArchived={false} />)}
+                    </div>
                   ))}
-                </div>
-              ))
+                  {active.length === 0 && !loadingTemplates && (
+                    <p className="text-xs text-[#a99873] text-center py-6 px-3">
+                      {lang === 'zh' ? '還沒有模板，點「新增」來建立第一個' : lang === 'fr' ? 'Aucun modèle. Cliquez « Nouveau ».' : 'No templates yet. Click "New".'}
+                    </p>
+                  )}
+                  {archived.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-[#c4b48a] px-3 pt-4 pb-1">
+                        {lang === 'zh' ? '已封存' : lang === 'fr' ? 'Archivés' : 'Archived'}
+                      </p>
+                      {archived.map((tmpl) => <TemplateRow key={tmpl.id} tmpl={tmpl} isArchived={true} />)}
+                    </div>
+                  )}
+                </>
+              )
             })()}
             {loadingTemplates && <InkLoader size="sm" />}
           </div>
@@ -780,13 +849,9 @@ export default function RetroplanningPage() {
                 {suggestedTasks.map((task) => {
                   const bestTemplate = (() => {
                     const lower = task.title.toLowerCase()
-                    for (const tmpl of BUILTIN_TEMPLATES) {
-                      if (tmpl.keywords.some((kw) => lower.includes(kw.toLowerCase()))) return tmpl
-                    }
-                    for (const tmpl of userTemplates) {
-                      if (tmpl.keywords.some((kw) => lower.includes(kw.toLowerCase()))) return { ...tmpl, nameFr: tmpl.name }
-                    }
-                    return null
+                    return userTemplates
+                      .filter((t) => !t.keywords.includes('__archived'))
+                      .find((t) => stripCatKeywords(t.keywords).some((kw) => lower.includes(kw.toLowerCase()))) ?? null
                   })()
 
                   return (
@@ -804,7 +869,7 @@ export default function RetroplanningPage() {
                       {bestTemplate && (
                         <div className="flex items-center gap-2 shrink-0">
                           <span className="text-xs text-red-800 font-medium">
-                            {lang === 'fr' ? (bestTemplate as BuiltinTemplate).nameFr ?? bestTemplate.name : lang === 'zh' ? bestTemplate.name : bestTemplate.name}
+                            {bestTemplate.name}
                           </span>
                           <Button
                             size="sm"
@@ -951,6 +1016,7 @@ export default function RetroplanningPage() {
           onDelete={editingTemplate && editingTemplate !== 'new' ? () => { handleDeleteTemplate(editingTemplate.id); setEditingTemplate(undefined) } : undefined}
           onClose={() => { setEditingTemplate(undefined); setForkDraft(null) }}
           lang={lang}
+          allTemplates={userTemplates}
         />
       )}
 
