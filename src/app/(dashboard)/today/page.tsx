@@ -738,40 +738,37 @@ export default function TodayPage() {
                     ))}
                   </div>
                 )}
+
+                {completedToday.length > 0 && (
+                  <div className="mt-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="flex-1 h-px bg-[#e7c894]/50" />
+                      <h3 className="text-xs font-semibold text-[#8a6b3e] flex items-center gap-1.5 shrink-0">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        {language === 'fr' ? `Terminées (${completedToday.length})` : language === 'zh' ? `已完成 (${completedToday.length})` : `Done (${completedToday.length})`}
+                      </h3>
+                      <div className="flex-1 h-px bg-[#e7c894]/50" />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {completedToday.slice(0, 5).map((task) => (
+                        <TaskCard
+                          key={task.id}
+                          task={task}
+                          onComplete={handleComplete}
+                          onEdit={(t) => { setEditingTask(t); setShowTaskForm(true) }}
+                          onDelete={handleDelete}
+                          onBreakdown={setBreakdownTask}
+                          onReschedule={handleReschedule}
+                          lang={language}
+                          compact
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </DroppableTasksPanel>
             </div>
           </DndContext>
-
-          {completedToday.length > 0 && (
-            <div>
-              {/* Ink separator */}
-              <div className="flex items-center gap-3 mb-4">
-                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#c9aa72]/50 to-transparent" />
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/logo_v5/Waterprint_Social Media.png" alt="" className="h-6 w-auto opacity-35" />
-                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#c9aa72]/50 to-transparent" />
-              </div>
-              <h2 className="text-sm font-semibold text-[#8a6b3e] mb-3 flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4" />
-                {language === 'fr' ? `Terminées aujourd'hui (${completedToday.length})` : language === 'zh' ? `今日已完成 (${completedToday.length})` : `Completed today (${completedToday.length})`}
-              </h2>
-              <div className="flex flex-col gap-2">
-                {completedToday.slice(0, 5).map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onComplete={handleComplete}
-                    onEdit={(t) => { setEditingTask(t); setShowTaskForm(true) }}
-                    onDelete={handleDelete}
-                    onBreakdown={setBreakdownTask}
-                    onReschedule={handleReschedule}
-                    lang={language}
-                    compact
-                  />
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         {AI_ENABLED && showChat && (
