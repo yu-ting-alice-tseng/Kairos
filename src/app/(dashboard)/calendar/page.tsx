@@ -282,9 +282,14 @@ export default function CalendarPage() {
   const getDeadlineTasksForDay = (day: Date) =>
     tasks.filter((task) => {
       if (!task.deadline) return false
-      if (task.scheduledStart) return false
-      if (task.status === 'COMPLETED' || task.status === 'CANCELLED') return false
-      return isSameDay(new Date(task.deadline), day)
+      if (task.scheduledStart) return false // has a specific time slot already
+      if (task.status === 'CANCELLED') return false
+      return isSameDay(new Date(String(task.deadline)), day)
+    }).sort((a, b) => {
+      // completed last
+      const aD = a.status === 'COMPLETED' ? 1 : 0
+      const bD = b.status === 'COMPLETED' ? 1 : 0
+      return aD - bD
     })
 
   const getAllDayEventsForDay = (day: Date) => {
@@ -786,7 +791,8 @@ export default function CalendarPage() {
             {weekDays.map((day, dayIdx) => {
               const allDayEvs = getAllDayEventsForDay(day)
               const allDayHabits = getHabitsAllDayForDay(day)
-              const total = allDayEvs.length + allDayHabits.length
+              const deadlineTasks = getDeadlineTasksForDay(day)
+              const total = allDayEvs.length + allDayHabits.length + deadlineTasks.length
               const isPreviewHere = isDragging && dragPreview?.dayIdx === dayIdx && (dragPreview?.hour ?? 7) < 7
               return (
                 <div
@@ -826,6 +832,28 @@ export default function CalendarPage() {
                           : <span className="h-2 w-2 rounded-full border shrink-0" style={{ borderColor: habit.color }} />
                         }
                         <span className={cn('truncate', doneToday && 'line-through')}>{habit.icon ?? '🔁'} {habit.title}</span>
+                      </div>
+                    )
+                  })}
+                  {deadlineTasks.map((task) => {
+                    const done = task.status === 'COMPLETED'
+                    const qId = getQuadrant(task.importance, task.urgency)
+                    const q = EISENHOWER_QUADRANTS.find((qq) => qq.id === qId)
+                    const acc = calendarAccounts.find((a) => a.id === task.calendarAccountId)
+                    const borderColor = acc?.color ?? (q ? undefined : '#a99873')
+                    return (
+                      <div
+                        key={task.id}
+                        className={cn(
+                          'rounded px-1.5 py-0.5 text-xs mb-0.5 truncate border cursor-pointer hover:brightness-95 transition-all',
+                          done ? 'opacity-50 bg-emerald-50 border-emerald-200' : cn(q?.bgColor, 'border-[#e2d6bc]')
+                        )}
+                        style={!done && borderColor ? { borderLeftColor: borderColor, borderLeftWidth: 2 } : {}}
+                        title={`${task.title} — I:${task.importance} U:${task.urgency}`}
+                        onClick={(e) => { e.stopPropagation(); handleTaskClick(task) }}
+                      >
+                        <span className={cn(done ? 'line-through text-[#a99873]' : 'text-[#2a2420]')}>{task.title}</span>
+                        <span className="ml-1 text-[10px] opacity-60">I:{task.importance} U:{task.urgency}</span>
                       </div>
                     )
                   })}
