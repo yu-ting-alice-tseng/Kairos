@@ -820,6 +820,13 @@ export default function RetroplanningPage() {
                     <span className="text-[11px] text-amber-500 shrink-0">{m.date}</span>
                     <span className="text-[11px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 shrink-0">{m.templateName}</span>
                     <button
+                      onClick={(e) => { e.stopPropagation(); setScanMatches((prev) => prev.filter((x) => x.title !== m.title)) }}
+                      className="p-1 rounded-lg text-amber-400 hover:text-amber-700 hover:bg-amber-100 transition-colors shrink-0"
+                      title={lang === 'zh' ? '移除' : lang === 'fr' ? 'Ignorer' : 'Dismiss'}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                    <button
                       onClick={(e) => { e.stopPropagation(); handleCreateFromScan(m) }}
                       disabled={scanCreating === m.title}
                       className="flex items-center gap-1 text-[11px] bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-2.5 py-1 disabled:opacity-60 transition-colors shrink-0"
