@@ -405,6 +405,62 @@ export default function RetroplanningPage() {
   const [forkDraft, setForkDraft] = useState<{ name: string; keywords: string[]; stages: RetroStage[] } | null>(null)
   const [selectedChainId, setSelectedChainId] = useState<string | null>(null)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [deleteChainDialog, setDeleteChainDialog] = useState<{ parentId: string; parentTitle: string; childIds: string[] } | null>(null)
+  const [deleteChainLoading, setDeleteChainLoading] = useState(false)
+
+  // Prefer the first Google calendar account for event creation
+  const googleCalendarAccount = calendarAccounts.find((a) => (a as { provider?: string }).provider === 'GOOGLE') ?? calendarAccounts[0] ?? null
+
+  const createCalendarEvent = async (title: string, date: Date): Promise<string | null> => {
+    if (!googleCalendarAccount) return null
+    try {
+      const end = new Date(date.getTime() + 60 * 60 * 1000) // +1h
+      const res = await fetch('/api/calendar/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          calendarAccountId: googleCalendarAccount.id,
+          calendarId: 'primary',
+          title,
+          start: date.toISOString(),
+          end: end.toISOString(),
+          allDay: false,
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        return data.eventId ?? null
+      }
+    } catch { /* best-effort */ }
+    return null
+  }
+
+  const handleDeleteChain = async (mode: 'delete' | 'unlink') => {
+    if (!deleteChainDialog) return
+    setDeleteChainLoading(true)
+    const { parentId, childIds } = deleteChainDialog
+    try {
+      if (mode === 'delete') {
+        await Promise.all([...childIds, parentId].map((id) => fetch(`/api/tasks/${id}`, { method: 'DELETE' })))
+        setTasks(tasks.filter((t) => t.id !== parentId && !childIds.includes(t.id)))
+      } else {
+        // Unlink: remove parentTaskId from children, keep all tasks
+        await Promise.all(childIds.map((id) =>
+          fetch(`/api/tasks/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ parentTaskId: null }),
+          })
+        ))
+        const tasksRes = await fetch('/api/tasks')
+        if (tasksRes.ok) setTasks(await tasksRes.json())
+      }
+    } finally {
+      setDeleteChainLoading(false)
+      setDeleteChainDialog(null)
+      setSelectedChainId(null)
+    }
+  }
 
   // 1-minute calendar scan: upcoming events matching template keywords
   interface ScanMatch {
@@ -474,14 +530,24 @@ export default function RetroplanningPage() {
       if (!parentRes.ok) throw new Error()
       const parent = await parentRes.json()
       const today = new Date(); today.setHours(0, 0, 0, 0)
-      await Promise.all(m.stages.map((s) => {
+      await Promise.all(m.stages.map(async (s) => {
         const d = new Date(deadline)
         d.setDate(d.getDate() - s.daysBeforeDeadline)
         const finalDate = d < today ? today : d
+        // Create Google Calendar event for this stage
+        const calEventId = await createCalendarEvent(s.name, finalDate)
         return fetch('/api/tasks', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: s.name, parentTaskId: parent.id, importance: 8, urgency: 7, deadline: finalDate.toISOString() }),
+          body: JSON.stringify({
+            title: s.name,
+            parentTaskId: parent.id,
+            importance: 8,
+            urgency: 7,
+            deadline: finalDate.toISOString(),
+            calendarEventId: calEventId ?? undefined,
+            calendarAccountId: googleCalendarAccount?.id ?? undefined,
+          }),
         })
       }))
       const tasksRes = await fetch('/api/tasks')
@@ -626,20 +692,22 @@ export default function RetroplanningPage() {
     if (!stages.length) return
 
     const today = new Date(); today.setHours(0, 0, 0, 0)
-    await Promise.all(stages.map((s) => {
+    await Promise.all(stages.map(async (s) => {
       const d = new Date(deadline)
       d.setDate(d.getDate() - s.daysBeforeDeadline)
       const finalDate = d < today ? today : d
+      const calEventId = await createCalendarEvent(s.name, finalDate)
       return fetch('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: s.name,
           parentTaskId: task.id,
-          calendarAccountId: task.calendarAccountId,
+          calendarAccountId: task.calendarAccountId ?? googleCalendarAccount?.id,
           importance: task.importance,
           urgency: task.urgency,
           deadline: finalDate.toISOString(),
+          calendarEventId: calEventId ?? undefined,
         }),
       })
     }))
@@ -675,7 +743,7 @@ export default function RetroplanningPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-5 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10">
+      <div className="flex items-center justify-between px-6 h-[72px] shrink-0 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10">
         <div className="flex items-center gap-2.5">
           <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-red-500 to-amber-700 flex items-center justify-center shadow-md shadow-red-500/20">
             <GitBranch className="h-4 w-4 text-white" />
@@ -949,9 +1017,9 @@ export default function RetroplanningPage() {
                             lang={lang}
                           />
                         </div>
-                        <div className="flex items-center gap-3 shrink-0">
+                        <div className="flex items-center gap-2 shrink-0">
                           <div className="flex items-center gap-1.5">
-                            <div className="w-24 h-1.5 rounded-full bg-[#ece2cb] overflow-hidden">
+                            <div className="w-20 h-1.5 rounded-full bg-[#ece2cb] overflow-hidden">
                               <div
                                 className={cn('h-full rounded-full transition-all', allDone ? 'bg-emerald-500' : 'bg-red-500')}
                                 style={{ width: `${donePct}%` }}
@@ -959,6 +1027,13 @@ export default function RetroplanningPage() {
                             </div>
                             <span className="text-xs text-[#a99873] font-mono">{donePct}%</span>
                           </div>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDeleteChainDialog({ parentId: parent.id, parentTitle: parent.title, childIds: children.map((c) => c.id) }) }}
+                            className="p-1 rounded-lg hover:bg-red-50 text-[#c4b48a] hover:text-red-500 transition-colors"
+                            title={lang === 'zh' ? '刪除鏈' : lang === 'fr' ? 'Supprimer la chaîne' : 'Delete chain'}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
                           {isActive ? <ChevronDown className="h-4 w-4 text-[#a99873]" /> : <ChevronRight className="h-4 w-4 text-[#a99873]" />}
                         </div>
                       </div>
@@ -1091,6 +1166,59 @@ export default function RetroplanningPage() {
         calendarAccounts={calendarAccounts}
         lang={lang}
       />
+
+      {/* Delete chain dialog */}
+      {deleteChainDialog && (
+        <Dialog open onOpenChange={() => setDeleteChainDialog(null)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <Trash2 className="h-4 w-4 text-red-600" />
+                {lang === 'zh' ? '刪除任務鏈' : lang === 'fr' ? 'Supprimer la chaîne' : 'Delete chain'}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-3 py-1">
+              <p className="text-sm text-[#5c5347]">
+                <span className="font-medium text-[#2a2420]">「{deleteChainDialog.parentTitle}」</span>
+                {lang === 'zh'
+                  ? ` 共有 ${deleteChainDialog.childIds.length} 個階段任務。`
+                  : lang === 'fr'
+                  ? ` comporte ${deleteChainDialog.childIds.length} étape(s).`
+                  : ` has ${deleteChainDialog.childIds.length} stage(s).`}
+              </p>
+              <p className="text-xs text-[#8a7a5e]">
+                {lang === 'zh'
+                  ? '要刪除所有任務，還是只解除它們的連結關係（保留任務本身）？'
+                  : lang === 'fr'
+                  ? 'Voulez-vous supprimer toutes les tâches ou seulement dissocier la chaîne (conserver les tâches) ?'
+                  : 'Delete all tasks, or just unlink them (keep tasks but remove chain connection)?'}
+              </p>
+            </div>
+            <DialogFooter className="flex-col gap-2 sm:flex-row">
+              <Button variant="outline" onClick={() => setDeleteChainDialog(null)} disabled={deleteChainLoading}>
+                {lang === 'zh' ? '取消' : lang === 'fr' ? 'Annuler' : 'Cancel'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleDeleteChain('unlink')}
+                disabled={deleteChainLoading}
+                className="border-amber-300 text-amber-800 hover:bg-amber-50"
+              >
+                {deleteChainLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {lang === 'zh' ? '只解除連結' : lang === 'fr' ? 'Dissocier seulement' : 'Unlink only'}
+              </Button>
+              <Button
+                onClick={() => handleDeleteChain('delete')}
+                disabled={deleteChainLoading}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {deleteChainLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {lang === 'zh' ? '刪除全部任務' : lang === 'fr' ? 'Tout supprimer' : 'Delete all'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }

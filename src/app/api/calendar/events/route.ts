@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { listGoogleEvents, updateGoogleEvent, deleteGoogleEvent } from '@/lib/calendar/google'
+import { listGoogleEvents, createGoogleEvent, updateGoogleEvent, deleteGoogleEvent } from '@/lib/calendar/google'
 import { listOutlookEvents } from '@/lib/calendar/outlook'
 import { listNotionEvents } from '@/lib/calendar/notion'
 import { CalendarEvent } from '@/types'
@@ -96,6 +96,36 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json(allEvents)
+}
+
+// POST — create a Google Calendar event and return its id
+export async function POST(req: NextRequest) {
+  const session = await auth()
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { calendarAccountId, calendarId, title, description, start, end, allDay } = await req.json()
+
+  const account = await prisma.calendarAccount.findFirst({
+    where: { id: calendarAccountId, userId },
+  })
+  if (!account?.accessToken) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+
+  if (account.provider === 'GOOGLE') {
+    const startDate = new Date(start)
+    const endDate = end ? new Date(end) : new Date(startDate.getTime() + 60 * 60 * 1000)
+    const eventId = await createGoogleEvent(
+      account.id,
+      account.accessToken,
+      calendarId ?? 'primary',
+      { title, description, start: startDate, end: endDate, allDay: !!allDay },
+      account.refreshToken,
+      account.expiresAt
+    )
+    return NextResponse.json({ eventId })
+  }
+
+  return NextResponse.json({ error: 'Provider does not support creation' }, { status: 400 })
 }
 
 // PATCH — update a Google Calendar event

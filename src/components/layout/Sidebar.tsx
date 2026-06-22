@@ -111,7 +111,7 @@ export function Sidebar() {
       {collapsed && (
         <button
           onClick={() => setCollapsed(false)}
-          className="absolute -right-[13px] top-[76px] z-10 h-6 w-6 rounded-full bg-[#3d2e1a] border border-[rgba(225,200,150,0.14)] shadow-lg flex items-center justify-center text-[#8a7a5e] hover:text-[#d9c79f] transition-all"
+          className="absolute -right-[13px] top-[76px] z-30 h-6 w-6 rounded-full bg-[#3d2e1a] border border-[rgba(225,200,150,0.14)] shadow-lg flex items-center justify-center text-[#8a7a5e] hover:text-[#d9c79f] transition-all"
         >
           <ChevronRight className="h-3 w-3" />
         </button>
