@@ -1165,24 +1165,67 @@ function EventDetailPanel({
   }, [event.title, tasks, chainParent])
 
   const [linkingChain, setLinkingChain] = React.useState(false)
+  const [linkMode, setLinkMode] = React.useState<'tasks' | 'events'>('tasks')
   const [availableEvents, setAvailableEvents] = React.useState<{ id: string; title: string; start: string }[]>([])
   const [selectedLinkIds, setSelectedLinkIds] = React.useState<Set<string>>(new Set())
   const [linkSaving, setLinkSaving] = React.useState(false)
   const [linkSearch, setLinkSearch] = React.useState('')
+  const [newTaskSaving, setNewTaskSaving] = React.useState(false)
 
-  const openLinkDialog = async () => {
+  // Relevance: count event-title chars found in task title (higher = more relevant)
+  const relevanceScore = React.useCallback((taskTitle: string): number => {
+    const evChars = new Set(event.title.toLowerCase().replace(/\s/g, '').split(''))
+    let score = 0
+    for (const c of taskTitle.toLowerCase().replace(/\s/g, '').split('')) {
+      if (evChars.has(c)) score++
+    }
+    return score
+  }, [event.title])
+
+  const handleCreateTask = async () => {
+    setNewTaskSaving(true)
+    try {
+      await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: event.title, calendarEventId: event.id, deadline: event.start, importance: 7, urgency: 6 }),
+      })
+      onTasksRefresh()
+    } catch { /* ignore */ } finally { setNewTaskSaving(false) }
+  }
+
+  const handleLinkExistingTasks = async () => {
+    if (selectedLinkIds.size === 0) return
+    setLinkSaving(true)
+    try {
+      await Promise.all([...selectedLinkIds].map((id) =>
+        fetch(`/api/tasks/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ calendarEventId: event.id }),
+        })
+      ))
+      onTasksRefresh()
+      setLinkingChain(false)
+    } catch { /* ignore */ } finally { setLinkSaving(false) }
+  }
+
+  const openLinkDialog = async (mode: 'tasks' | 'events' = 'tasks') => {
+    setLinkMode(mode)
     setLinkingChain(true)
     setSelectedLinkIds(new Set())
     setLinkSearch('')
-    const start = new Date().toISOString()
-    const end = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
-    try {
-      const res = await fetch(`/api/calendar/events?start=${start}&end=${end}`)
-      if (res.ok) {
-        const evs: { id: string; title: string; start: string }[] = await res.json()
-        setAvailableEvents(evs.filter((e) => e.id !== event.id))
-      }
-    } catch { /* best-effort */ }
+    if (mode === 'events') {
+      const start = new Date().toISOString()
+      const end = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
+      try {
+        const res = await fetch(`/api/calendar/events?start=${start}&end=${end}`)
+        if (res.ok) {
+          const evs: { id: string; title: string; start: string }[] = await res.json()
+          setAvailableEvents(evs.filter((e) => e.id !== event.id))
+        }
+      } catch { /* best-effort */ }
+    }
   }
 
   const handleCreateChain = async () => {
@@ -1380,76 +1423,122 @@ function EventDetailPanel({
               ))}
             </div>
           ) : (
-            <button
-              onClick={openLinkDialog}
-              className="flex items-center gap-1.5 text-xs text-[#8a7a5e] hover:text-[#ab3326] border border-dashed border-[#e2d6bc] rounded-lg px-3 py-2 hover:border-red-300 transition-colors"
-            >
-              <Plus className="h-3 w-3" />
-              {lang === 'fr' ? 'Lier des étapes' : lang === 'zh' ? '連結其他行程為鏈' : 'Link events as chain'}
-            </button>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => openLinkDialog('tasks')}
+                className="flex-1 flex items-center justify-center gap-1.5 text-xs text-[#8a7a5e] hover:text-[#ab3326] border border-dashed border-[#e2d6bc] rounded-lg px-3 py-2 hover:border-red-300 transition-colors"
+              >
+                <GitBranch className="h-3 w-3" />
+                {lang === 'fr' ? 'Lier une tâche' : lang === 'zh' ? '連結既有任務' : 'Link task'}
+              </button>
+              <button
+                onClick={handleCreateTask}
+                disabled={newTaskSaving}
+                className="flex-1 flex items-center justify-center gap-1.5 text-xs text-white bg-[#ab3326] hover:bg-[#861f17] rounded-lg px-3 py-2 transition-colors disabled:opacity-50"
+              >
+                {newTaskSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                {lang === 'fr' ? 'Créer' : lang === 'zh' ? '新增任務' : 'Create task'}
+              </button>
+            </div>
           )}
         </div>
 
         {/* Link chain dialog */}
         {linkingChain && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setLinkingChain(false)}>
-            <div className="bg-[#fbf7ee] rounded-2xl border border-[#e2d6bc] shadow-xl w-80 max-h-[70vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-[#fbf7ee] rounded-2xl border border-[#e2d6bc] shadow-xl w-80 max-h-[75vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+              {/* Header */}
               <div className="px-4 py-3 border-b border-[#ece2cb] flex items-center justify-between">
                 <p className="text-sm font-semibold text-[#2a2420]">
-                  {lang === 'zh' ? '選擇要連結的行程' : lang === 'fr' ? 'Sélectionner les étapes' : 'Select events to link'}
+                  {lang === 'zh' ? '連結任務' : lang === 'fr' ? 'Lier une tâche' : 'Link a task'}
                 </p>
                 <button onClick={() => setLinkingChain(false)} className="p-1 rounded-lg hover:bg-[#ece2cb] text-[#a99873]">
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
+              {/* Mode tabs */}
+              <div className="px-4 pt-2 pb-1 flex gap-1">
+                {(['tasks', 'events'] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => { setLinkMode(m); setSelectedLinkIds(new Set()); if (m === 'events' && availableEvents.length === 0) openLinkDialog('events') }}
+                    className={`flex-1 text-[11px] rounded-lg py-1.5 font-medium transition-colors ${linkMode === m ? 'bg-[#ab3326] text-white' : 'bg-[#ece2cb] text-[#5c5347] hover:bg-[#e2d6bc]'}`}
+                  >
+                    {m === 'tasks'
+                      ? (lang === 'zh' ? '既有任務' : lang === 'fr' ? 'Tâches existantes' : 'Existing tasks')
+                      : (lang === 'zh' ? '日曆行程' : lang === 'fr' ? 'Événements' : 'Calendar events')}
+                  </button>
+                ))}
+              </div>
+              {/* Search */}
               <div className="px-4 py-2 border-b border-[#ece2cb]">
                 <input
                   className="w-full border border-[#e2d6bc] rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-red-300 bg-white"
-                  placeholder={lang === 'zh' ? '搜尋行程...' : lang === 'fr' ? 'Rechercher...' : 'Search events...'}
+                  placeholder={lang === 'zh' ? '搜尋...' : lang === 'fr' ? 'Rechercher...' : 'Search...'}
                   value={linkSearch}
                   onChange={(e) => setLinkSearch(e.target.value)}
                 />
               </div>
+              {/* List */}
               <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1">
-                {availableEvents
-                  .filter((e) => !linkSearch || e.title.toLowerCase().includes(linkSearch.toLowerCase()))
-                  .slice(0, 30)
-                  .map((e) => (
-                    <button
-                      key={e.id}
-                      onClick={() => setSelectedLinkIds((prev) => {
-                        const next = new Set(prev)
-                        next.has(e.id) ? next.delete(e.id) : next.add(e.id)
-                        return next
-                      })}
-                      className={`flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 text-left transition-colors ${selectedLinkIds.has(e.id) ? 'bg-red-50 border border-red-200' : 'hover:bg-[#f3ecdd] border border-transparent'}`}
-                    >
-                      <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${selectedLinkIds.has(e.id) ? 'bg-red-600 border-red-600' : 'border-[#c4b48a]'}`}>
-                        {selectedLinkIds.has(e.id) && <Check className="h-2.5 w-2.5 text-white" />}
-                      </span>
-                      <span className="truncate flex-1 text-[#3a3326]">{e.title}</span>
-                      <span className="text-[#a99873] shrink-0">
-                        {new Date(e.start).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
-                      </span>
-                    </button>
-                  ))}
-                {availableEvents.length === 0 && (
-                  <p className="text-xs text-[#a99873] text-center py-4">
-                    {lang === 'zh' ? '載入中...' : 'Loading...'}
-                  </p>
+                {linkMode === 'tasks' ? (
+                  tasks
+                    .filter((t) => !linkSearch || t.title.toLowerCase().includes(linkSearch.toLowerCase()))
+                    .sort((a, b) => relevanceScore(b.title) - relevanceScore(a.title))
+                    .slice(0, 40)
+                    .map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => setSelectedLinkIds((prev) => { const n = new Set(prev); n.has(t.id) ? n.delete(t.id) : n.add(t.id); return n })}
+                        className={`flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 text-left transition-colors ${selectedLinkIds.has(t.id) ? 'bg-red-50 border border-red-200' : 'hover:bg-[#f3ecdd] border border-transparent'}`}
+                      >
+                        <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${selectedLinkIds.has(t.id) ? 'bg-red-600 border-red-600' : 'border-[#c4b48a]'}`}>
+                          {selectedLinkIds.has(t.id) && <Check className="h-2.5 w-2.5 text-white" />}
+                        </span>
+                        <span className="truncate flex-1 text-[#3a3326]">{t.title}</span>
+                        {t.deadline && (
+                          <span className="text-[#a99873] shrink-0 text-[10px]">
+                            {new Date(String(t.deadline)).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
+                          </span>
+                        )}
+                      </button>
+                    ))
+                ) : (
+                  availableEvents
+                    .filter((e) => !linkSearch || e.title.toLowerCase().includes(linkSearch.toLowerCase()))
+                    .slice(0, 30)
+                    .map((e) => (
+                      <button
+                        key={e.id}
+                        onClick={() => setSelectedLinkIds((prev) => { const n = new Set(prev); n.has(e.id) ? n.delete(e.id) : n.add(e.id); return n })}
+                        className={`flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 text-left transition-colors ${selectedLinkIds.has(e.id) ? 'bg-red-50 border border-red-200' : 'hover:bg-[#f3ecdd] border border-transparent'}`}
+                      >
+                        <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${selectedLinkIds.has(e.id) ? 'bg-red-600 border-red-600' : 'border-[#c4b48a]'}`}>
+                          {selectedLinkIds.has(e.id) && <Check className="h-2.5 w-2.5 text-white" />}
+                        </span>
+                        <span className="truncate flex-1 text-[#3a3326]">{e.title}</span>
+                        <span className="text-[#a99873] shrink-0 text-[10px]">
+                          {new Date(e.start).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
+                        </span>
+                      </button>
+                    ))
+                )}
+                {linkMode === 'events' && availableEvents.length === 0 && (
+                  <p className="text-xs text-[#a99873] text-center py-4">{lang === 'zh' ? '載入中...' : 'Loading...'}</p>
                 )}
               </div>
+              {/* Footer */}
               <div className="px-4 py-3 border-t border-[#ece2cb] flex gap-2">
                 <button onClick={() => setLinkingChain(false)} className="flex-1 rounded-xl border border-[#e2d6bc] text-[#5c5347] text-xs py-2 hover:bg-[#ece2cb] transition-colors">
                   {lang === 'zh' ? '取消' : lang === 'fr' ? 'Annuler' : 'Cancel'}
                 </button>
                 <button
-                  onClick={handleCreateChain}
+                  onClick={linkMode === 'tasks' ? handleLinkExistingTasks : handleCreateChain}
                   disabled={selectedLinkIds.size === 0 || linkSaving}
                   className="flex-1 rounded-xl bg-[#ab3326] text-white text-xs py-2 hover:bg-[#861f17] transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
                 >
                   {linkSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitBranch className="h-3.5 w-3.5" />}
-                  {lang === 'zh' ? `連結 ${selectedLinkIds.size} 個行程` : lang === 'fr' ? `Lier (${selectedLinkIds.size})` : `Link (${selectedLinkIds.size})`}
+                  {lang === 'zh' ? `連結 (${selectedLinkIds.size})` : lang === 'fr' ? `Lier (${selectedLinkIds.size})` : `Link (${selectedLinkIds.size})`}
                 </button>
               </div>
             </div>

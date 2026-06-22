@@ -179,11 +179,11 @@ const [habitPanelOpen, setHabitPanelOpen] = useState(true)
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-6 py-5 border-b border-[#ece2cb] bg-[#fbf7ee] sticky top-0 z-10">
+      <div className="flex items-center justify-between px-6 py-5 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             <LayoutGrid className="h-5 w-5 text-red-800" />
-            <h1 className="text-xl font-bold text-[#2a2420]">{t('matrix', language)}</h1>
+            <h1 className="text-2xl font-serif text-[#2a2420]">{t('matrix', language)}</h1>
           </div>
           <span className="text-sm text-[#8a7a5e]">
             {language === 'fr' ? 'Glissez les tâches pour les prioriser' : language === 'zh' ? '拖曳任務以排定優先順序' : 'Drag tasks to prioritize'}

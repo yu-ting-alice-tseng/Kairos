@@ -675,13 +675,13 @@ export default function RetroplanningPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-5 border-b border-[#ece2cb] bg-[#fbf7ee] sticky top-0 z-10">
+      <div className="flex items-center justify-between px-6 py-5 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10">
         <div className="flex items-center gap-2.5">
           <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-red-500 to-amber-700 flex items-center justify-center shadow-md shadow-red-500/20">
             <GitBranch className="h-4 w-4 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-[#2a2420]">{t('retroplanning', lang)}</h1>
+            <h1 className="text-2xl font-serif text-[#2a2420]">{t('retroplanning', lang)}</h1>
             <p className="text-xs text-[#8a7a5e] mt-0.5">
               {lang === 'fr' ? 'Modèles + chaînes de tâches liées' : lang === 'zh' ? '模板＋關聯任務鏈' : 'Templates + linked task chains'}
             </p>

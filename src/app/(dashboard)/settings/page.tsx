@@ -666,9 +666,11 @@ export default function SettingsPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center px-6 py-5 border-b border-[#ece2cb] bg-[#fbf7ee] sticky top-0 z-10">
-        <Settings className="h-5 w-5 text-red-800 mr-2" />
-        <h1 className="text-xl font-bold text-[#2a2420]">{t('settings', language)}</h1>
+      <div className="flex items-center justify-between px-6 py-5 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10">
+        <div className="flex items-center gap-2.5">
+          <Settings className="h-5 w-5 text-red-800" />
+          <h1 className="text-2xl font-serif text-[#2a2420]">{t('settings', language)}</h1>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6">
