@@ -310,10 +310,34 @@ export default function TodayPage() {
         setTasks(tasks.map((t) => t.id === editingTask.id ? updated : t))
       }
     } else {
+      // Sync new task to Google Calendar if a calendar account is selected
+      let calendarEventId: string | undefined
+      if (data.calendarAccountId && data.deadline) {
+        try {
+          const evStart = new Date(String(data.deadline))
+          const evEnd = new Date(evStart.getTime() + 60 * 60 * 1000)
+          const evRes = await fetch('/api/calendar/events', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              calendarAccountId: data.calendarAccountId,
+              calendarId: 'primary',
+              title: data.title,
+              start: evStart.toISOString(),
+              end: evEnd.toISOString(),
+            }),
+          })
+          if (evRes.ok) {
+            const evData = await evRes.json()
+            calendarEventId = evData.eventId
+          }
+        } catch { /* best-effort */ }
+      }
+
       const res = await fetch('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, calendarEventId }),
       })
       if (res.ok) {
         const created = await res.json()

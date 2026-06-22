@@ -144,6 +144,7 @@ export default function CalendarPage() {
   const [eventsLoading, setEventsLoading] = useState(false)
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
   const [eventSaving, setEventSaving] = useState(false)
+  const [viewingHabit, setViewingHabit] = useState<Habit | null>(null)
   const [userTemplates, setUserTemplates] = useState<RetroTemplate[]>([])
   const [retroSuggestion, setRetroSuggestion] = useState<RetroSuggestion | null>(null)
   const [retroSuggestionSaving, setRetroSuggestionSaving] = useState(false)
@@ -459,10 +460,38 @@ export default function CalendarPage() {
         toast({ title: language === 'fr' ? 'Tâche modifiée' : language === 'zh' ? '任務已更新' : 'Task updated', variant: 'success' })
       }
     } else {
+      // Create Google Calendar event first if a calendar account is selected
+      let calendarEventId: string | undefined
+      if (payload.calendarAccountId && (payload.scheduledStart || payload.deadline)) {
+        try {
+          const evStart = payload.scheduledStart
+            ? new Date(payload.scheduledStart)
+            : new Date(String(payload.deadline))
+          const evEnd = payload.scheduledEnd
+            ? new Date(payload.scheduledEnd)
+            : new Date(evStart.getTime() + 60 * 60 * 1000)
+          const evRes = await fetch('/api/calendar/events', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              calendarAccountId: payload.calendarAccountId,
+              calendarId: 'primary',
+              title: payload.title,
+              start: evStart.toISOString(),
+              end: evEnd.toISOString(),
+            }),
+          })
+          if (evRes.ok) {
+            const evData = await evRes.json()
+            calendarEventId = evData.eventId
+          }
+        } catch { /* best-effort */ }
+      }
+
       const res = await fetch('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, calendarEventId }),
       })
       if (res.ok) {
         const created = await res.json()
@@ -790,7 +819,7 @@ export default function CalendarPage() {
                         className={cn('rounded px-1.5 py-0.5 text-xs mb-0.5 truncate border border-dashed select-none flex items-center gap-1 cursor-pointer', doneToday && 'opacity-60')}
                         style={{ backgroundColor: habit.color + '18', borderColor: habit.color, color: habit.color }}
                         title={habit.title}
-                        onClick={() => isToday(day) && handleCompleteHabit(habit)}
+                        onClick={() => setViewingHabit(habit)}
                       >
                         {doneToday
                           ? <CheckCircle2 className="h-2.5 w-2.5 shrink-0" />
@@ -943,7 +972,7 @@ export default function CalendarPage() {
                             doneToday ? 'border-emerald-200 opacity-60' : 'border-dashed cursor-pointer hover:brightness-95'
                           )}
                           style={{ ...boxStyle, backgroundColor: habit.color + '18', borderColor: habit.color, color: habit.color }}
-                          onClick={() => !doneToday && handleCompleteHabit(habit)}
+                          onClick={(e) => { e.stopPropagation(); setViewingHabit(habit) }}
                         >
                           <p className={cn('font-medium truncate', doneToday && 'line-through')}>
                             {habit.icon ?? '🔁'} {habit.title}
@@ -1001,6 +1030,13 @@ export default function CalendarPage() {
             const res = await fetch('/api/tasks')
             if (res.ok) setTasks(await res.json())
           }}
+        />
+      ) : viewingHabit ? (
+        <HabitDetailPanel
+          habit={viewingHabit}
+          lang={language}
+          onComplete={() => handleCompleteHabit(viewingHabit)}
+          onClose={() => setViewingHabit(null)}
         />
       ) : null}
 
@@ -1120,6 +1156,72 @@ function RetroSuggestionBanner({
 
 // ─── Edit event modal ─────────────────────────────────────────────────────────
 
+function HabitDetailPanel({ habit, lang, onComplete, onClose }: {
+  habit: Habit
+  lang: 'fr' | 'en' | 'zh'
+  onComplete: () => void
+  onClose: () => void
+}) {
+  const done = (habit.completions?.length ?? 0) > 0
+  const freqLabel = habit.frequency === 'DAILY'
+    ? (lang === 'zh' ? '每天' : lang === 'fr' ? 'Chaque jour' : 'Daily')
+    : habit.frequency === 'WEEKDAYS'
+    ? (lang === 'zh' ? '週一到週五' : lang === 'fr' ? 'Jours ouvrés' : 'Weekdays')
+    : (lang === 'zh' ? '週末' : lang === 'fr' ? 'Week-ends' : 'Weekends')
+
+  return (
+    <div className="w-72 shrink-0 border-l border-[#e2d6bc] bg-[#fbf7ee] flex flex-col overflow-hidden">
+      <div className="h-1 w-full shrink-0" style={{ backgroundColor: habit.color }} />
+      <div className="flex items-center justify-between px-4 pt-4 pb-2 gap-2">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#a99873]">
+          {lang === 'zh' ? '習慣' : lang === 'fr' ? 'Habitude' : 'Habit'}
+        </p>
+        <button onClick={onClose} className="p-1 rounded-lg hover:bg-[#ece2cb] text-[#a99873]">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 pb-4 flex flex-col gap-4">
+        <div className="flex items-center gap-2">
+          {habit.icon && <span className="text-xl">{habit.icon}</span>}
+          <h2 className="text-sm font-semibold text-[#2a2420]">{habit.title}</h2>
+        </div>
+        <div className="flex flex-col gap-2 text-xs text-[#5c5347]">
+          <div className="flex items-center gap-2">
+            <span className="text-[#a99873]">{lang === 'zh' ? '頻率' : lang === 'fr' ? 'Fréquence' : 'Frequency'}</span>
+            <span className="font-medium">{freqLabel}</span>
+          </div>
+          {habit.scheduledTime && (
+            <div className="flex items-center gap-2">
+              <Clock className="h-3.5 w-3.5 text-[#a99873]" />
+              <span>{habit.scheduledTime}{habit.durationMinutes ? ` · ${habit.durationMinutes} min` : ''}</span>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+            <span>{lang === 'zh' ? '連續' : lang === 'fr' ? 'Série' : 'Streak'}: <strong>{habit.streak ?? 0}</strong></span>
+          </div>
+        </div>
+        <button
+          onClick={() => { if (!done) onComplete() }}
+          disabled={done}
+          className={cn(
+            'w-full flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all',
+            done
+              ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 cursor-default'
+              : 'text-white hover:opacity-90'
+          )}
+          style={done ? {} : { backgroundColor: habit.color }}
+        >
+          <CheckCircle2 className="h-4 w-4" />
+          {done
+            ? (lang === 'zh' ? '已完成' : lang === 'fr' ? 'Complété ✓' : 'Completed ✓')
+            : (lang === 'zh' ? '標記完成' : lang === 'fr' ? 'Valider' : 'Mark done')}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function EventDetailPanel({
   event, lang, saving, tasks, onSave, onDelete, onClose, onTasksRefresh,
 }: {
@@ -1229,7 +1331,7 @@ function EventDetailPanel({
     setSelectedLinkIds(new Set())
     setLinkSearch('')
     if (mode === 'events') {
-      const start = new Date().toISOString()
+      const start = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString() // 1 year back
       const end = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
       try {
         const res = await fetch(`/api/calendar/events?start=${start}&end=${end}`)

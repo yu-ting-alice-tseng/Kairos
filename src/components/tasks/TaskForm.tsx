@@ -145,8 +145,13 @@ export function TaskForm({ open, onClose, onSave, onDelete, task, calendarAccoun
   const quadrantId = getQuadrant(importance, urgency)
   const quadrant = EISENHOWER_QUADRANTS.find((q) => q.id === quadrantId)
 
+  const isNewTask = !task
   const handleSave = async () => {
     if (!title.trim()) return
+    // Require calendar selection for new tasks when accounts are available
+    if (isNewTask && calendarAccounts.length > 0 && !calendarAccountId) {
+      setCalendarAccountId(calendarAccounts[0].id) // auto-select first
+    }
     setIsSaving(true)
     try {
       await onSave({
