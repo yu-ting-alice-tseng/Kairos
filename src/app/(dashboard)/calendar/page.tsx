@@ -1162,10 +1162,14 @@ function EventDetailPanel({
     const sub = directlyLinkedTasks.find((t) => t.parentTaskId)
     return sub ? tasks.find((t) => t.id === sub.parentTaskId) ?? null : null
   }, [directlyLinkedTasks, tasks])
-  const chainSiblings = React.useMemo(
-    () => chainParent ? tasks.filter((t) => t.parentTaskId === chainParent.id) : [],
-    [chainParent, tasks]
-  )
+  const chainSiblings = React.useMemo(() => {
+    if (!chainParent) return []
+    const byParent = tasks.filter((t) => t.parentTaskId === chainParent.id)
+    const directExtras = directlyLinkedTasks.filter(
+      (t) => t.id !== chainParent.id && !byParent.some((s) => s.id === t.id)
+    )
+    return [...byParent, ...directExtras]
+  }, [chainParent, tasks, directlyLinkedTasks])
   // Fallback: fuzzy title match for old tasks not linked via calendarEventId
   const relatedChains = React.useMemo(() => {
     if (chainParent) return []

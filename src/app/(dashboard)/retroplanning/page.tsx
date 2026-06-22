@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
 import {
   GitBranch, Plus, Trash2, Edit2, Save, X, Check, ChevronDown,
-  ChevronRight, Circle, CheckCircle2, Clock, AlertTriangle, Loader2, Sparkles,
+  ChevronRight, Circle, CheckCircle2, Clock, AlertTriangle, Loader2, Sparkles, History,
 } from 'lucide-react'
 import { InkLoader } from '@/components/ui/InkLoader'
 
@@ -407,6 +407,7 @@ export default function RetroplanningPage() {
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [deleteChainDialog, setDeleteChainDialog] = useState<{ parentId: string; parentTitle: string; childIds: string[] } | null>(null)
   const [deleteChainLoading, setDeleteChainLoading] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   // Prefer the first Google calendar account for event creation
   const googleCalendarAccount = calendarAccounts.find((a) => (a as { provider?: string }).provider === 'GOOGLE') ?? calendarAccounts[0] ?? null
@@ -568,7 +569,7 @@ export default function RetroplanningPage() {
     return () => clearInterval(id)
   }, [runScan])
 
-  // Build chains: parent task → sub-tasks
+  // Build chains: parent task → sub-tasks (includes all manually linked chains)
   const chains = React.useMemo(() => {
     const parentIds = new Set(tasks.filter((t) => t.parentTaskId).map((t) => t.parentTaskId!))
     const parents = tasks.filter((t) => parentIds.has(t.id))
@@ -588,6 +589,21 @@ export default function RetroplanningPage() {
       return da - db
     })
   }, [tasks])
+
+  const now = new Date()
+  // A chain is "past" when every child's deadline (or the parent's) is before today
+  const { activeChains, pastChains } = React.useMemo(() => {
+    const active: typeof chains = []
+    const past: typeof chains = []
+    for (const c of chains) {
+      const allDates = [...c.children.map((ch) => ch.deadline), c.parent.deadline].filter(Boolean) as string[]
+      const allPast = allDates.length > 0 && allDates.every((d) => new Date(d) < now)
+      if (allPast) past.push(c)
+      else active.push(c)
+    }
+    return { activeChains: active, pastChains: past }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chains])
 
   // Suggested tasks: tasks with no children but matching a template keyword
   const suggestedTasks = React.useMemo(() => {
@@ -977,17 +993,19 @@ export default function RetroplanningPage() {
               </p>
             </div>
           ) : chains.length > 0 && (
-            <div>
+            <div className="flex flex-col gap-6">
+              {activeChains.length > 0 && (
+              <div>
               <div className="flex items-center gap-2 mb-3">
                 <GitBranch className="h-4 w-4 text-[#8a7a5e]" />
                 <h2 className="text-sm font-semibold text-[#5c5347]">
                   {lang === 'fr' ? 'Chaînes de tâches' : lang === 'zh' ? '任務鏈' : 'Task chains'}
                 </h2>
-                <Badge variant="secondary" className="text-xs">{chains.length}</Badge>
+                <Badge variant="secondary" className="text-xs">{activeChains.length}</Badge>
               </div>
 
               <div className="flex flex-col gap-4">
-                {chains.map(({ parent, children }) => {
+                {activeChains.map(({ parent, children }) => {
                   const isActive = selectedChainId === parent.id
                   const allDone = parent.status === 'COMPLETED' && children.every((c) => c.status === 'COMPLETED')
                   const donePct = Math.round(
@@ -1084,6 +1102,95 @@ export default function RetroplanningPage() {
                   )
                 })}
               </div>
+            </div>
+              )}
+
+              {/* History: chains where all stages are in the past */}
+              {pastChains.length > 0 && (
+                <div>
+                  <button
+                    onClick={() => setHistoryOpen((v) => !v)}
+                    className="w-full flex items-center gap-2 rounded-xl border border-[#ece2cb] bg-[#f3ecdd] px-4 py-2.5 hover:bg-[#ece2cb] transition-colors"
+                  >
+                    <History className="h-4 w-4 text-[#a99873]" />
+                    <span className="text-sm font-medium text-[#8a7a5e] flex-1 text-left">
+                      {lang === 'zh' ? '歷史紀錄' : lang === 'fr' ? 'Historique' : 'History'}
+                    </span>
+                    <Badge variant="secondary" className="text-xs">{pastChains.length}</Badge>
+                    {historyOpen ? <ChevronDown className="h-4 w-4 text-[#a99873]" /> : <ChevronRight className="h-4 w-4 text-[#a99873]" />}
+                  </button>
+
+                  {historyOpen && (
+                    <div className="flex flex-col gap-3 mt-3">
+                      {pastChains.map(({ parent, children }) => {
+                        const isActive = selectedChainId === parent.id
+                        const donePct = Math.round(
+                          ([parent, ...children].filter((t) => t.status === 'COMPLETED').length / (1 + children.length)) * 100
+                        )
+                        return (
+                          <div
+                            key={parent.id}
+                            className={cn(
+                              'rounded-2xl border bg-[#f9f5ec] overflow-hidden transition-all opacity-70',
+                              isActive ? 'border-[#c4b48a] shadow-sm' : 'border-[#e2d6bc]'
+                            )}
+                          >
+                            <div
+                              className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[#f0e8d4] transition-colors"
+                              onClick={() => setSelectedChainId(isActive ? null : parent.id)}
+                            >
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-[#8a7a5e] truncate line-through">{parent.title}</p>
+                                <p className="text-[11px] text-[#a99873] mt-0.5">
+                                  {children.length} {lang === 'zh' ? '個階段' : lang === 'fr' ? 'étapes' : 'stages'}
+                                  {parent.deadline && ` · ${new Date(parent.deadline).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <div className="w-16 h-1.5 rounded-full bg-[#ece2cb] overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full bg-emerald-400 transition-all"
+                                    style={{ width: `${donePct}%` }}
+                                  />
+                                </div>
+                                <span className="text-xs text-[#a99873] font-mono">{donePct}%</span>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setDeleteChainDialog({ parentId: parent.id, parentTitle: parent.title, childIds: children.map((c) => c.id) }) }}
+                                  className="p-1 rounded-lg hover:bg-red-50 text-[#c4b48a] hover:text-red-500 transition-colors"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                                {isActive ? <ChevronDown className="h-4 w-4 text-[#a99873]" /> : <ChevronRight className="h-4 w-4 text-[#a99873]" />}
+                              </div>
+                            </div>
+                            {isActive && (
+                              <div className="px-4 pb-3 flex flex-col gap-1.5 border-t border-[#f0e8d4]">
+                                <p className="text-[11px] text-[#a99873] mt-2 mb-1 uppercase tracking-wider font-semibold">
+                                  {lang === 'zh' ? '回顧' : lang === 'fr' ? 'Révision' : 'Review'}
+                                </p>
+                                {children.map((child) => (
+                                  <div key={child.id} className="flex items-center gap-2 rounded-lg bg-[#f3ecdd] px-3 py-1.5">
+                                    {child.status === 'COMPLETED'
+                                      ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                                      : <Circle className="h-3.5 w-3.5 text-[#c4b48a] shrink-0" />
+                                    }
+                                    <span className={cn('text-xs flex-1 truncate', child.status === 'COMPLETED' ? 'line-through text-[#a99873]' : 'text-[#5c5347]')}>{child.title}</span>
+                                    {child.deadline && (
+                                      <span className="text-[10px] text-[#a99873] shrink-0">
+                                        {new Date(child.deadline).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-US', { month: 'short', day: 'numeric' })}
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
