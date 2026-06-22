@@ -74,7 +74,7 @@ export default async function SignInPage() {
   const featureIcons = [Target, Brain, CalendarDays, Flame]
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#fbeacb] flex items-center justify-center p-4">
+    <div className="relative h-screen overflow-hidden bg-[#fbeacb] flex items-center justify-center px-6">
 
       {/* ── Parchment background ── */}
       <div
@@ -92,72 +92,74 @@ export default async function SignInPage() {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[600px] w-[600px] rounded-full bg-[#ab3326]/[0.03] blur-[120px]" />
       </div>
 
-      {/* Ink mountains — visible on cream */}
+      {/* Ink mountains */}
       <div className="pointer-events-none absolute bottom-0 left-0 right-0">
         <InkMountains className="opacity-40" />
       </div>
 
-      {/* ── Card ── */}
-      <div className="relative z-10 w-full max-w-[480px] animate-fade-in-scale">
+      {/* ── Two-column layout ── */}
+      <div className="relative z-10 w-full max-w-[860px] flex items-center gap-10 animate-fade-in-scale">
 
-        {/* Hero banner */}
-        <div className="mb-6">
+        {/* Left: Banner + taglines */}
+        <div className="flex-1 min-w-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/logo_v5/Banner.png"
             alt="Kairos 墨時"
             className="w-full rounded-2xl shadow-[0_4px_24px_rgba(42,31,18,0.13)]"
           />
-          <p className="text-center text-[#6b5840] text-sm font-medium tracking-wide mt-3 mb-0.5">{t.tagline1}</p>
+          <p className="text-center text-[#6b5840] text-sm font-medium tracking-wide mt-4 mb-1">{t.tagline1}</p>
           <p className="text-center text-[#a87f3e] text-[13px] font-medium tracking-[0.12em]">{t.tagline2}</p>
         </div>
 
-        {/* Main card */}
-        <div className="rounded-[28px] border border-[#e7c894] bg-[#f3dcb2]/80 backdrop-blur-sm shadow-[0_8px_40px_rgba(42,31,18,0.12)] p-8">
-          <h2 className="text-lg font-semibold text-[#2a1f12] text-center mb-1.5">{t.cardTitle}</h2>
-          <p className="text-[13px] text-[#6b5840] text-center mb-7 leading-relaxed">{t.cardDesc}</p>
+        {/* Right: Login card */}
+        <div className="w-[340px] shrink-0">
+          <div className="rounded-[28px] border border-[#e7c894] bg-[#f3dcb2]/80 backdrop-blur-sm shadow-[0_8px_40px_rgba(42,31,18,0.12)] p-7">
+            <h2 className="text-lg font-semibold text-[#2a1f12] text-center mb-1.5">{t.cardTitle}</h2>
+            <p className="text-[13px] text-[#6b5840] text-center mb-5 leading-relaxed">{t.cardDesc}</p>
 
-          {/* Auth buttons */}
-          <div className="flex flex-col gap-3 mb-3">
-            <GoogleSignInButton />
-            <NotionSignInButton />
+            {/* Auth buttons */}
+            <div className="flex flex-col gap-3 mb-3">
+              <GoogleSignInButton />
+              <NotionSignInButton />
+            </div>
+
+            {/* Remember me */}
+            <p className="flex items-center gap-2 text-[12px] text-[#8a6b3e] px-1 mt-1">
+              <svg className="h-3.5 w-3.5 text-[#ab3326] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {t.remember}
+            </p>
+
+            <DemoLoginButton />
+
+            {/* Divider */}
+            <div className="flex items-center gap-3 my-5">
+              <div className="flex-1 h-px bg-[#c9aa72]/40" />
+              <span className="text-[11px] text-[#8a6b3e] uppercase tracking-widest">{t.featuresLabel}</span>
+              <div className="flex-1 h-px bg-[#c9aa72]/40" />
+            </div>
+
+            {/* Feature pills */}
+            <div className="grid grid-cols-2 gap-2">
+              {t.features.map((label, i) => {
+                const Icon = featureIcons[i]
+                return (
+                  <div
+                    key={label}
+                    className="flex items-center gap-2 rounded-xl bg-[#2a1f12]/[0.04] border border-[#e7c894]/60 px-3 py-2"
+                  >
+                    <Icon className="h-3.5 w-3.5 text-[#ab3326] shrink-0" />
+                    <span className="text-[11px] text-[#6b5840] leading-snug">{label}</span>
+                  </div>
+                )
+              })}
+            </div>
           </div>
 
-          {/* Remember me */}
-          <p className="flex items-center gap-2 text-[12px] text-[#8a6b3e] px-1 mt-1">
-            <svg className="h-3.5 w-3.5 text-[#ab3326] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            {t.remember}
-          </p>
-
-          <DemoLoginButton />
-
-          {/* Divider */}
-          <div className="flex items-center gap-3 my-6">
-            <div className="flex-1 h-px bg-[#c9aa72]/40" />
-            <span className="text-[11px] text-[#8a6b3e] uppercase tracking-widest">{t.featuresLabel}</span>
-            <div className="flex-1 h-px bg-[#c9aa72]/40" />
-          </div>
-
-          {/* Feature pills */}
-          <div className="grid grid-cols-2 gap-2">
-            {t.features.map((label, i) => {
-              const Icon = featureIcons[i]
-              return (
-                <div
-                  key={label}
-                  className="flex items-center gap-2 rounded-xl bg-[#2a1f12]/[0.04] border border-[#e7c894]/60 px-3 py-2"
-                >
-                  <Icon className="h-3.5 w-3.5 text-[#ab3326] shrink-0" />
-                  <span className="text-[11px] text-[#6b5840] leading-snug">{label}</span>
-                </div>
-              )
-            })}
-          </div>
+          <p className="text-center text-[11.5px] text-[#8a6b3e] mt-4">{t.privacy}</p>
         </div>
-
-        <p className="text-center text-[11.5px] text-[#8a6b3e] mt-5">{t.privacy}</p>
       </div>
     </div>
   )
