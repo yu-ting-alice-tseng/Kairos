@@ -87,9 +87,9 @@ export function Sidebar() {
         <div className="flex items-center gap-2.5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/logo_v5/Logo.png"
+            src="/logo_v5/Logo_transparent.png"
             alt="Kairos"
-            className="h-9 w-9 shrink-0 rounded-lg object-cover object-top"
+            className="h-9 w-9 shrink-0 object-contain"
           />
           {!collapsed && (
             <div className="flex flex-col leading-none">

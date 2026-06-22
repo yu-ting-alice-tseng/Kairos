@@ -193,6 +193,7 @@ function TemplateEditor({
   template,
   initial,
   onSave,
+  onDelete,
   onClose,
   lang,
 }: {
@@ -200,12 +201,14 @@ function TemplateEditor({
   /** Pre-fill when forking a built-in template into an editable custom one. */
   initial?: { name: string; keywords: string[]; stages: RetroStage[] }
   onSave: (data: { name: string; keywords: string[]; stages: RetroStage[] }) => Promise<void>
+  onDelete?: () => void
   onClose: () => void
   lang: 'fr' | 'en' | 'zh'
 }) {
   const rawKeywords = template?.keywords ?? initial?.keywords ?? []
   const [name, setName] = useState(template?.name ?? initial?.name ?? '')
   const [category, setCategory] = useState(getCategory(rawKeywords))
+  const [customCatInput, setCustomCatInput] = useState('')
   const [keywords, setKeywords] = useState<string[]>(stripCatKeywords(rawKeywords))
   const [newKw, setNewKw] = useState('')
   const [stages, setStages] = useState<RetroStage[]>(template?.stages ?? initial?.stages ?? [{ name: '', daysBeforeDeadline: 7 }])
@@ -257,12 +260,24 @@ function TemplateEditor({
           <div className="flex flex-col gap-1.5">
             <Label>{lang === 'fr' ? 'Catégorie' : lang === 'zh' ? '分類' : 'Category'}</Label>
             <div className="flex gap-2 flex-wrap">
-              {CATEGORIES[lang].map((cat) => (
+              {[...CATEGORIES[lang], ...(category && !CATEGORIES[lang].includes(category) ? [category] : [])].map((cat) => (
                 <button key={cat} type="button" onClick={() => setCategory(cat === category ? '' : cat)}
                   className={cn('rounded-xl px-3 py-1 text-xs border transition-all', category === cat ? 'bg-red-50 border-red-300 text-red-900' : 'border-[#e2d6bc] text-[#6e6147] hover:bg-[#f3ecdd]')}>
                   {cat}
                 </button>
               ))}
+            </div>
+            <div className="flex gap-2 mt-1">
+              <Input
+                value={customCatInput}
+                onChange={(e) => setCustomCatInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && customCatInput.trim()) { e.preventDefault(); setCategory(customCatInput.trim()); setCustomCatInput('') } }}
+                placeholder={lang === 'fr' ? 'Catégorie personnalisée...' : lang === 'zh' ? '自訂分類...' : 'Custom category...'}
+                className="h-7 text-xs"
+              />
+              <Button size="sm" variant="outline" className="h-7 text-xs px-2" onClick={() => { if (customCatInput.trim()) { setCategory(customCatInput.trim()); setCustomCatInput('') } }} disabled={!customCatInput.trim()}>
+                {lang === 'fr' ? 'Appliquer' : lang === 'zh' ? '套用' : 'Apply'}
+              </Button>
             </div>
           </div>
 
@@ -331,12 +346,22 @@ function TemplateEditor({
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>{t('cancel', lang)}</Button>
-          <Button onClick={handleSave} disabled={!name.trim() || saving}>
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {t('save', lang)}
-          </Button>
+        <DialogFooter className="flex items-center justify-between gap-2">
+          <div>
+            {onDelete && (
+              <Button variant="outline" onClick={onDelete} className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700">
+                <Trash2 className="h-4 w-4" />
+                {lang === 'fr' ? 'Supprimer' : lang === 'zh' ? '刪除' : 'Delete'}
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose}>{t('cancel', lang)}</Button>
+            <Button onClick={handleSave} disabled={!name.trim() || saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {t('save', lang)}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -918,6 +943,7 @@ export default function RetroplanningPage() {
           template={editingTemplate === 'new' ? null : editingTemplate}
           initial={editingTemplate === 'new' ? forkDraft ?? undefined : undefined}
           onSave={handleSaveTemplate}
+          onDelete={editingTemplate && editingTemplate !== 'new' ? () => { handleDeleteTemplate(editingTemplate.id); setEditingTemplate(undefined) } : undefined}
           onClose={() => { setEditingTemplate(undefined); setForkDraft(null) }}
           lang={lang}
         />

@@ -441,7 +441,7 @@ export default function TodayPage() {
         <div>
           <div className="flex items-center gap-2.5">
             <Sundial className="h-8 w-8" />
-            <h1 className="text-2xl font-brush text-[#2a2420] tracking-tight leading-none">{t('today', language)}</h1>
+            <h1 className="text-2xl font-serif text-[#2a2420] tracking-tight leading-none">{t('today', language)}</h1>
 
           </div>
           <p className="text-[13px] text-[#8a7a5e] mt-1 capitalize pl-[42px]">{today}</p>

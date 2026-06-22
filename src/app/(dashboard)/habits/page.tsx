@@ -259,7 +259,7 @@ export default function HabitsPage() {
       <div className="flex items-center justify-between px-6 py-5 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10">
         <div className="flex items-center gap-2.5">
           <Candle className="h-7 w-7" />
-          <h1 className="text-2xl font-brush text-[#2a2420]">{t('habits', language)}</h1>
+          <h1 className="text-2xl font-serif text-[#2a2420]">{t('habits', language)}</h1>
           <Badge variant="default" className="bg-[#ab3326] text-[#f3ecdd]">{habits.length}</Badge>
         </div>
         <Button size="sm" onClick={() => setShowForm(true)}>

@@ -635,7 +635,7 @@ export default function CalendarPage() {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <Calendar className="h-5 w-5 text-[#ab3326]" />
-            <h1 className="text-2xl font-brush text-[#2a2420]">{t('calendar', language)}</h1>
+            <h1 className="text-2xl font-serif text-[#2a2420]">{t('calendar', language)}</h1>
           </div>
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="icon-sm" onClick={() => setStartDate((d) => addDays(d, -1))}>
