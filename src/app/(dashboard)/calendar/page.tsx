@@ -283,6 +283,7 @@ export default function CalendarPage() {
     tasks.filter((task) => {
       if (!task.deadline) return false
       if (task.scheduledStart) return false // has a specific time slot already
+      if (task.calendarEventId) return false // already shown as a Google Calendar event
       if (task.status === 'CANCELLED') return false
       return isSameDay(new Date(String(task.deadline)), day)
     }).sort((a, b) => {
@@ -803,17 +804,23 @@ export default function CalendarPage() {
                   {allDayEvs.map((ev) => {
                     const color = ev.color ?? calendarAccounts.find((a) => a.id === ev.calendarAccountId)?.color ?? '#6366F1'
                     const isDraggingThis = draggingEventId === ev.id
-                    const isLinkedDone = tasks.some((t) => t.calendarEventId === ev.id && t.status === 'COMPLETED')
+                    const linkedTask = tasks.find((t) => t.calendarEventId === ev.id)
+                    const isLinkedDone = linkedTask?.status === 'COMPLETED'
                     return (
                       <div
                         key={ev.id}
-                        className={cn('rounded px-1.5 py-0.5 text-xs mb-0.5 truncate border border-dashed', ev.editable && !isDragging ? 'cursor-grab' : '', isDraggingThis && 'opacity-40', isLinkedDone && 'opacity-50')}
+                        className={cn('rounded px-1.5 py-0.5 text-xs mb-0.5 border border-dashed flex items-center gap-1 min-w-0', ev.editable && !isDragging ? 'cursor-grab' : '', isDraggingThis && 'opacity-40', isLinkedDone && 'opacity-50')}
                         style={{ backgroundColor: color + '22', borderColor: color }}
                         title={ev.title}
                         onMouseDown={(e) => { if (ev.editable) startAllDayDrag(e, ev) }}
                         onClick={(e) => { e.stopPropagation(); if (!isDragging) setEditingEvent(ev) }}
                       >
-                        <span className={cn('text-[#2a2420]', isLinkedDone && 'line-through text-[#a99873]')}>{ev.title}</span>
+                        <span className={cn('text-[#2a2420] truncate flex-1', isLinkedDone && 'line-through text-[#a99873]')}>{ev.title}</span>
+                        {linkedTask && (
+                          <span className="shrink-0 text-[9px] opacity-60 font-mono whitespace-nowrap">
+                            I:{linkedTask.importance} U:{linkedTask.urgency}
+                          </span>
+                        )}
                       </div>
                     )
                   })}
