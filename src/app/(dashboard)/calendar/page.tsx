@@ -762,7 +762,7 @@ export default function CalendarPage() {
               return (
                 <div
                   key={day.toISOString()}
-                  className={cn('border-r border-[#e2d6bc] px-1 py-1 min-h-[32px]', isToday(day) && 'bg-red-50/40', isPreviewHere && 'bg-red-100/60')}
+                  className={cn('border-r border-[#e2d6bc] px-1 py-1 min-h-[32px] overflow-hidden min-w-0', isToday(day) && 'bg-red-50/40', isPreviewHere && 'bg-red-100/60')}
                   onMouseMove={() => handleAllDayCellMouseMove(dayIdx)}
                 >
                   {allDayEvs.map((ev) => {
