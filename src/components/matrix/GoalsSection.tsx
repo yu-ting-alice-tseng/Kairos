@@ -228,7 +228,11 @@ function GoalColumn({
 
       <div className="flex flex-col gap-0.5 mb-2 min-h-[28px]">
         {goals.length === 0 && !adding && (
-          <p className="text-xs text-[#a99873] italic py-1">{t('noGoals', lang)}</p>
+          <div className="flex flex-col items-center gap-2 py-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo_v5/empty-goals.png" alt="" className="h-20 w-auto opacity-60 object-contain" />
+            <p className="text-xs text-[#a99873] italic">{t('noGoals', lang)}</p>
+          </div>
         )}
         {goals.map((g) => (
           <GoalItem key={g.id} goal={g} goalType={type} onDelete={onDelete} onEdit={onEdit} onGoalsCreated={onGoalsCreated} />

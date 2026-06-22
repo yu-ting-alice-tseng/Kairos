@@ -93,8 +93,10 @@ function QuadrantDroppable({ id, label, color, bgColor, tasks, onTaskClick }: Qu
           </div>
         ))}
         {tasks.length === 0 && (
-          <div className="flex-1 flex items-center justify-center text-xs text-[#a99873] italic border-2 border-dashed border-[#e2d6bc] rounded-xl min-h-[80px]">
-            Glissez ici
+          <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-[#e2d6bc] rounded-xl min-h-[80px] gap-1">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo_v5/empty matric.png" alt="" className="h-10 w-10 opacity-30 object-contain" />
+            <span className="text-xs text-[#c9b88a] italic">Glissez ici</span>
           </div>
         )}
       </div>

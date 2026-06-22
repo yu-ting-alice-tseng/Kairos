@@ -14,8 +14,9 @@ import { cn } from '@/lib/utils'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
 import {
   GitBranch, Plus, Trash2, Edit2, Save, X, Check, ChevronDown,
-  ChevronRight, Circle, CheckCircle2, Clock, AlertTriangle, Loader2, Sparkles, Bell,
+  ChevronRight, Circle, CheckCircle2, Clock, AlertTriangle, Loader2, Sparkles,
 } from 'lucide-react'
+import { InkLoader } from '@/components/ui/InkLoader'
 
 // ─── Built-in templates (same as RetroplanDialog) ────────────────────────────
 
@@ -357,8 +358,16 @@ export default function RetroplanningPage() {
   const [editingTask, setEditingTask] = useState<Task | null>(null)
 
   // 1-minute calendar scan: upcoming events matching template keywords
-  const [scanMatches, setScanMatches] = useState<{ title: string; date: string; templateName: string }[]>([])
-  const [scanDismissed, setScanDismissed] = useState(false)
+  interface ScanMatch {
+    title: string
+    start: string       // ISO — used to compute stage dates
+    date: string        // display string
+    templateId: string
+    templateName: string
+    stages: { name: string; daysBeforeDeadline: number }[]
+  }
+  const [scanMatches, setScanMatches] = useState<ScanMatch[]>([])
+  const [scanCreating, setScanCreating] = useState<string | null>(null)
 
   const runScan = useCallback(async () => {
     if (calendarAccounts.length === 0) return
@@ -368,26 +377,78 @@ export default function RetroplanningPage() {
       const res = await fetch(`/api/calendar/events?start=${start}&end=${end}`)
       if (!res.ok) return
       const events: { title: string; start: string }[] = await res.json()
-      const allTemplates = [
-        ...BUILTIN_TEMPLATES.map((t) => ({ name: lang === 'fr' ? t.nameFr : lang === 'zh' ? t.name : t.name, keywords: t.keywords })),
-        ...userTemplates.map((t) => ({ name: t.name, keywords: stripCatKeywords(t.keywords) })),
+
+      // Build unified template list with id + stages
+      type AnyTmpl = { id: string; name: string; keywords: string[]; stages: { name: string; daysBeforeDeadline: number }[] }
+      const allTemplates: AnyTmpl[] = [
+        ...BUILTIN_TEMPLATES.map((t) => ({
+          id: t.id,
+          name: lang === 'fr' ? t.nameFr : t.name,
+          keywords: t.keywords,
+          stages: t.stages.map((s) => ({ name: lang === 'fr' ? s.nameFr : s.name, daysBeforeDeadline: s.daysBeforeDeadline })),
+        })),
+        ...userTemplates.map((t) => ({
+          id: t.id,
+          name: t.name,
+          keywords: stripCatKeywords(t.keywords),
+          stages: t.stages,
+        })),
       ]
-      const matches: { title: string; date: string; templateName: string }[] = []
+
+      const matches: ScanMatch[] = []
       for (const ev of events) {
         const lower = ev.title.toLowerCase()
         for (const tmpl of allTemplates) {
-          if (tmpl.keywords.some((kw) => lower.includes(kw.toLowerCase()))) {
-            matches.push({ title: ev.title, date: new Date(ev.start).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-US'), templateName: tmpl.name })
+          const matchedKw = tmpl.keywords.find((kw) => lower.includes(kw.toLowerCase()))
+          if (matchedKw) {
+            const prefix = ev.title.split(/[|\-:]/)[0]?.trim() ?? ev.title
+            matches.push({
+              title: ev.title,
+              start: ev.start,
+              date: new Date(ev.start).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-US', { day: 'numeric', month: 'short' }),
+              templateId: tmpl.id,
+              templateName: tmpl.name,
+              stages: tmpl.stages.map((s) => ({ name: `${prefix} | ${s.name}`, daysBeforeDeadline: s.daysBeforeDeadline })),
+            })
             break
           }
         }
       }
-      if (matches.length > 0) {
-        setScanMatches(matches)
-        setScanDismissed(false)
-      }
+      setScanMatches(matches)
     } catch { /* best-effort */ }
   }, [calendarAccounts.length, userTemplates, lang])
+
+  const handleCreateFromScan = async (m: ScanMatch) => {
+    setScanCreating(m.title)
+    try {
+      const deadline = new Date(m.start)
+      const parentRes = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: m.title, importance: 8, urgency: 7, deadline: deadline.toISOString() }),
+      })
+      if (!parentRes.ok) throw new Error()
+      const parent = await parentRes.json()
+      await Promise.all(m.stages.map((s) => {
+        const d = new Date(deadline)
+        d.setDate(d.getDate() - s.daysBeforeDeadline)
+        return fetch('/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: s.name, parentTaskId: parent.id, importance: 8, urgency: 7, deadline: d.toISOString() }),
+        })
+      }))
+      const tasksRes = await fetch('/api/tasks')
+      if (tasksRes.ok) setTasks(await tasksRes.json())
+      toast({ title: lang === 'fr' ? 'Rétroplanning créé !' : lang === 'zh' ? '逆向規劃已建立！' : 'Retroplan created!', variant: 'success' })
+      // Remove from scan list
+      setScanMatches((prev) => prev.filter((x) => x.title !== m.title))
+    } catch {
+      toast({ title: lang === 'fr' ? 'Erreur' : lang === 'zh' ? '建立失敗' : 'Failed', variant: 'error' })
+    } finally {
+      setScanCreating(null)
+    }
+  }
 
   useEffect(() => {
     runScan()
@@ -632,41 +693,45 @@ export default function RetroplanningPage() {
                 </div>
               ))
             })()}
-            {loadingTemplates && <div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-red-400" /></div>}
+            {loadingTemplates && <InkLoader size="sm" />}
           </div>
         </div>
 
         {/* ── Right: Chains ── */}
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
 
-          {/* 1-min calendar scan results */}
-          {scanMatches.length > 0 && !scanDismissed && (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                  <p className="text-sm font-semibold text-amber-800">
-                    {lang === 'fr'
-                      ? `${scanMatches.length} événement(s) à planifier dans le mois`
-                      : lang === 'zh'
-                      ? `未來一個月發現 ${scanMatches.length} 個符合關鍵字的行程`
-                      : `${scanMatches.length} upcoming event(s) match your templates`}
-                  </p>
-                </div>
-                <button onClick={() => setScanDismissed(true)} className="p-0.5 rounded text-amber-400 hover:text-amber-600 shrink-0">
-                  <X className="h-3.5 w-3.5" />
-                </button>
+          {/* Calendar scan — actionable list, always visible while matches exist */}
+          {scanMatches.length > 0 && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="h-4 w-4 text-amber-600 shrink-0" />
+                <p className="text-sm font-semibold text-amber-800">
+                  {lang === 'fr'
+                    ? `${scanMatches.length} événement(s) détecté(s) ce mois-ci`
+                    : lang === 'zh'
+                    ? `未來一個月偵測到 ${scanMatches.length} 個符合的行程`
+                    : `${scanMatches.length} upcoming event(s) detected`}
+                </p>
               </div>
-              <div className="mt-3 flex flex-col gap-1.5">
-                {scanMatches.slice(0, 5).map((m, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs text-amber-700">
-                    <GitBranch className="h-3 w-3 shrink-0" />
-                    <span className="font-medium truncate flex-1">{m.title}</span>
-                    <span className="text-amber-500 shrink-0">{m.date}</span>
-                    <span className="bg-amber-200 text-amber-800 rounded-full px-1.5 py-0.5 shrink-0">{m.templateName}</span>
+              <div className="flex flex-col gap-2">
+                {scanMatches.map((m) => (
+                  <div key={m.title} className="flex items-center gap-2 bg-white/60 rounded-xl border border-amber-200 px-3 py-2">
+                    <GitBranch className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                    <span className="text-xs font-medium text-amber-900 truncate flex-1">{m.title}</span>
+                    <span className="text-[11px] text-amber-500 shrink-0">{m.date}</span>
+                    <span className="text-[11px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 shrink-0">{m.templateName}</span>
+                    <button
+                      onClick={() => handleCreateFromScan(m)}
+                      disabled={scanCreating === m.title}
+                      className="flex items-center gap-1 text-[11px] bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-2.5 py-1 disabled:opacity-60 transition-colors shrink-0"
+                    >
+                      {scanCreating === m.title
+                        ? <Loader2 className="h-3 w-3 animate-spin" />
+                        : <Check className="h-3 w-3" />}
+                      {lang === 'fr' ? 'Créer' : lang === 'zh' ? '建立' : 'Create'}
+                    </button>
                   </div>
                 ))}
-                {scanMatches.length > 5 && <p className="text-[11px] text-amber-500 pl-5">+{scanMatches.length - 5} {lang === 'fr' ? 'autres' : lang === 'zh' ? '其他' : 'more'}</p>}
               </div>
             </div>
           )}
@@ -731,9 +796,8 @@ export default function RetroplanningPage() {
           {/* Chains */}
           {chains.length === 0 && suggestedTasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#e2d6bc] py-20 text-center">
-              <div className="h-16 w-16 rounded-2xl bg-red-50 flex items-center justify-center mb-4">
-                <GitBranch className="h-7 w-7 text-red-300" />
-              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo_v5/empty state retroplanning.png" alt="" className="h-28 w-auto mb-5 object-contain opacity-85" />
               <p className="text-sm font-medium text-[#8a7a5e] max-w-xs">
                 {lang === 'fr'
                   ? 'Aucune chaîne de tâches. Ouvrez une tâche avec deadline et cliquez sur "Rétroplanifier".'

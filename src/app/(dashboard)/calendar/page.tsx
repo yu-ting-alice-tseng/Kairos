@@ -488,22 +488,39 @@ export default function CalendarPage() {
   const handleApplyRetroSuggestion = async (suggestion: RetroSuggestion, adjustedStages: Array<{ name: string; daysBeforeDeadline: number }>) => {
     setRetroSuggestionSaving(true)
     try {
-      // Create parent task from event
       const deadlineDate = new Date(suggestion.event.start)
-      const parentRes = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: suggestion.event.title,
-          calendarAccountId: suggestion.event.calendarAccountId,
-          calendarEventId: suggestion.event.id,
-          importance: 8,
-          urgency: 7,
-          deadline: deadlineDate.toISOString(),
-        }),
-      })
-      if (!parentRes.ok) throw new Error('Failed to create parent task')
-      const parentTask = await parentRes.json()
+
+      // Check if a parent task already exists for this event (by calendarEventId or title match)
+      const existingParent = tasks.find(
+        (t) => t.parentTaskId === null && (
+          t.calendarEventId === suggestion.event.id ||
+          t.title.toLowerCase() === suggestion.event.title.toLowerCase()
+        )
+      )
+
+      let parentTaskId: string
+      if (existingParent) {
+        // Overwrite: delete existing sub-tasks then reuse parent
+        const existingChildren = tasks.filter((t) => t.parentTaskId === existingParent.id)
+        await Promise.all(existingChildren.map((t) => fetch(`/api/tasks/${t.id}`, { method: 'DELETE' })))
+        parentTaskId = existingParent.id
+      } else {
+        // Create new parent task
+        const parentRes = await fetch('/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: suggestion.event.title,
+            calendarAccountId: suggestion.event.calendarAccountId,
+            calendarEventId: suggestion.event.id,
+            importance: 8,
+            urgency: 7,
+            deadline: deadlineDate.toISOString(),
+          }),
+        })
+        if (!parentRes.ok) throw new Error('Failed to create parent task')
+        parentTaskId = (await parentRes.json()).id
+      }
 
       // Create sub-tasks for each stage
       await Promise.all(
@@ -515,17 +532,17 @@ export default function CalendarPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               title: s.name.trim(),
-              parentTaskId: parentTask.id,
+              parentTaskId,
               calendarAccountId: suggestion.event.calendarAccountId,
-              importance: parentTask.importance,
-              urgency: parentTask.urgency,
+              importance: 8,
+              urgency: 7,
               deadline: stageDeadline.toISOString(),
             }),
           })
         })
       )
       await loadTasks()
-      toast({ title: language === 'fr' ? 'Rétroplanning créé !' : language === 'zh' ? '逆向規劃已建立！' : 'Retroplanning created!', variant: 'success' })
+      toast({ title: language === 'fr' ? (existingParent ? 'Rétroplanning mis à jour !' : 'Rétroplanning créé !') : language === 'zh' ? (existingParent ? '逆向規劃已更新！' : '逆向規劃已建立！') : (existingParent ? 'Retroplanning updated!' : 'Retroplanning created!'), variant: 'success' })
     } catch {
       toast({ title: language === 'fr' ? 'Erreur' : language === 'zh' ? '建立失敗' : 'Failed to create', variant: 'error' })
     } finally {
@@ -695,26 +712,6 @@ export default function CalendarPage() {
 
       {/* Body: calendar grid + detail side panel */}
       <div className="flex flex-1 min-h-0">
-
-      {/* Left detail panel */}
-      {editingEvent ? (
-        <EventDetailPanel
-          event={editingEvent}
-          lang={language}
-          saving={eventSaving}
-          tasks={tasks}
-          onSave={handleSaveEvent}
-          onDelete={handleDeleteEvent}
-          onClose={() => setEditingEvent(null)}
-        />
-      ) : (
-        <div className="w-72 shrink-0 border-r border-[#e2d6bc] bg-[#fbf7ee] flex items-center justify-center text-[#c9b89a] text-xs p-6 text-center select-none">
-          <div className="flex flex-col items-center gap-3">
-            <Calendar className="h-8 w-8 opacity-30" />
-            <p className="opacity-50">{language === 'fr' ? 'Cliquez sur un événement pour voir les détails' : language === 'zh' ? '點擊活動查看詳情' : 'Click an event to see details'}</p>
-          </div>
-        </div>
-      )}
 
       {/* Calendar grid — swipe to change week */}
       <div
@@ -981,6 +978,19 @@ export default function CalendarPage() {
         </div>
       </div>
 
+      {/* Right detail panel */}
+      {editingEvent ? (
+        <EventDetailPanel
+          event={editingEvent}
+          lang={language}
+          saving={eventSaving}
+          tasks={tasks}
+          onSave={handleSaveEvent}
+          onDelete={handleDeleteEvent}
+          onClose={() => setEditingEvent(null)}
+        />
+      ) : null}
+
       </div>{/* end body row */}
 
       <TaskForm
@@ -1153,7 +1163,7 @@ function EventDetailPanel({
   }, [event.start, event.end, event.allDay, lang])
 
   return (
-    <div className="w-72 shrink-0 border-r border-[#e2d6bc] bg-[#fbf7ee] flex flex-col overflow-hidden">
+    <div className="w-72 shrink-0 border-l border-[#e2d6bc] bg-[#fbf7ee] flex flex-col overflow-hidden">
       {/* Color bar + header */}
       <div className="h-1 w-full shrink-0" style={{ backgroundColor: evColor }} />
       <div className="flex items-center justify-between px-4 pt-4 pb-2 gap-2">

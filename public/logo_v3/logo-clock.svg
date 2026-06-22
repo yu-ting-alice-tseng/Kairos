@@ -1,0 +1,52 @@
+<svg viewBox="0 0 200 220" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="flame-grad" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#ffd27a"/>
+      <stop offset="40%" stop-color="#ef8a32"/>
+      <stop offset="100%" stop-color="#6f1a10"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#ffb24a" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#ffb24a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Flame glow halo -->
+  <ellipse cx="100" cy="28" rx="22" ry="28" fill="#ffb24a" opacity="0.25"/>
+  <ellipse cx="100" cy="20" rx="18" ry="24" fill="url(#glow)"/>
+
+  <!-- Flame body -->
+  <path d="M100 0 C92 12,80 28,82 46 C84 62,92 72,100 74 C108 72,116 62,118 46 C120 28,108 12,100 0 Z"
+        fill="url(#flame-grad)"/>
+  <!-- Inner flame highlight -->
+  <ellipse cx="98" cy="42" rx="4" ry="9" fill="#ffd27a" opacity="0.65"/>
+
+  <!-- Wick -->
+  <line x1="100" y1="74" x2="100" y2="88" stroke="#3a2a18" stroke-width="3.5" stroke-linecap="round" opacity="0.7"/>
+
+  <!-- Clock ring -->
+  <circle cx="100" cy="120" r="80" fill="none" stroke="#3a2a18" stroke-opacity="0.18" stroke-width="3.5"/>
+
+  <!-- Hour tick marks (11 positions — skip 12 which is replaced by flame) -->
+  <g stroke="#3a2a18" stroke-opacity="0.45" stroke-linecap="round">
+    <!-- 1 o'clock -->  <line x1="139.3" y1="53.5"  x2="134.0" y2="62.7"  stroke-width="3"/>
+    <!-- 2 o'clock -->  <line x1="167.3" y1="90.0"  x2="160.3" y2="94.1"  stroke-width="3"/>
+    <!-- 3 o'clock -->  <line x1="180"   y1="120"    x2="170"   y2="120"    stroke-width="3.5"/>
+    <!-- 4 o'clock -->  <line x1="167.3" y1="150.0" x2="160.3" y2="145.9" stroke-width="3"/>
+    <!-- 5 o'clock -->  <line x1="139.3" y1="186.5" x2="134.0" y2="177.3" stroke-width="3"/>
+    <!-- 6 o'clock -->  <line x1="100"   y1="200"    x2="100"   y2="190"    stroke-width="3.5"/>
+    <!-- 7 o'clock -->  <line x1="60.7"  y1="186.5" x2="66.0"  y2="177.3" stroke-width="3"/>
+    <!-- 8 o'clock -->  <line x1="32.7"  y1="150.0" x2="39.7"  y2="145.9" stroke-width="3"/>
+    <!-- 9 o'clock -->  <line x1="20"    y1="120"    x2="30"    y2="120"    stroke-width="3.5"/>
+    <!-- 10 o'clock --> <line x1="32.7"  y1="90.0"  x2="39.7"  y2="94.1"  stroke-width="3"/>
+    <!-- 11 o'clock --> <line x1="60.7"  y1="53.5"  x2="66.0"  y2="62.7"  stroke-width="3"/>
+  </g>
+
+  <!-- Minute hand (~4 o'clock direction) -->
+  <line x1="100" y1="120" x2="135" y2="158" stroke="#a87f3e" stroke-width="4.5" stroke-linecap="round"/>
+  <!-- Hour hand (~10 o'clock direction) -->
+  <line x1="100" y1="120" x2="70"  y2="94"  stroke="#3a2a18" stroke-width="5.5" stroke-linecap="round" opacity="0.75"/>
+
+  <!-- Centre pivot -->
+  <circle cx="100" cy="120" r="5" fill="#3a2a18" opacity="0.6"/>
+</svg>

@@ -5,9 +5,9 @@
   /* Parchment — page backgrounds */
   --background: #fbeacb;       /* Lit Vellum */
   --foreground: #2a1f12;       /* Ink */
-  --font-sans: var(--font-noto-sans-sc), var(--font-geist), system-ui, sans-serif;
-  --font-serif: var(--font-noto-serif-sc), 'Songti SC', serif;
-  --font-brush: var(--font-ma-shan-zheng), cursive;
+  --font-sans: 'Noto Sans SC', var(--font-cormorant), Georgia, serif;
+  --font-serif: 'Noto Serif SC', 'Songti SC', serif;
+  --font-brush: 'Long Cang', 'cwTeXKai', cursive;
   --font-script: var(--font-dancing-script), cursive;
 
   --surface: #f3dcb2;          /* Parchment — cards/panels */
@@ -171,6 +171,24 @@ body {
 .animate-flame   { animation: flame-flicker 2.4s ease-in-out infinite; transform-origin: bottom center; }
 .animate-sundial { animation: sundial-sweep 8s ease-in-out infinite; transform-origin: bottom center; }
 .animate-ink-bloom { animation: ink-bloom 16s ease-in-out infinite; }
+
+/* ── Ink Loading Sprite (loading.png — 4-quadrant sprite) ── */
+@keyframes ink-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes ink-dots-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.96); }
+  50%       { opacity: 1;    transform: scale(1.04); }
+}
+
+/* Enso circle — top-left quadrant of sprite */
+.ink-loader-enso    { width: 72px;  height: 72px;  background-image: url('/logo_v5/loading.png'); background-size: 200% 200%; background-position: 0% 0%; animation: ink-spin 2.5s linear infinite; }
+.ink-loader-enso-sm { width: 44px;  height: 44px;  background-image: url('/logo_v5/loading.png'); background-size: 200% 200%; background-position: 0% 0%; animation: ink-spin 2s   linear infinite; }
+.ink-loader-xs      { width: 18px;  height: 18px;  background-image: url('/logo_v5/loading.png'); background-size: 200% 200%; background-position: 0% 0%; animation: ink-spin 1.6s linear infinite; display: inline-block; }
+
+/* Three ink dots — bottom-left quadrant */
+.ink-loader-dots    { width: 72px;  height: 28px;  background-image: url('/logo_v5/loading.png'); background-size: 200% 200%; background-position: 0% 100%; animation: ink-dots-pulse 1.4s ease-in-out infinite; }
 
 /* Staggered list entrance */
 .stagger > * { animation: slideInUp 0.3s ease-out both; }

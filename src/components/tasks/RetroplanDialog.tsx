@@ -92,16 +92,19 @@ function autoSelectTemplate(
 
 // ── Stage row ─────────────────────────────────────────────────────────────────
 
+type StageWithCal = RetroStage & { calendarId?: string }
+
 interface StageRowProps {
-  stage: RetroStage
+  stage: StageWithCal
   deadline: Date
   index: number
   lang: 'fr' | 'en' | 'zh'
-  onChange: (index: number, stage: RetroStage) => void
+  onChange: (index: number, stage: StageWithCal) => void
   onRemove: (index: number) => void
+  calendarAccounts: CalendarAccount[]
 }
 
-function StageRow({ stage, deadline, index, lang, onChange, onRemove }: StageRowProps) {
+function StageRow({ stage, deadline, index, lang, onChange, onRemove, calendarAccounts }: StageRowProps) {
   const date = stageDate(deadline, stage.daysBeforeDeadline)
   const isPast = date < new Date()
 
@@ -132,6 +135,20 @@ function StageRow({ stage, deadline, index, lang, onChange, onRemove }: StageRow
         />
         <span className="text-xs text-[#8a7a5e]">{t('retroplanDaysBefore', lang)}</span>
       </div>
+
+      {calendarAccounts.length > 1 && (
+        <select
+          value={stage.calendarId ?? ''}
+          onChange={(e) => onChange(index, { ...stage, calendarId: e.target.value || undefined })}
+          className="text-xs border border-[#e2d6bc] rounded-lg px-1.5 py-0.5 bg-[#fbf7ee] text-[#5c5347] max-w-[120px] truncate"
+          title={lang === 'fr' ? 'Sous-calendrier' : lang === 'zh' ? '子日曆' : 'Sub-calendar'}
+        >
+          <option value="">{lang === 'fr' ? 'Défaut' : lang === 'zh' ? '預設' : 'Default'}</option>
+          {calendarAccounts.map((acc) => (
+            <option key={acc.id} value={acc.id}>{acc.name}</option>
+          ))}
+        </select>
+      )}
 
       <div className="flex items-center gap-1 flex-shrink-0">
         {isPast && (
@@ -168,7 +185,7 @@ export function RetroplanDialog({ open, onClose, task, lang, calendarAccounts = 
   const { toast } = useGlobalToast()
   const [userTemplates, setUserTemplates] = useState<RetroTemplate[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('__study')
-  const [stages, setStages] = useState<RetroStage[]>([])
+  const [stages, setStages] = useState<StageWithCal[]>([])
   const [saving, setSaving] = useState(false)
   const [savingTemplate, setSavingTemplate] = useState(false)
   const [newTemplateName, setNewTemplateName] = useState('')
@@ -213,7 +230,7 @@ export function RetroplanDialog({ open, onClose, task, lang, calendarAccounts = 
     loadStagesForTemplate(id, userTemplates, lang)
   }
 
-  const handleStageChange = (index: number, stage: RetroStage) => {
+  const handleStageChange = (index: number, stage: StageWithCal) => {
     setStages((prev) => prev.map((s, i) => (i === index ? stage : s)))
   }
 
@@ -222,8 +239,28 @@ export function RetroplanDialog({ open, onClose, task, lang, calendarAccounts = 
   }
 
   const handleAddStage = () => {
-    setStages((prev) => [...prev, { name: '', daysBeforeDeadline: 3 }])
+    setStages((prev) => [...prev, { name: '', daysBeforeDeadline: 3, calendarId: prev[prev.length - 1]?.calendarId }])
   }
+
+  // Build stage title with name inheritance: "IBM | Exam" + keyword "exam" → "IBM | Review"
+  const buildStageTitleInherited = useCallback((stageName: string): string => {
+    if (!task?.title || !selectedTemplateId) return stageName
+    const allTemplates = [
+      ...BUILTIN_TEMPLATES.map((t) => ({ id: t.id, keywords: t.keywords })),
+      ...userTemplates.map((t) => ({ id: t.id, keywords: t.keywords })),
+    ]
+    const tmpl = allTemplates.find((t) => t.id === selectedTemplateId)
+    if (!tmpl) return stageName
+    const lower = task.title.toLowerCase()
+    const matchedKw = tmpl.keywords.find((kw) => lower.includes(kw.toLowerCase()))
+    if (!matchedKw) return stageName
+    const kwIdx = lower.indexOf(matchedKw.toLowerCase())
+    if (kwIdx > 0) {
+      const prefix = task.title.substring(0, kwIdx).trim().replace(/[|\-:,\s]+$/, '').trim()
+      if (prefix) return `${prefix} | ${stageName}`
+    }
+    return stageName
+  }, [task?.title, selectedTemplateId, userTemplates])
 
   const handleApply = async () => {
     if (!task?.id || !deadline || stages.length === 0) return
@@ -237,9 +274,9 @@ export function RetroplanDialog({ open, onClose, task, lang, calendarAccounts = 
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                title: s.name.trim(),
+                title: buildStageTitleInherited(s.name.trim()),
                 parentTaskId: task.id,
-                calendarAccountId: task.calendarAccountId,
+                calendarAccountId: (s as StageWithCal).calendarId ?? task.calendarAccountId,
                 importance: task.importance,
                 urgency: task.urgency,
                 deadline: stageDate(deadline, s.daysBeforeDeadline).toISOString(),
@@ -374,6 +411,7 @@ export function RetroplanDialog({ open, onClose, task, lang, calendarAccounts = 
                 lang={lang}
                 onChange={handleStageChange}
                 onRemove={handleStageRemove}
+                calendarAccounts={calendarAccounts}
               />
             ))}
           </div>

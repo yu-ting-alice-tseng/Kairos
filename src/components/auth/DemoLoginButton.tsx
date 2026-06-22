@@ -22,9 +22,9 @@ export function DemoLoginButton() {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-3 my-1">
-        <div className="flex-1 h-px bg-[rgba(225,200,150,0.10)]" />
-        <span className="text-xs text-[#8a6a32]">ou</span>
-        <div className="flex-1 h-px bg-[rgba(225,200,150,0.10)]" />
+        <div className="flex-1 h-px bg-[#c9aa72]/40" />
+        <span className="text-xs text-[#8a6b3e]">ou</span>
+        <div className="flex-1 h-px bg-[#c9aa72]/40" />
       </div>
 
       <button
@@ -50,7 +50,7 @@ export function DemoLoginButton() {
 
       {error && <p className="text-xs text-[#c44a3a] text-center">{error}</p>}
 
-      <p className="text-xs text-[#6e6147] text-center">
+      <p className="text-xs text-[#8a6b3e] text-center">
         Données fictives préconfigurées · Aucune inscription requise
       </p>
     </div>

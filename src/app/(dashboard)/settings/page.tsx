@@ -15,7 +15,8 @@ import { DEMO_USER_ID } from '@/lib/demo-data'
 import {
   Settings, Plus, Trash2, Globe, Calendar, Check,
   MonitorSmartphone, Loader2, AlertTriangle, ChevronDown, ChevronUp, RefreshCw,
-  Pencil, KeyRound, LogOut, User, LayoutGrid, Sun, Wand2, SlidersHorizontal,
+  Pencil, KeyRound, LogOut, User, SlidersHorizontal, Shield, MessageSquare,
+  ExternalLink, Mail, Star,
 } from 'lucide-react'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
 import { cn } from '@/lib/utils'
@@ -586,9 +587,6 @@ export default function SettingsPage() {
   const {
     language, setLanguage,
     calendarAccounts, setCalendarAccounts,
-    matrixExcludePatterns, setMatrixExcludePatterns,
-    todayExcludePatterns, setTodayExcludePatterns,
-    keywordRules, setKeywordRules,
   } = useAppStore()
   const { data: session } = useSession()
   const isDemo = session?.user?.id === DEMO_USER_ID
@@ -597,20 +595,7 @@ export default function SettingsPage() {
   const [showAddCalendar, setShowAddCalendar] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [editAccount, setEditAccount] = useState<CalendarAccount | null>(null)
-
-  // Filter inputs
-  const [newMatrixPattern, setNewMatrixPattern] = useState('')
-  const [newTodayPattern, setNewTodayPattern] = useState('')
-
-  // Keyword rule inputs
-  const [newRuleKeyword, setNewRuleKeyword] = useState('')
-  const [newRuleImportance, setNewRuleImportance] = useState(5)
-  const [newRuleUrgence, setNewRuleUrgence] = useState(5)
-
-  const syncRules = async (rules: typeof keywordRules) => {
-    setKeywordRules(rules)
-    await fetch('/api/keyword-rules', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rules) })
-  }
+  const [feedbackRating, setFeedbackRating] = useState(0)
 
   // Surface OAuth result toasts
   useEffect(() => {
@@ -678,26 +663,6 @@ export default function SettingsPage() {
     toast({ title: language === 'fr' ? 'Calendrier supprimé' : language === 'zh' ? '日曆已移除' : 'Calendar removed', variant: 'info' })
   }
 
-  const addMatrixPattern = () => {
-    if (!newMatrixPattern.trim()) return
-    setMatrixExcludePatterns([...matrixExcludePatterns, newMatrixPattern.trim()])
-    setNewMatrixPattern('')
-  }
-
-  const addTodayPattern = () => {
-    if (!newTodayPattern.trim()) return
-    setTodayExcludePatterns([...todayExcludePatterns, newTodayPattern.trim()])
-    setNewTodayPattern('')
-  }
-
-  const addKeywordRule = () => {
-    if (!newRuleKeyword.trim()) return
-    syncRules([...keywordRules, { id: Date.now().toString(), keyword: newRuleKeyword.trim(), importance: newRuleImportance, urgence: newRuleUrgence }])
-    setNewRuleKeyword('')
-    setNewRuleImportance(5)
-    setNewRuleUrgence(5)
-  }
-
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -761,115 +726,103 @@ export default function SettingsPage() {
               </div>
             </section>
 
-            {/* Filters — Matrix */}
+            {/* Privacy & Data */}
             <section className="rounded-2xl border border-[#ece2cb] bg-[#fbf7ee] p-5">
-              <h2 className="text-sm font-semibold text-[#5c5347] mb-1 flex items-center gap-2">
-                <LayoutGrid className="h-4 w-4 text-red-500" />
-                {language === 'fr' ? 'Masquer de la Matrice' : language === 'zh' ? '矩陣隱藏規則' : 'Hide from Matrix'}
+              <h2 className="text-sm font-semibold text-[#5c5347] mb-3 flex items-center gap-2">
+                <Shield className="h-4 w-4 text-red-500" />
+                {language === 'fr' ? 'Confidentialité & Données' : language === 'zh' ? '隱私權與資料' : 'Privacy & Data'}
               </h2>
-              <p className="text-xs text-[#a99873] mb-3">
-                {language === 'fr' ? 'Les tâches contenant ces mots seront masquées de la Matrice.' : language === 'zh' ? '包含這些關鍵字的任務將不顯示在矩陣中。' : 'Tasks containing these words will be hidden from the Matrix.'}
-              </p>
-              <div className="flex flex-wrap gap-2 mb-3">
-                {matrixExcludePatterns.map((p) => (
-                  <TagChip key={p} label={p} onRemove={() => setMatrixExcludePatterns(matrixExcludePatterns.filter((x) => x !== p))} />
-                ))}
-                {matrixExcludePatterns.length === 0 && (
-                  <span className="text-xs text-[#c4b49a] italic">{language === 'fr' ? 'Aucun filtre actif' : language === 'zh' ? '無篩選條件' : 'No filters active'}</span>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <input
-                  value={newMatrixPattern}
-                  onChange={(e) => setNewMatrixPattern(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && addMatrixPattern()}
-                  placeholder={language === 'fr' ? 'ex: Meeting' : language === 'zh' ? '例：會議' : 'e.g. Meeting'}
-                  className="flex-1 border border-[#e2d6bc] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-red-300 bg-white"
-                />
-                <button onClick={addMatrixPattern} className="px-3 py-1.5 rounded-lg bg-[#c44a3a] text-white text-xs hover:bg-[#ab3326]">
-                  <Plus className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </section>
-
-            {/* Filters — Today */}
-            <section className="rounded-2xl border border-[#ece2cb] bg-[#fbf7ee] p-5">
-              <h2 className="text-sm font-semibold text-[#5c5347] mb-1 flex items-center gap-2">
-                <Sun className="h-4 w-4 text-amber-500" />
-                {language === 'fr' ? "Masquer d'Aujourd'hui" : language === 'zh' ? '今日頁面隱藏規則' : "Hide from Today"}
-              </h2>
-              <p className="text-xs text-[#a99873] mb-3">
-                {language === 'fr' ? "Les tâches contenant ces mots seront masquées de la vue Aujourd'hui." : language === 'zh' ? '包含這些關鍵字的任務將不顯示在今日頁面中。' : "Tasks containing these words will be hidden from the Today view."}
-              </p>
-              <div className="flex flex-wrap gap-2 mb-3">
-                {todayExcludePatterns.map((p) => (
-                  <TagChip key={p} label={p} onRemove={() => setTodayExcludePatterns(todayExcludePatterns.filter((x) => x !== p))} />
-                ))}
-                {todayExcludePatterns.length === 0 && (
-                  <span className="text-xs text-[#c4b49a] italic">{language === 'fr' ? 'Aucun filtre actif' : language === 'zh' ? '無篩選條件' : 'No filters active'}</span>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <input
-                  value={newTodayPattern}
-                  onChange={(e) => setNewTodayPattern(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && addTodayPattern()}
-                  placeholder={language === 'fr' ? 'ex: Réunion' : language === 'zh' ? '例：會議' : 'e.g. Meeting'}
-                  className="flex-1 border border-[#e2d6bc] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-red-300 bg-white"
-                />
-                <button onClick={addTodayPattern} className="px-3 py-1.5 rounded-lg bg-[#c44a3a] text-white text-xs hover:bg-[#ab3326]">
-                  <Plus className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </section>
-
-            {/* Keyword Rules */}
-            <section className="rounded-2xl border border-[#ece2cb] bg-[#fbf7ee] p-5">
-              <h2 className="text-sm font-semibold text-[#5c5347] mb-1 flex items-center gap-2">
-                <Wand2 className="h-4 w-4 text-[#a87f3e]" />
-                {language === 'fr' ? 'Règles par mot-clé' : language === 'zh' ? '關鍵字優先規則' : 'Keyword priority rules'}
-              </h2>
-              <p className="text-xs text-[#a99873] mb-3">
-                {language === 'fr' ? "Applique automatiquement un score d'importance et d'urgence aux tâches contenant le mot-clé." : language === 'zh' ? '自動為包含關鍵字的任務套用重要度與緊急度分數。' : 'Automatically apply importance and urgency scores to tasks containing the keyword.'}
-              </p>
-
-              {keywordRules.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {keywordRules.map((rule) => (
-                    <span key={rule.id} className="flex items-center gap-1.5 rounded-lg bg-[#f3ecdd] border border-[#e2d6bc] px-2.5 py-1 text-xs text-[#5c5347]">
-                      <span className="font-mono bg-white rounded px-1">{rule.keyword}</span>
-                      <span className="text-[#a99873]">I:{rule.importance} U:{rule.urgence}</span>
-                      <button onClick={() => syncRules(keywordRules.filter((r) => r.id !== rule.id))} className="text-[#a99873] hover:text-red-500 ml-0.5">
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </span>
+              <div className="flex flex-col gap-3">
+                <p className="text-xs text-[#6b5840] leading-relaxed">
+                  {language === 'fr'
+                    ? 'Vos données (tâches, habitudes, calendriers) sont stockées de façon sécurisée et ne sont jamais partagées avec des tiers. Seules les informations de base du profil (nom, email, avatar) sont conservées depuis votre compte OAuth.'
+                    : language === 'zh'
+                    ? '你的資料（任務、習慣、日曆）安全儲存，絕不與第三方分享。僅保留 OAuth 帳號的基本個人資料（姓名、電子郵件、頭像）。'
+                    : 'Your data (tasks, habits, calendars) is stored securely and never shared with third parties. Only basic profile info (name, email, avatar) is retained from your OAuth account.'}
+                </p>
+                <div className="border-t border-[#ece2cb] pt-3 flex flex-col gap-2">
+                  {[
+                    language === 'fr' ? 'Données chiffrées en transit (HTTPS)' : language === 'zh' ? '傳輸加密（HTTPS）' : 'Data encrypted in transit (HTTPS)',
+                    language === 'fr' ? 'Aucun suivi publicitaire' : language === 'zh' ? '無廣告追蹤' : 'No ad tracking',
+                    language === 'fr' ? 'Suppression sur demande' : language === 'zh' ? '可申請刪除帳號資料' : 'Deletion available on request',
+                  ].map((item) => (
+                    <div key={item} className="flex items-center gap-2 text-xs text-[#5c5347]">
+                      <Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                      {item}
+                    </div>
                   ))}
                 </div>
-              )}
+                <div className="flex gap-2 pt-1">
+                  <a
+                    href="mailto:yexiu07060810@gmail.com?subject=Data deletion request — Kairos"
+                    className="inline-flex items-center gap-1.5 text-xs text-[#ab3326] hover:text-[#861f17] font-medium transition-colors"
+                  >
+                    <Mail className="h-3.5 w-3.5" />
+                    {language === 'fr' ? 'Demander la suppression' : language === 'zh' ? '申請刪除資料' : 'Request deletion'}
+                  </a>
+                </div>
+              </div>
+            </section>
 
-              <div className="flex flex-wrap gap-2 items-end">
-                <input
-                  value={newRuleKeyword}
-                  onChange={(e) => setNewRuleKeyword(e.target.value)}
-                  placeholder={language === 'fr' ? 'Mot-clé' : language === 'zh' ? '關鍵字' : 'Keyword'}
-                  className="border border-[#e2d6bc] rounded-lg px-3 py-1.5 text-xs w-28 focus:outline-none focus:ring-1 focus:ring-red-300 bg-white"
-                />
-                <div className="flex flex-col gap-0.5">
-                  <label className="text-[10px] text-[#8a7a5e]">{language === 'fr' ? 'Importance' : language === 'zh' ? '重要度' : 'Importance'} ({newRuleImportance})</label>
-                  <input type="range" min={1} max={10} value={newRuleImportance} onChange={(e) => setNewRuleImportance(Number(e.target.value))} className="w-24 accent-red-600" />
+            {/* Feedback */}
+            <section className="rounded-2xl border border-[#ece2cb] bg-[#fbf7ee] p-5">
+              <h2 className="text-sm font-semibold text-[#5c5347] mb-3 flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-[#a87f3e]" />
+                {language === 'fr' ? 'Avis & Retours' : language === 'zh' ? '意見回饋' : 'Feedback'}
+              </h2>
+              <div className="flex flex-col gap-4">
+                {/* Star rating */}
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs text-[#8a7a5e]">
+                    {language === 'fr' ? 'Comment évaluez-vous Kairos ?' : language === 'zh' ? '你對 Kairos 的評價如何？' : 'How would you rate Kairos?'}
+                  </p>
+                  <div className="flex gap-1">
+                    {[1,2,3,4,5].map((n) => (
+                      <button
+                        key={n}
+                        onClick={() => setFeedbackRating(n)}
+                        className="transition-transform hover:scale-110"
+                      >
+                        <Star
+                          className="h-6 w-6 transition-colors"
+                          fill={n <= feedbackRating ? '#a87f3e' : 'none'}
+                          stroke={n <= feedbackRating ? '#a87f3e' : '#c9b88a'}
+                        />
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex flex-col gap-0.5">
-                  <label className="text-[10px] text-[#8a7a5e]">{language === 'fr' ? 'Urgence' : language === 'zh' ? '緊急度' : 'Urgency'} ({newRuleUrgence})</label>
-                  <input type="range" min={1} max={10} value={newRuleUrgence} onChange={(e) => setNewRuleUrgence(Number(e.target.value))} className="w-24 accent-amber-600" />
+                {/* Contact links */}
+                <div className="border-t border-[#ece2cb] pt-3 flex flex-col gap-2.5">
+                  <a
+                    href="mailto:yexiu07060810@gmail.com?subject=Kairos Feedback"
+                    className="flex items-center gap-2.5 text-sm text-[#5c5347] hover:text-[#ab3326] transition-colors group"
+                  >
+                    <span className="h-8 w-8 rounded-xl bg-[#f3ecdd] border border-[#e7c894] flex items-center justify-center group-hover:bg-red-50 transition-colors shrink-0">
+                      <Mail className="h-3.5 w-3.5 text-[#ab3326]" />
+                    </span>
+                    <div>
+                      <p className="text-xs font-medium">{language === 'fr' ? 'Envoyer un email' : language === 'zh' ? '傳送電子郵件' : 'Send an email'}</p>
+                      <p className="text-[11px] text-[#a99873]">yexiu07060810@gmail.com</p>
+                    </div>
+                    <ExternalLink className="h-3.5 w-3.5 ml-auto text-[#c9b88a] group-hover:text-[#ab3326]" />
+                  </a>
+                  <a
+                    href="https://github.com/AliceTseng0810"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2.5 text-sm text-[#5c5347] hover:text-[#2a1f12] transition-colors group"
+                  >
+                    <span className="h-8 w-8 rounded-xl bg-[#f3ecdd] border border-[#e7c894] flex items-center justify-center group-hover:bg-[#2a1f12]/10 transition-colors shrink-0">
+                      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+                    </span>
+                    <div>
+                      <p className="text-xs font-medium">{language === 'fr' ? 'Signaler un bug' : language === 'zh' ? '回報問題 / GitHub' : 'Report a bug / GitHub'}</p>
+                      <p className="text-[11px] text-[#a99873]">github.com/AliceTseng0810</p>
+                    </div>
+                    <ExternalLink className="h-3.5 w-3.5 ml-auto text-[#c9b88a]" />
+                  </a>
                 </div>
-                <button
-                  disabled={!newRuleKeyword.trim()}
-                  onClick={addKeywordRule}
-                  className="flex items-center gap-1 rounded-lg bg-[#c44a3a] text-white px-3 py-1.5 text-xs font-medium hover:bg-[#ab3326] disabled:opacity-50"
-                >
-                  <Plus className="h-3 w-3" />
-                  {language === 'fr' ? 'Ajouter' : language === 'zh' ? '新增' : 'Add'}
-                </button>
               </div>
             </section>
 

@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { cn } from '@/lib/utils'
 import { Repeat2, Plus, Flame, CheckCircle2, Trophy, Loader2, Trash2, Edit2, Clock, CalendarDays } from 'lucide-react'
 import { Candle } from '@/components/ui/Candle'
+import { InkLoader } from '@/components/ui/InkLoader'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
 
 const HABIT_COLORS = [
@@ -248,7 +249,7 @@ export default function HabitsPage() {
     setHabits(habits.filter((h) => h.id !== id))
   }
 
-  if (loading) return <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-red-800" /></div>
+  if (loading) return <InkLoader size="page" />
 
   const totalStreak = habits.reduce((acc, h) => acc + h.streak, 0)
   const topStreak = Math.max(0, ...habits.map((h) => h.longestStreak))
@@ -286,7 +287,8 @@ export default function HabitsPage() {
 
         {habits.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#e2d6bc] py-16 text-center">
-            <Repeat2 className="h-10 w-10 text-[#cbb98e] mb-3" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo_v5/empty-habits.png" alt="" className="h-32 w-auto mb-4 object-contain opacity-85" />
             <p className="text-sm font-medium text-[#8a7a5e]">{t('noHabits', language)}</p>
             <Button variant="outline" size="sm" className="mt-4" onClick={() => setShowForm(true)}>
               <Plus className="h-4 w-4" />

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Sundial } from '@/components/ui/Sundial'
 import { Candle } from '@/components/ui/Candle'
+import { InkLoader } from '@/components/ui/InkLoader'
 import { generatePriorityList, formatDate, formatTime, cn } from '@/lib/utils'
 import {
   Plus, Sparkles, Sun, Flame, RefreshCw, MessageSquare, ChevronRight,
@@ -432,18 +433,7 @@ export default function TodayPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center bg-[#f7f6ff]">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-red-500 to-amber-700 flex items-center justify-center shadow-lg shadow-red-500/30 animate-float">
-            <Zap className="h-5 w-5 text-white" />
-          </div>
-          <Loader2 className="h-5 w-5 animate-spin text-red-400" />
-        </div>
-      </div>
-    )
-  }
+  if (loading) return <InkLoader size="page" />
 
   return (
     <div className="h-full flex flex-col">
@@ -524,13 +514,13 @@ export default function TodayPage() {
       <div className="flex-1 flex min-h-0 overflow-hidden">
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 animate-fade-in">
           {AI_ENABLED && recap && (
-            <div className="relative rounded-2xl bg-gradient-to-br from-red-50 to-amber-50 border border-red-100 p-5">
-              <button onClick={() => setRecap(null)} className="absolute right-3 top-3 p-1 rounded-lg hover:bg-[#fbf7ee]/50 text-[#a99873]">
+            <div className="relative rounded-2xl bg-gradient-to-br from-[#fbeacb] to-[#f3dcb2] border border-[#e7c894] p-5">
+              <button onClick={() => setRecap(null)} className="absolute right-3 top-3 p-1 rounded-lg hover:bg-[#e7c894]/30 text-[#a99873]">
                 <X className="h-4 w-4" />
               </button>
               <div className="flex items-center gap-2 mb-3">
-                <Sparkles className="h-4 w-4 text-red-800" />
-                <span className="text-sm font-semibold text-red-900">{t('morningRecap', language)}</span>
+                <Sparkles className="h-4 w-4 text-[#ab3326]" />
+                <span className="text-sm font-semibold text-[#2a1f12]">{t('morningRecap', language)}</span>
               </div>
               <p className="text-sm text-[#5c5347] whitespace-pre-line leading-relaxed">{recap}</p>
             </div>
@@ -652,7 +642,7 @@ export default function TodayPage() {
           <DndContext onDragEnd={handleScheduleTask}>
             <div className="flex gap-4 min-h-0">
               {/* Left: Today's schedule timeline */}
-              <div className="w-[240px] shrink-0 rounded-2xl border border-[#e2d6bc] bg-[#fbf7ee] overflow-hidden flex flex-col">
+              <div className="w-[320px] shrink-0 rounded-2xl border border-[#e2d6bc] bg-[#fbf7ee] overflow-hidden flex flex-col">
                 <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#ece2cb]">
                   <CalendarDays className="h-3.5 w-3.5 text-red-500" />
                   <span className="text-xs font-semibold text-[#5c5347]">
@@ -686,7 +676,7 @@ export default function TodayPage() {
               {/* Right: Priority tasks (draggable) */}
               <DroppableTasksPanel>
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-sm font-semibold text-[#4a4866] flex items-center gap-2">
+                  <h2 className="text-sm font-semibold text-[#2a1f12] flex items-center gap-2">
                     <Clock className="h-4 w-4 text-red-500" />
                     {language === 'fr' ? 'Tâches prioritaires' : language === 'zh' ? '優先任務' : 'Priority tasks'}
                     <Badge variant="default" className="text-xs bg-red-100 text-red-900 border-0">{prioritizedTasks.length}</Badge>
@@ -694,13 +684,12 @@ export default function TodayPage() {
                 </div>
 
                 {prioritizedTasks.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#ebe8f8] py-12 text-center bg-[#fbf7ee]/60">
-                    <div className="h-14 w-14 rounded-2xl bg-[#f7f6ff] border border-[#ebe8f8] flex items-center justify-center mb-4">
-                      <CheckCircle2 className="h-7 w-7 text-red-300" />
-                    </div>
-                    <p className="text-sm font-medium text-[#9896a8]">{t('noTasks', language)}</p>
+                  <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#e7c894]/60 py-12 text-center bg-[#fbeacb]/40">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/logo_v5/empty-task.png" alt="" className="h-20 w-20 mb-4 opacity-70" />
+                    <p className="text-sm font-medium text-[#6b5840]">{t('noTasks', language)}</p>
                     <Button variant="outline" size="sm"
-                      className="mt-4 border-[#ebe8f8] text-[#4a4866] hover:bg-[#f7f6ff] hover:border-red-200"
+                      className="mt-4 border-[#e7c894] text-[#6b5840] hover:bg-[#f3dcb2] hover:border-[#c9aa72]"
                       onClick={() => setShowTaskForm(true)}>
                       <Plus className="h-4 w-4" />
                       {t('addTask', language)}
@@ -729,7 +718,14 @@ export default function TodayPage() {
 
           {completedToday.length > 0 && (
             <div>
-              <h2 className="text-sm font-semibold text-[#b8b4cc] mb-3 flex items-center gap-2">
+              {/* Ink separator */}
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#c9aa72]/50 to-transparent" />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo_v5/Waterprint_Social Media.png" alt="" className="h-6 w-auto opacity-35" />
+                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#c9aa72]/50 to-transparent" />
+              </div>
+              <h2 className="text-sm font-semibold text-[#8a6b3e] mb-3 flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4" />
                 {language === 'fr' ? `Terminées aujourd'hui (${completedToday.length})` : language === 'zh' ? `今日已完成 (${completedToday.length})` : `Completed today (${completedToday.length})`}
               </h2>
