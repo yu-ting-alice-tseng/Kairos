@@ -1058,6 +1058,14 @@ export default function CalendarPage() {
             const res = await fetch('/api/tasks')
             if (res.ok) setTasks(await res.json())
           }}
+          onNavigateToDate={(date: Date) => {
+            // Jump to the Monday of the week containing `date`
+            const d = new Date(date); d.setHours(0, 0, 0, 0)
+            const dow = d.getDay()
+            const toMon = dow === 0 ? -6 : 1 - dow
+            d.setDate(d.getDate() + toMon)
+            setStartDate(d)
+          }}
         />
       ) : viewingHabit ? (
         <HabitDetailPanel
@@ -1251,7 +1259,7 @@ function HabitDetailPanel({ habit, lang, onComplete, onClose }: {
 }
 
 function EventDetailPanel({
-  event, lang, saving, tasks, onSave, onDelete, onClose, onTasksRefresh,
+  event, lang, saving, tasks, onSave, onDelete, onClose, onTasksRefresh, onNavigateToDate,
 }: {
   event: CalendarEvent
   lang: 'fr' | 'en' | 'zh'
@@ -1261,6 +1269,7 @@ function EventDetailPanel({
   onDelete: (ev: CalendarEvent) => void
   onClose: () => void
   onTasksRefresh: () => void
+  onNavigateToDate?: (date: Date) => void
 }) {
   const toLocal = (d: Date | string) => {
     const dt = new Date(d)
@@ -1532,22 +1541,31 @@ function EventDetailPanel({
             <div className="flex flex-col gap-1">
               {chainParent ? (
                 <>
-                  <div className="flex items-center gap-2 text-xs rounded-lg px-2.5 py-1.5 bg-red-50 border border-red-200">
+                  <div
+                    className={cn('flex items-center gap-2 text-xs rounded-lg px-2.5 py-1.5 bg-red-50 border border-red-200', chainParent.deadline && onNavigateToDate ? 'cursor-pointer hover:bg-red-100 transition-colors' : '')}
+                    onClick={() => chainParent.deadline && onNavigateToDate?.(new Date(String(chainParent.deadline)))}
+                  >
                     <GitBranch className="h-3 w-3 text-red-600 shrink-0" />
                     <span className="text-[#3a3326] truncate flex-1 font-medium">{chainParent.title}</span>
                     {chainParent.deadline && (
-                      <span className="text-red-500 shrink-0 text-[10px]">
+                      <span className="text-red-500 shrink-0 text-[10px] flex items-center gap-0.5">
                         {new Date(chainParent.deadline).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
+                        {onNavigateToDate && <ChevronRight className="h-2.5 w-2.5" />}
                       </span>
                     )}
                   </div>
                   {chainSiblings.map((t) => (
-                    <div key={t.id} className="flex items-center gap-2 text-xs rounded-lg px-2.5 py-1.5 bg-[#f3ecdd] border border-[#ece2cb] ml-3">
+                    <div
+                      key={t.id}
+                      className={cn('flex items-center gap-2 text-xs rounded-lg px-2.5 py-1.5 bg-[#f3ecdd] border border-[#ece2cb] ml-3', t.deadline && onNavigateToDate ? 'cursor-pointer hover:bg-[#ece2cb] transition-colors' : '')}
+                      onClick={() => t.deadline && onNavigateToDate?.(new Date(String(t.deadline)))}
+                    >
                       <span className="h-1.5 w-1.5 rounded-full bg-[#a99873] shrink-0" />
                       <span className={`truncate flex-1 ${t.calendarEventId === event.id ? 'text-[#ab3326] font-medium' : 'text-[#3a3326]'}`}>{t.title}</span>
                       {t.deadline && (
-                        <span className="text-[#a99873] shrink-0 text-[10px]">
+                        <span className="text-[#a99873] shrink-0 text-[10px] flex items-center gap-0.5">
                           {new Date(t.deadline).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
+                          {onNavigateToDate && <ChevronRight className="h-2.5 w-2.5" />}
                         </span>
                       )}
                     </div>
@@ -1555,11 +1573,16 @@ function EventDetailPanel({
                 </>
               ) : (
                 relatedChains.map((t) => (
-                  <div key={t.id} className="flex items-center justify-between text-xs rounded-lg px-2.5 py-1.5 bg-[#f3ecdd] border border-[#ece2cb]">
+                  <div
+                    key={t.id}
+                    className={cn('flex items-center justify-between text-xs rounded-lg px-2.5 py-1.5 bg-[#f3ecdd] border border-[#ece2cb]', t.deadline && onNavigateToDate ? 'cursor-pointer hover:bg-[#ece2cb] transition-colors' : '')}
+                    onClick={() => t.deadline && onNavigateToDate?.(new Date(String(t.deadline)))}
+                  >
                     <span className="text-[#3a3326] truncate flex-1">{t.title}</span>
                     {t.deadline && (
-                      <span className="text-[#a99873] ml-2 shrink-0 text-[10px]">
+                      <span className="text-[#a99873] ml-2 shrink-0 text-[10px] flex items-center gap-0.5">
                         {new Date(t.deadline).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
+                        {onNavigateToDate && <ChevronRight className="h-2.5 w-2.5" />}
                       </span>
                     )}
                   </div>
