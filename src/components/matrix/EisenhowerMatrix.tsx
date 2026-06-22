@@ -42,9 +42,9 @@ function TaskCard({ task, isDragging = false }: { task: Task; isDragging?: boole
       style={style}
       {...listeners}
       {...attributes}
-      className={`group relative bg-[#fbf7ee] rounded-xl border border-[#ece2cb] p-3 shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md hover:border-[#e2d6bc] transition-all duration-150 select-none ${isDragging ? 'opacity-50' : ''}`}
+      className={`group relative bg-[#fbf7ee] rounded-xl border border-[#ece2cb] p-3 shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md hover:border-[#e2d6bc] transition-all duration-150 select-none ${isDragging ? 'opacity-50' : ''} ${task.status === 'COMPLETED' ? 'opacity-50' : ''}`}
     >
-      <p className="text-sm font-medium text-[#2a2420] line-clamp-2 mb-2">{task.title}</p>
+      <p className={`text-sm font-medium line-clamp-2 mb-2 ${task.status === 'COMPLETED' ? 'line-through text-[#a99873]' : 'text-[#2a2420]'}`}>{task.title}</p>
       <div className="flex items-center gap-2 flex-wrap">
         {task.estimatedMinutes && (
           <span className="flex items-center gap-1 text-xs text-[#8a7a5e]">
@@ -117,7 +117,7 @@ export function EisenhowerMatrix({ tasks, onTaskUpdate, onTaskClick, lang = 'fr'
 
   const getTasksForQuadrant = useCallback(
     (quadrantId: string) =>
-      tasks.filter((t) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && getQuadrant(t.importance, t.urgency) === quadrantId),
+      tasks.filter((t) => t.status !== 'CANCELLED' && getQuadrant(t.importance, t.urgency) === quadrantId),
     [tasks]
   )
 
