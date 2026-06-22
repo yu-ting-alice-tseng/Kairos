@@ -85,7 +85,7 @@ function HabitForm({ open, onClose, onSave, habit, lang, calendarAccounts }: {
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{habit ? t('edit', lang) : t('addHabit', lang)}</DialogTitle>
         </DialogHeader>
