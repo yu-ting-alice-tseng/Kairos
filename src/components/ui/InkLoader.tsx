@@ -8,7 +8,7 @@ export function InkLoader({ size = 'page' }: { size?: 'page' | 'sm' | 'xs' }) {
       <div className="flex h-full w-full min-h-[200px] items-center justify-center bg-[#fbeacb]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/logo_v5/主加載圖示.png"
+          src="/logo_v5/主加載圖示_去背.png"
           alt=""
           className="w-20 h-20 object-contain ink-loader-enso-img"
         />
@@ -21,7 +21,7 @@ export function InkLoader({ size = 'page' }: { size?: 'page' | 'sm' | 'xs' }) {
       <div className="flex items-center justify-center py-8">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/logo_v5/主加載圖示.png"
+          src="/logo_v5/主加載圖示_去背.png"
           alt=""
           className="w-11 h-11 object-contain ink-loader-enso-img"
         />
@@ -33,7 +33,7 @@ export function InkLoader({ size = 'page' }: { size?: 'page' | 'sm' | 'xs' }) {
     <span className="inline-flex items-center justify-center w-5 h-5" aria-hidden="true">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/logo_v5/主加載圖示.png"
+        src="/logo_v5/主加載圖示_去背.png"
         alt=""
         className="w-5 h-5 object-contain ink-loader-enso-img"
       />

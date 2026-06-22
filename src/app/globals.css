@@ -179,12 +179,12 @@ body {
 }
 
 /* img-based spinner used by InkLoader component */
-.ink-loader-enso-img { animation: ink-spin 2.5s linear infinite; mix-blend-mode: multiply; filter: brightness(2) contrast(6); }
+.ink-loader-enso-img { animation: ink-spin 2.5s linear infinite; }
 
 /* legacy div-based classes kept for compatibility */
-.ink-loader-enso    { width: 72px;  height: 72px;  background-image: url('/logo_v5/主加載圖示.png'); background-size: contain; background-repeat: no-repeat; background-position: center; animation: ink-spin 2.5s linear infinite; }
-.ink-loader-enso-sm { width: 44px;  height: 44px;  background-image: url('/logo_v5/主加載圖示.png'); background-size: contain; background-repeat: no-repeat; background-position: center; animation: ink-spin 2s   linear infinite; }
-.ink-loader-xs      { width: 18px;  height: 18px;  background-image: url('/logo_v5/主加載圖示.png'); background-size: contain; background-repeat: no-repeat; background-position: center; animation: ink-spin 1.6s linear infinite; display: inline-block; }
+.ink-loader-enso    { width: 72px;  height: 72px;  background-image: url('/logo_v5/主加載圖示_去背.png'); background-size: contain; background-repeat: no-repeat; background-position: center; animation: ink-spin 2.5s linear infinite; }
+.ink-loader-enso-sm { width: 44px;  height: 44px;  background-image: url('/logo_v5/主加載圖示_去背.png'); background-size: contain; background-repeat: no-repeat; background-position: center; animation: ink-spin 2s   linear infinite; }
+.ink-loader-xs      { width: 18px;  height: 18px;  background-image: url('/logo_v5/主加載圖示_去背.png'); background-size: contain; background-repeat: no-repeat; background-position: center; animation: ink-spin 1.6s linear infinite; display: inline-block; }
 .ink-loader-dots    { display: none; }
 
 /* Staggered list entrance */
