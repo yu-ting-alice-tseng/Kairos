@@ -232,7 +232,7 @@ export default function TodayPage() {
   )
 
   const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999)
-  const isDueByToday = (deadline: string | null | undefined) => {
+  const isDueByToday = (deadline: string | Date | null | undefined) => {
     if (!deadline) return true
     return new Date(String(deadline)) <= todayEnd
   }
