@@ -84,6 +84,10 @@ function formatDateShort(d: Date): string {
 function isOverdue(d: Date): boolean {
   return d < new Date()
 }
+function isToday(d: Date): boolean {
+  const now = new Date()
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
+}
 
 function matchesAnyTemplate(
   title: string,
@@ -117,6 +121,18 @@ function ChainCard({
   const done = task.status === 'COMPLETED'
   const deadline = task.deadline ? new Date(task.deadline) : null
   const overdue = deadline && !done && isOverdue(deadline)
+  const todayTask = deadline && !done && isToday(deadline)
+
+  // Intuitive relative label shown on child cards
+  const relativeLabel = (() => {
+    if (!deadline || done) return null
+    if (isToday(deadline)) return lang === 'fr' ? "Aujourd'hui" : lang === 'zh' ? '今天' : 'Today'
+    const now = new Date(); now.setHours(0, 0, 0, 0)
+    const dl = new Date(deadline); dl.setHours(0, 0, 0, 0)
+    const diff = Math.round((dl.getTime() - now.getTime()) / 86400000)
+    if (diff > 0) return lang === 'fr' ? `Dans ${diff}j` : lang === 'zh' ? `${diff}天後` : `In ${diff}d`
+    return null // overdue already shown via red styling
+  })()
 
   return (
     <div
@@ -127,6 +143,8 @@ function ChainCard({
         isSelected && 'ring-2 ring-red-400 ring-offset-1',
         done
           ? 'bg-emerald-50 border-emerald-200 opacity-75'
+          : todayTask
+          ? 'bg-amber-50 border-amber-300 hover:shadow-md'
           : overdue
           ? 'bg-red-50/50 border-red-200 hover:shadow-md'
           : 'bg-[#fbf7ee] border-[#ece2cb] hover:border-red-200 hover:shadow-md'
@@ -156,7 +174,7 @@ function ChainCard({
             {deadline && (
               <span className={cn(
                 'flex items-center gap-1 text-xs',
-                done ? 'text-emerald-600' : overdue ? 'text-red-500' : 'text-[#8a7a5e]'
+                done ? 'text-emerald-600' : overdue ? 'text-red-500' : todayTask ? 'text-amber-700' : 'text-[#8a7a5e]'
               )}>
                 {overdue && !done && <AlertTriangle className="h-3 w-3" />}
                 <Clock className="h-3 w-3" />
@@ -168,9 +186,12 @@ function ChainCard({
                 {lang === 'fr' ? 'Terminé' : lang === 'zh' ? '已完成' : 'Done'}
               </span>
             )}
-            {node.daysBeforeParent !== undefined && (
-              <span className="text-xs text-red-500">
-                −{node.daysBeforeParent}j
+            {relativeLabel && (
+              <span className={cn(
+                'text-xs font-medium px-1.5 py-0.5 rounded-full',
+                todayTask ? 'bg-amber-100 text-amber-700' : 'bg-[#f3ecdd] text-[#8a7a5e]'
+              )}>
+                {relativeLabel}
               </span>
             )}
           </div>
@@ -352,7 +373,7 @@ function TemplateEditor({
                       onChange={(e) => setStages((prev) => prev.map((s, j) => j === i ? { ...s, daysBeforeDeadline: Math.max(1, Number(e.target.value)) } : s))}
                       className="w-12 text-center text-xs border border-[#e2d6bc] rounded-lg px-1 py-0.5 bg-[#fbf7ee]"
                     />
-                    <span className="text-xs text-[#8a7a5e]">j</span>
+                    <span className="text-xs text-[#8a7a5e]">{lang === 'zh' ? '天' : lang === 'en' ? 'd' : 'j'}</span>
                   </div>
                   <button onClick={() => setStages((prev) => prev.filter((_, j) => j !== i))} className="p-1 rounded hover:bg-red-50 text-[#a99873] hover:text-red-500">
                     <Trash2 className="h-3 w-3" />
