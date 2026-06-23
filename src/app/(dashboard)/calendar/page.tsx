@@ -1369,6 +1369,15 @@ function EventDetailPanel({
     setLinkSearch('')
   }
 
+  const handleUnlinkFromChain = async (taskId: string) => {
+    await fetch(`/api/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parentTaskId: null }),
+    })
+    onTasksRefresh()
+  }
+
   const handleLinkTask = async () => {
     if (!selectedLinkId) return
     setLinkSaving(true)
@@ -1522,17 +1531,31 @@ function EventDetailPanel({
                   {chainSiblings.map((t) => (
                     <div
                       key={t.id}
-                      className={cn('flex items-center gap-2 text-xs rounded-lg px-2.5 py-1.5 bg-[#f3ecdd] border border-[#ece2cb] ml-3', t.deadline && onNavigateToDate ? 'cursor-pointer hover:bg-[#ece2cb] transition-colors' : '')}
-                      onClick={() => t.deadline && onNavigateToDate?.(new Date(String(t.deadline)), t.id)}
+                      className="group flex items-center gap-2 text-xs rounded-lg px-2.5 py-1.5 bg-[#f3ecdd] border border-[#ece2cb] ml-3 hover:bg-[#ece2cb] transition-colors"
                     >
                       <span className="h-1.5 w-1.5 rounded-full bg-[#a99873] shrink-0" />
-                      <span className={`truncate flex-1 ${t.calendarEventId === event.id ? 'text-[#ab3326] font-medium' : 'text-[#3a3326]'}`}>{t.title}</span>
+                      <span
+                        className={`truncate flex-1 ${t.calendarEventId === event.id ? 'text-[#ab3326] font-medium' : 'text-[#3a3326]'} ${t.deadline && onNavigateToDate ? 'cursor-pointer' : ''}`}
+                        onClick={() => t.deadline && onNavigateToDate?.(new Date(String(t.deadline)), t.id)}
+                      >
+                        {t.title}
+                      </span>
                       {t.deadline && (
-                        <span className="text-[#a99873] shrink-0 text-[10px] flex items-center gap-0.5">
+                        <span
+                          className="text-[#a99873] shrink-0 text-[10px] flex items-center gap-0.5 cursor-pointer"
+                          onClick={() => t.deadline && onNavigateToDate?.(new Date(String(t.deadline)), t.id)}
+                        >
                           {new Date(t.deadline).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
                           {onNavigateToDate && <ChevronRight className="h-2.5 w-2.5" />}
                         </span>
                       )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleUnlinkFromChain(t.id) }}
+                        className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-100 hover:text-red-500 text-[#a99873] transition-all"
+                        title={lang === 'fr' ? 'Retirer de la chaîne' : lang === 'zh' ? '從任務練移除' : 'Remove from chain'}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
                     </div>
                   ))}
                 </>
