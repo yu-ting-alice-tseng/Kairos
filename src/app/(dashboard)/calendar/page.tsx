@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { cn, formatTime, getQuadrant, EISENHOWER_QUADRANTS } from '@/lib/utils'
 import {
   ChevronLeft, ChevronRight, Calendar, Plus, Clock, Loader2, Pencil, Trash2, X,
-  MapPin, ExternalLink, GitBranch, AlignLeft, CheckCircle2, Circle, Check, Sparkles, Undo2,
+  MapPin, ExternalLink, GitBranch, AlignLeft, CheckCircle2, Circle, Check, Sparkles, Undo2, AlertTriangle,
 } from 'lucide-react'
 import {
   format, addDays, isSameDay, isToday,
@@ -1521,49 +1521,83 @@ function EventDetailPanel({
             <div className="flex flex-col gap-1">
               {chainParent ? (
                 <>
-                  <div
-                    className={cn('flex items-center gap-2 text-xs rounded-lg px-2.5 py-1.5 bg-red-50 border border-red-200', chainParent.deadline && onNavigateToDate ? 'cursor-pointer hover:bg-red-100 transition-colors' : '')}
-                    onClick={() => chainParent.deadline && onNavigateToDate?.(new Date(String(chainParent.deadline)), chainParent.id)}
-                  >
-                    <GitBranch className="h-3 w-3 text-red-600 shrink-0" />
-                    <span className="text-[#3a3326] truncate flex-1 font-medium">{chainParent.title}</span>
-                    {chainParent.deadline && (
-                      <span className="text-red-500 shrink-0 text-[10px] flex items-center gap-0.5">
-                        {new Date(chainParent.deadline).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
-                        {onNavigateToDate && <ChevronRight className="h-2.5 w-2.5" />}
-                      </span>
-                    )}
-                  </div>
-                  {chainSiblings.map((t) => (
-                    <div
-                      key={t.id}
-                      className="group flex items-center gap-2 text-xs rounded-lg px-2.5 py-1.5 bg-[#f3ecdd] border border-[#ece2cb] ml-3 hover:bg-[#ece2cb] transition-colors"
-                    >
-                      <span className="h-1.5 w-1.5 rounded-full bg-[#a99873] shrink-0" />
-                      <span
-                        className={`truncate flex-1 ${t.calendarEventId === event.id ? 'text-[#ab3326] font-medium' : 'text-[#3a3326]'} ${t.deadline && onNavigateToDate ? 'cursor-pointer' : ''}`}
-                        onClick={() => t.deadline && onNavigateToDate?.(new Date(String(t.deadline)), t.id)}
+                  {(() => {
+                    const p = chainParent
+                    const dl = p.deadline ? new Date(String(p.deadline)) : null
+                    const done = p.status === 'COMPLETED'
+                    const now = new Date(); now.setHours(0,0,0,0)
+                    const dlDay = dl ? new Date(dl.getTime()) : null; if (dlDay) dlDay.setHours(0,0,0,0)
+                    const isToday = dl && dlDay?.getTime() === now.getTime()
+                    const overdue = dl && !done && dl < new Date()
+                    return (
+                      <div
+                        className={cn(
+                          'flex items-center gap-2 text-xs rounded-lg px-2.5 py-1.5 border transition-colors',
+                          done ? 'bg-emerald-50 border-emerald-200 opacity-70' : isToday ? 'bg-amber-50 border-amber-300' : overdue ? 'bg-red-50/60 border-red-200' : 'bg-red-50 border-red-200',
+                          dl && onNavigateToDate ? 'cursor-pointer hover:brightness-95' : ''
+                        )}
+                        onClick={() => dl && onNavigateToDate?.(new Date(String(p.deadline)), p.id)}
                       >
-                        {t.title}
-                      </span>
-                      {t.deadline && (
-                        <span
-                          className="text-[#a99873] shrink-0 text-[10px] flex items-center gap-0.5 cursor-pointer"
-                          onClick={() => t.deadline && onNavigateToDate?.(new Date(String(t.deadline)), t.id)}
-                        >
-                          {new Date(t.deadline).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
-                          {onNavigateToDate && <ChevronRight className="h-2.5 w-2.5" />}
+                        <GitBranch className={cn('h-3 w-3 shrink-0', done ? 'text-emerald-500' : overdue ? 'text-red-500' : 'text-red-600')} />
+                        <span className={cn('truncate flex-1 font-medium', done ? 'line-through text-[#a99873]' : overdue ? 'text-red-700' : isToday ? 'text-amber-800' : 'text-[#3a3326]')}>
+                          {p.title}
                         </span>
-                      )}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleUnlinkFromChain(t.id) }}
-                        className="shrink-0 p-0.5 rounded hover:bg-red-100 hover:text-red-500 text-[#c4b48a] transition-all"
-                        title={lang === 'fr' ? 'Retirer de la chaîne' : lang === 'zh' ? '從任務練移除' : 'Remove from chain'}
+                        {dl && (
+                          <span className={cn('shrink-0 text-[10px] flex items-center gap-0.5', done ? 'text-emerald-600' : overdue ? 'text-red-500' : isToday ? 'text-amber-700' : 'text-red-500')}>
+                            {overdue && !done && <AlertTriangle className="h-2.5 w-2.5" />}
+                            {dl.toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
+                            {onNavigateToDate && <ChevronRight className="h-2.5 w-2.5" />}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })()}
+                  {chainSiblings.map((t) => {
+                    const dl = t.deadline ? new Date(String(t.deadline)) : null
+                    const done = t.status === 'COMPLETED'
+                    const now = new Date(); now.setHours(0,0,0,0)
+                    const dlDay = dl ? new Date(dl.getTime()) : null; if (dlDay) dlDay.setHours(0,0,0,0)
+                    const isToday = dl && dlDay?.getTime() === now.getTime()
+                    const overdue = dl && !done && dl < new Date()
+                    return (
+                      <div
+                        key={t.id}
+                        className={cn(
+                          'group flex items-center gap-2 text-xs rounded-lg px-2.5 py-1.5 border ml-3 transition-colors',
+                          done ? 'bg-emerald-50/60 border-emerald-100 opacity-70' : isToday ? 'bg-amber-50 border-amber-200 hover:bg-amber-100' : overdue ? 'bg-red-50/40 border-red-100 hover:bg-red-50' : 'bg-[#f3ecdd] border-[#ece2cb] hover:bg-[#ece2cb]'
+                        )}
                       >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
+                        <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', done ? 'bg-emerald-400' : overdue ? 'bg-red-400' : isToday ? 'bg-amber-400' : 'bg-[#a99873]')} />
+                        <span
+                          className={cn(
+                            'truncate flex-1',
+                            done ? 'line-through text-[#a99873]' : overdue ? 'text-red-700' : isToday ? 'text-amber-800' : t.calendarEventId === event.id ? 'text-[#ab3326] font-medium' : 'text-[#3a3326]',
+                            dl && onNavigateToDate ? 'cursor-pointer' : ''
+                          )}
+                          onClick={() => dl && onNavigateToDate?.(new Date(String(t.deadline)), t.id)}
+                        >
+                          {t.title}
+                        </span>
+                        {dl && (
+                          <span
+                            className={cn('shrink-0 text-[10px] flex items-center gap-0.5 cursor-pointer', done ? 'text-emerald-600' : overdue ? 'text-red-500' : isToday ? 'text-amber-600' : 'text-[#a99873]')}
+                            onClick={() => dl && onNavigateToDate?.(new Date(String(t.deadline)), t.id)}
+                          >
+                            {overdue && !done && <AlertTriangle className="h-2.5 w-2.5" />}
+                            {dl.toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
+                            {onNavigateToDate && <ChevronRight className="h-2.5 w-2.5" />}
+                          </span>
+                        )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleUnlinkFromChain(t.id) }}
+                          className="shrink-0 p-0.5 rounded hover:bg-red-100 hover:text-red-500 text-[#c4b48a] transition-all"
+                          title={lang === 'fr' ? 'Retirer de la chaîne' : lang === 'zh' ? '從任務練移除' : 'Remove from chain'}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    )
+                  })}
                 </>
               ) : (
                 relatedChains.map((t) => (
