@@ -140,7 +140,7 @@ export default function CalendarPage() {
   const [showTaskForm, setShowTaskForm] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(tasks.length === 0)
   const [externalEvents, setExternalEvents] = useState<CalendarEvent[]>([])
   const [eventsLoading, setEventsLoading] = useState(false)
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)

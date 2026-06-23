@@ -20,7 +20,7 @@ const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === 'true'
 export default function MatrixPage() {
   const { language, tasks, setTasks, habits, setHabits, calendarAccounts, matrixExcludePatterns, setMatrixExcludePatterns, keywordRules, setKeywordRules } = useAppStore()
   const { toast } = useGlobalToast()
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(tasks.length === 0)
   const [showTaskForm, setShowTaskForm] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [breakdownTask, setBreakdownTask] = useState<Task | null>(null)

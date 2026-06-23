@@ -512,6 +512,16 @@ export default function RetroplanningPage() {
   const [scanMatches, setScanMatches] = useState<ScanMatch[]>([])
   const [scanCreating, setScanCreating] = useState<string | null>(null)
   const [previewScan, setPreviewScan] = useState<ScanMatch | null>(null)
+  const [dismissedScanKeys] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('kairos:dismissed-scans') ?? '[]')) } catch { return new Set() }
+  })
+
+  const scanKey = (m: ScanMatch) => `${m.title}::${m.start.slice(0, 10)}`
+  const dismissScan = (key: string) => {
+    dismissedScanKeys.add(key)
+    try { localStorage.setItem('kairos:dismissed-scans', JSON.stringify([...dismissedScanKeys])) } catch { /* ignore */ }
+    setScanMatches((prev) => prev.filter((x) => scanKey(x) !== key))
+  }
 
   const runScan = useCallback(async () => {
     if (calendarAccounts.length === 0) return
@@ -552,9 +562,9 @@ export default function RetroplanningPage() {
           }
         }
       }
-      setScanMatches(matches)
+      setScanMatches(matches.filter((m) => !dismissedScanKeys.has(scanKey(m))))
     } catch { /* best-effort */ }
-  }, [calendarAccounts.length, userTemplates, lang])
+  }, [calendarAccounts.length, userTemplates, lang, dismissedScanKeys])
 
   const handleCreateFromScan = async (m: ScanMatch) => {
     setScanCreating(m.title)
@@ -591,8 +601,8 @@ export default function RetroplanningPage() {
       const tasksRes = await fetch('/api/tasks')
       if (tasksRes.ok) setTasks(await tasksRes.json())
       toast({ title: lang === 'fr' ? 'Rétroplanning créé !' : lang === 'zh' ? '逆向規劃已建立！' : 'Retroplan created!', variant: 'success' })
-      // Remove from scan list
-      setScanMatches((prev) => prev.filter((x) => x.title !== m.title))
+      // Remove from scan list and persist dismissal
+      dismissScan(scanKey(m))
     } catch {
       toast({ title: lang === 'fr' ? 'Erreur' : lang === 'zh' ? '建立失敗' : 'Failed', variant: 'error' })
     } finally {
@@ -954,7 +964,7 @@ export default function RetroplanningPage() {
                     <span className="text-[11px] text-amber-500 shrink-0">{m.date}</span>
                     <span className="text-[11px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 shrink-0">{m.templateName}</span>
                     <button
-                      onClick={(e) => { e.stopPropagation(); setScanMatches((prev) => prev.filter((x) => x.title !== m.title)) }}
+                      onClick={(e) => { e.stopPropagation(); dismissScan(scanKey(m)) }}
                       className="p-1 rounded-lg text-amber-400 hover:text-amber-700 hover:bg-amber-100 transition-colors shrink-0"
                       title={lang === 'zh' ? '移除' : lang === 'fr' ? 'Ignorer' : 'Dismiss'}
                     >

@@ -163,7 +163,7 @@ export default function TodayPage() {
   const { language, tasks, habits, setTasks, setHabits, calendarAccounts, todayExcludePatterns, setTodayExcludePatterns, keywordRules } = useAppStore()
   const { toast } = useGlobalToast()
 
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(tasks.length === 0 && habits.length === 0)
   const [showTaskForm, setShowTaskForm] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [filterPanelOpen, setFilterPanelOpen] = useState(false)
