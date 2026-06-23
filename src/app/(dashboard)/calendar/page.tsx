@@ -1514,8 +1514,8 @@ function EventDetailPanel({
             {lang === 'fr' ? 'Chaîne de tâches' : lang === 'zh' ? '任務鏈' : 'Task chain'}
           </p>
 
-          {/* Existing chain display */}
-          {(chainParent || relatedChains.length > 0) && (
+          {/* Existing chain display — only show when at least 2 tasks form a chain */}
+          {((chainParent && chainSiblings.length > 0) || relatedChains.length > 0) && (
             <div className="flex flex-col gap-1">
               {chainParent ? (
                 <>
