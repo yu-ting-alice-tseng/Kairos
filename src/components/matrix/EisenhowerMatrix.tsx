@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useRef } from 'react'
 import {
   DndContext,
   DragEndEvent,
@@ -18,7 +18,7 @@ import { t } from '@/lib/i18n'
 import { useAppStore } from '@/stores/useAppStore'
 import { getQuadrant, formatDuration } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { Clock, AlertCircle, Zap } from 'lucide-react'
+import { Clock, AlertCircle, Zap, CheckCircle2, Circle, Loader2 } from 'lucide-react'
 
 interface QuadrantDroppableProps {
   id: string
@@ -27,51 +27,57 @@ interface QuadrantDroppableProps {
   bgColor: string
   tasks: Task[]
   onTaskClick: (task: Task) => void
+  onComplete: (id: string) => Promise<void>
 }
 
-function TaskCard({ task, isDragging = false }: { task: Task; isDragging?: boolean }) {
+function MatrixTaskCard({ task, isDragging = false, onComplete, onTaskClick }: { task: Task; isDragging?: boolean; onComplete: (id: string) => Promise<void>; onTaskClick: (t: Task) => void }) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: task.id })
   const style = { transform: CSS.Translate.toString(transform) }
+  const [completing, setCompleting] = React.useState(false)
 
   const urgencyColor = task.urgency >= 8 ? 'text-red-600' : task.urgency >= 6 ? 'text-amber-600' : 'text-[#a99873]'
   const importanceColor = task.importance >= 8 ? 'text-red-800' : task.importance >= 6 ? 'text-blue-500' : 'text-[#a99873]'
+  const done = task.status === 'COMPLETED'
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      {...listeners}
-      {...attributes}
-      className={`group relative bg-[#fbf7ee] rounded-xl border border-[#ece2cb] p-3 shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md hover:border-[#e2d6bc] transition-all duration-150 select-none ${isDragging ? 'opacity-50' : ''} ${task.status === 'COMPLETED' ? 'opacity-50' : ''}`}
+      className={`group relative bg-[#fbf7ee] rounded-xl border border-[#ece2cb] p-3 shadow-sm hover:shadow-md hover:border-[#e2d6bc] transition-all duration-150 select-none flex items-start gap-2 ${isDragging ? 'opacity-50' : ''} ${done ? 'opacity-50' : ''}`}
     >
-      <p className={`text-sm font-medium line-clamp-2 mb-2 ${task.status === 'COMPLETED' ? 'line-through text-[#a99873]' : 'text-[#2a2420]'}`}>{task.title}</p>
-      <div className="flex items-center gap-2 flex-wrap">
-        {task.estimatedMinutes && (
-          <span className="flex items-center gap-1 text-xs text-[#8a7a5e]">
-            <Clock className="h-3 w-3" />
-            {formatDuration(task.estimatedMinutes)}
+      <button
+        onClick={async (e) => { e.stopPropagation(); if (completing) return; setCompleting(true); await onComplete(task.id); setCompleting(false) }}
+        className="shrink-0 mt-0.5 hover:scale-110 transition-transform"
+      >
+        {completing ? <Loader2 className="h-4 w-4 text-red-400 animate-spin" /> : done ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <Circle className="h-4 w-4 text-[#cbb98e] group-hover:text-red-400" />}
+      </button>
+      <div className="flex-1 min-w-0 cursor-grab active:cursor-grabbing" {...listeners} {...attributes} onClick={() => onTaskClick(task)}>
+        <p className={`text-sm font-medium line-clamp-2 mb-2 ${done ? 'line-through text-[#a99873]' : 'text-[#2a2420]'}`}>{task.title}</p>
+        <div className="flex items-center gap-2 flex-wrap">
+          {task.estimatedMinutes && (
+            <span className="flex items-center gap-1 text-xs text-[#8a7a5e]">
+              <Clock className="h-3 w-3" />
+              {formatDuration(task.estimatedMinutes)}
+            </span>
+          )}
+          <span className={`flex items-center gap-1 text-xs font-medium ${importanceColor}`}>
+            <Zap className="h-3 w-3" />
+            {task.importance}
           </span>
-        )}
-        <span className={`flex items-center gap-1 text-xs font-medium ${importanceColor}`}>
-          <Zap className="h-3 w-3" />
-          {task.importance}
-        </span>
-        <span className={`flex items-center gap-1 text-xs font-medium ${urgencyColor}`}>
-          <AlertCircle className="h-3 w-3" />
-          {task.urgency}
-        </span>
-        {task.deadline && (
-          <Badge variant="warning" className="text-xs py-0">
-            {new Date(task.deadline).toLocaleDateString()}
-          </Badge>
-        )}
+          <span className={`flex items-center gap-1 text-xs font-medium ${urgencyColor}`}>
+            <AlertCircle className="h-3 w-3" />
+            {task.urgency}
+          </span>
+        </div>
       </div>
     </div>
   )
 }
 
-function QuadrantDroppable({ id, label, color, bgColor, tasks, onTaskClick }: QuadrantDroppableProps) {
+function QuadrantDroppable({ id, label, color, bgColor, tasks, onTaskClick, onComplete }: QuadrantDroppableProps) {
   const { setNodeRef, isOver } = useDroppable({ id })
+  // Sort: non-completed first, completed at bottom
+  const sorted = [...tasks].sort((a, b) => (a.status === 'COMPLETED' ? 1 : 0) - (b.status === 'COMPLETED' ? 1 : 0))
 
   return (
     <div
@@ -87,10 +93,8 @@ function QuadrantDroppable({ id, label, color, bgColor, tasks, onTaskClick }: Qu
         </span>
       </div>
       <div className="flex flex-col gap-2 flex-1">
-        {tasks.map((task) => (
-          <div key={task.id} onClick={() => onTaskClick(task)}>
-            <TaskCard task={task} />
-          </div>
+        {sorted.map((task) => (
+          <MatrixTaskCard key={task.id} task={task} onComplete={onComplete} onTaskClick={onTaskClick} />
         ))}
         {tasks.length === 0 && (
           <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-[#e2d6bc] rounded-xl min-h-[80px] gap-1">
@@ -108,10 +112,11 @@ interface EisenhowerMatrixProps {
   tasks: Task[]
   onTaskUpdate: (id: string, importance: number, urgency: number) => Promise<void>
   onTaskClick: (task: Task) => void
+  onComplete: (id: string) => Promise<void>
   lang?: 'fr' | 'en' | 'zh'
 }
 
-export function EisenhowerMatrix({ tasks, onTaskUpdate, onTaskClick, lang = 'fr' }: EisenhowerMatrixProps) {
+export function EisenhowerMatrix({ tasks, onTaskUpdate, onTaskClick, onComplete, lang = 'fr' }: EisenhowerMatrixProps) {
   const [activeTask, setActiveTask] = useState<Task | null>(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
@@ -194,6 +199,7 @@ export function EisenhowerMatrix({ tasks, onTaskUpdate, onTaskClick, lang = 'fr'
                 bgColor={q.bgColor}
                 tasks={getTasksForQuadrant(q.id)}
                 onTaskClick={onTaskClick}
+                onComplete={onComplete}
               />
             ))}
           </div>

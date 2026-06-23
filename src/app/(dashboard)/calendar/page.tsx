@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { cn, formatTime, getQuadrant, EISENHOWER_QUADRANTS } from '@/lib/utils'
 import {
   ChevronLeft, ChevronRight, Calendar, Plus, Clock, Loader2, Pencil, Trash2, X,
-  MapPin, ExternalLink, GitBranch, AlignLeft, CheckCircle2, Check, Sparkles, Undo2,
+  MapPin, ExternalLink, GitBranch, AlignLeft, CheckCircle2, Circle, Check, Sparkles, Undo2,
 } from 'lucide-react'
 import {
   format, addDays, isSameDay, isToday,
@@ -864,8 +864,16 @@ export default function CalendarPage() {
                         title={`${task.title} — I:${task.importance} U:${task.urgency}`}
                         onClick={(e) => { e.stopPropagation(); handleTaskClick(task) }}
                       >
-                        <span className={cn(done ? 'line-through text-[#a99873]' : 'text-[#2a2420]')}>{task.title}</span>
-                        <span className="ml-1 text-[10px] opacity-60">I:{task.importance} U:{task.urgency}</span>
+                        <button
+                          className="shrink-0 mr-0.5 hover:scale-110 transition-transform"
+                          onClick={(e) => { e.stopPropagation(); handleCompleteTask(task) }}
+                        >
+                          {done
+                            ? <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                            : <Circle className="h-3 w-3 text-[#cbb98e]" />}
+                        </button>
+                        <span className={cn('truncate flex-1', done ? 'line-through text-[#a99873]' : 'text-[#2a2420]')}>{task.title}</span>
+                        <span className="ml-1 text-[10px] opacity-60 shrink-0">I:{task.importance} U:{task.urgency}</span>
                       </div>
                     )
                   })}
@@ -1327,7 +1335,11 @@ function EventDetailPanel({
     const directExtras = parentIsDirectlyLinked
       ? []
       : directlyLinkedTasks.filter((t) => t.id !== chainParent.id && !byParent.some((s) => s.id === t.id))
-    return [...byParent, ...directExtras]
+    return [...byParent, ...directExtras].sort((a, b) => {
+      if (!a.deadline) return 1
+      if (!b.deadline) return -1
+      return new Date(String(a.deadline)).getTime() - new Date(String(b.deadline)).getTime()
+    })
   }, [chainParent, tasks, directlyLinkedTasks, event.id])
   // Fallback: fuzzy title match for old tasks not linked via calendarEventId
   const relatedChains = React.useMemo(() => {

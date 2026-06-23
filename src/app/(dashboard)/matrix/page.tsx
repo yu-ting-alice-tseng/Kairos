@@ -132,6 +132,14 @@ const [habitPanelOpen, setHabitPanelOpen] = useState(true)
     setEditingTask(null)
   }
 
+  const handleCompleteTask = async (id: string) => {
+    const task = tasks.find((t) => t.id === id)
+    if (!task) return
+    const newStatus = task.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED'
+    setTasks(tasks.map((t) => t.id === id ? { ...t, status: newStatus } : t))
+    await fetch(`/api/tasks/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: newStatus }) })
+  }
+
   const handleTaskClick = (task: Task) => {
     setEditingTask(task)
     setShowTaskForm(true)
@@ -172,9 +180,12 @@ const [habitPanelOpen, setHabitPanelOpen] = useState(true)
     return isSameDay(new Date(String(scheduledStart)), date)
   }
 
-  const isDueOnDate = (deadline: Task['deadline'], date: Date) => {
-    if (!deadline) return true // no deadline = always show
-    return isSameDay(new Date(String(deadline)), date)
+  const isDueOnDate = (task: Task, date: Date) => {
+    if (!task.deadline) {
+      // No deadline: show only if not completed (completed undated tasks are "done forever")
+      return task.status !== 'COMPLETED'
+    }
+    return isSameDay(new Date(String(task.deadline)), date)
   }
 
   const applyKeywordRules = (task: Task): Task => {
@@ -186,8 +197,9 @@ const [habitPanelOpen, setHabitPanelOpen] = useState(true)
 
   const filteredTasks = tasks
     .filter((t) =>
+      t.status !== 'CANCELLED' &&
       (!t.scheduledStart || isScheduledOnDate(t.scheduledStart, selectedDate)) &&
-      isDueOnDate(t.deadline, selectedDate) &&
+      isDueOnDate(t, selectedDate) &&
       !isExcludedFromMatrix(t.title)
     )
     .map(applyKeywordRules)
@@ -390,6 +402,7 @@ const [habitPanelOpen, setHabitPanelOpen] = useState(true)
           tasks={filteredTasks}
           onTaskUpdate={handleTaskUpdate}
           onTaskClick={handleTaskClick}
+          onComplete={handleCompleteTask}
           lang={language}
         />
       </div>
