@@ -1349,7 +1349,7 @@ function EventDetailPanel({
   }, [event.title, tasks, chainParent])
 
   const [linkingChain, setLinkingChain] = React.useState(false)
-  const [selectedLinkId, setSelectedLinkId] = React.useState<string | null>(null)
+  const [selectedLinkIds, setSelectedLinkIds] = React.useState<Set<string>>(new Set())
   const [linkSaving, setLinkSaving] = React.useState(false)
   const [linkSearch, setLinkSearch] = React.useState('')
 
@@ -1365,7 +1365,7 @@ function EventDetailPanel({
 
   const openLinkDialog = () => {
     setLinkingChain(true)
-    setSelectedLinkId(null)
+    setSelectedLinkIds(new Set())
     setLinkSearch('')
   }
 
@@ -1383,19 +1383,21 @@ function EventDetailPanel({
   }
 
   const handleLinkTask = async () => {
-    if (!selectedLinkId) return
+    if (selectedLinkIds.size === 0) return
     setLinkSaving(true)
     try {
-      // If this event already has a chain, add the task to that chain
       const patch: Record<string, unknown> = { calendarEventId: event.id }
       if (chainParent) patch.parentTaskId = chainParent.id
-      await fetch(`/api/tasks/${selectedLinkId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(patch),
-      })
+      await Promise.all([...selectedLinkIds].map((id) =>
+        fetch(`/api/tasks/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch),
+        })
+      ))
       onTasksRefresh()
       setLinkingChain(false)
+      setSelectedLinkIds(new Set())
     } catch { /* ignore */ } finally { setLinkSaving(false) }
   }
 
@@ -1604,13 +1606,13 @@ function EventDetailPanel({
 
         {/* Link task dialog */}
         {linkingChain && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setLinkingChain(false)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => { setLinkingChain(false); setSelectedLinkIds(new Set()) }}>
             <div className="bg-[#fbf7ee] rounded-2xl border border-[#e2d6bc] shadow-xl w-80 max-h-[70vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
               <div className="px-4 py-3 border-b border-[#ece2cb] flex items-center justify-between">
                 <p className="text-sm font-semibold text-[#2a2420]">
                   {lang === 'zh' ? '連結任務' : lang === 'fr' ? 'Lier une tâche' : 'Link a task'}
                 </p>
-                <button onClick={() => setLinkingChain(false)} className="p-1 rounded-lg hover:bg-[#ece2cb] text-[#a99873]">
+                <button onClick={() => { setLinkingChain(false); setSelectedLinkIds(new Set()) }} className="p-1 rounded-lg hover:bg-[#ece2cb] text-[#a99873]">
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -1633,35 +1635,46 @@ function EventDetailPanel({
                   .filter((t) => !linkSearch || t.title.toLowerCase().includes(linkSearch.toLowerCase()))
                   .sort((a, b) => relevanceScore(b.title) - relevanceScore(a.title))
                   .slice(0, 40)
-                  .map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => setSelectedLinkId(t.id === selectedLinkId ? null : t.id)}
-                      className={`flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 text-left transition-colors ${selectedLinkId === t.id ? 'bg-red-50 border border-red-200' : 'hover:bg-[#f3ecdd] border border-transparent'}`}
-                    >
-                      <span className={`h-3.5 w-3.5 rounded-full border flex items-center justify-center shrink-0 ${selectedLinkId === t.id ? 'bg-red-600 border-red-600' : 'border-[#c4b48a]'}`}>
-                        {selectedLinkId === t.id && <Check className="h-2.5 w-2.5 text-white" />}
-                      </span>
-                      <span className="truncate flex-1 text-[#3a3326]">{t.title}</span>
-                      {t.deadline && (
-                        <span className="text-[#a99873] shrink-0 text-[10px]">
-                          {new Date(String(t.deadline)).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
+                  .map((t) => {
+                    const selected = selectedLinkIds.has(t.id)
+                    return (
+                      <button
+                        key={t.id}
+                        onClick={() => setSelectedLinkIds((prev) => {
+                          const next = new Set(prev)
+                          selected ? next.delete(t.id) : next.add(t.id)
+                          return next
+                        })}
+                        className={`flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 text-left transition-colors ${selected ? 'bg-red-50 border border-red-200' : 'hover:bg-[#f3ecdd] border border-transparent'}`}
+                      >
+                        <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-red-600 border-red-600' : 'border-[#c4b48a]'}`}>
+                          {selected && <Check className="h-2.5 w-2.5 text-white" />}
                         </span>
-                      )}
-                    </button>
-                  ))}
+                        <span className="truncate flex-1 text-[#3a3326]">{t.title}</span>
+                        {t.deadline && (
+                          <span className="text-[#a99873] shrink-0 text-[10px]">
+                            {new Date(String(t.deadline)).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
               </div>
               <div className="px-4 py-3 border-t border-[#ece2cb] flex gap-2">
-                <button onClick={() => setLinkingChain(false)} className="flex-1 rounded-xl border border-[#e2d6bc] text-[#5c5347] text-xs py-2 hover:bg-[#ece2cb] transition-colors">
+                <button onClick={() => { setLinkingChain(false); setSelectedLinkIds(new Set()) }} className="flex-1 rounded-xl border border-[#e2d6bc] text-[#5c5347] text-xs py-2 hover:bg-[#ece2cb] transition-colors">
                   {lang === 'zh' ? '取消' : lang === 'fr' ? 'Annuler' : 'Cancel'}
                 </button>
                 <button
                   onClick={handleLinkTask}
-                  disabled={!selectedLinkId || linkSaving}
+                  disabled={selectedLinkIds.size === 0 || linkSaving}
                   className="flex-1 rounded-xl bg-[#ab3326] text-white text-xs py-2 hover:bg-[#861f17] transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
                 >
                   {linkSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitBranch className="h-3.5 w-3.5" />}
-                  {lang === 'zh' ? '連結' : lang === 'fr' ? 'Lier' : 'Link'}
+                  {lang === 'zh'
+                    ? `連結${selectedLinkIds.size > 0 ? ` (${selectedLinkIds.size})` : ''}`
+                    : lang === 'fr'
+                    ? `Lier${selectedLinkIds.size > 0 ? ` (${selectedLinkIds.size})` : ''}`
+                    : `Link${selectedLinkIds.size > 0 ? ` (${selectedLinkIds.size})` : ''}`}
                 </button>
               </div>
             </div>
