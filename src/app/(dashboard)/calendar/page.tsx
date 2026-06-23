@@ -1314,15 +1314,19 @@ function EventDetailPanel({
   }, [directlyLinkedTasks, tasks])
   const chainSiblings = React.useMemo(() => {
     if (!chainParent) return []
-    const byParent = tasks.filter((t) => t.parentTaskId === chainParent.id)
-    // Only add directExtras when the chainParent was found via a sub-task's parent,
-    // not when chainParent itself IS a directly linked task (avoids duplicate rows)
     const parentIsDirectlyLinked = directlyLinkedTasks.some((t) => t.id === chainParent.id)
+    const byParent = tasks.filter((t) => {
+      if (t.parentTaskId !== chainParent.id) return false
+      // If the parent is already the linked event, don't also show sibling tasks
+      // that link to the same event (they'd appear as duplicates of the parent row)
+      if (parentIsDirectlyLinked && t.calendarEventId === event.id) return false
+      return true
+    })
     const directExtras = parentIsDirectlyLinked
       ? []
       : directlyLinkedTasks.filter((t) => t.id !== chainParent.id && !byParent.some((s) => s.id === t.id))
     return [...byParent, ...directExtras]
-  }, [chainParent, tasks, directlyLinkedTasks])
+  }, [chainParent, tasks, directlyLinkedTasks, event.id])
   // Fallback: fuzzy title match for old tasks not linked via calendarEventId
   const relatedChains = React.useMemo(() => {
     if (chainParent) return []
