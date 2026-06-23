@@ -9,7 +9,9 @@ import { GoalsSection } from '@/components/matrix/GoalsSection'
 import { TaskForm } from '@/components/tasks/TaskForm'
 import { BreakdownDialog } from '@/components/ai/BreakdownDialog'
 import { Button } from '@/components/ui/button'
-import { Plus, LayoutGrid, Loader2, Repeat2, CheckCircle2, Circle, Settings, Wand2, Trash2, SlidersHorizontal, ChevronUp, ChevronDown } from 'lucide-react'
+import { Plus, LayoutGrid, Loader2, Repeat2, CheckCircle2, Circle, Settings, Wand2, Trash2, SlidersHorizontal, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { isSameDay, format } from 'date-fns'
+import { fr, enUS, zhTW } from 'date-fns/locale'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
 import { cn } from '@/lib/utils'
 
@@ -28,6 +30,8 @@ const [habitPanelOpen, setHabitPanelOpen] = useState(true)
   const [newRuleImportance, setNewRuleImportance] = useState(5)
   const [newRuleUrgence, setNewRuleUrgence] = useState(5)
   const [newExcludePattern, setNewExcludePattern] = useState('')
+  const [selectedDate, setSelectedDate] = useState<Date>(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d })
+  const dateInputRef = React.useRef<HTMLInputElement>(null)
 
   const syncRules = async (rules: KeywordRule[]) => {
     setKeywordRules(rules)
@@ -163,20 +167,16 @@ const [habitPanelOpen, setHabitPanelOpen] = useState(true)
   const isExcludedFromMatrix = (title: string) =>
     matrixExcludePatterns.some((p) => p && title.toLowerCase().includes(p.toLowerCase()))
 
-  const isScheduledToday = (scheduledStart: Task['scheduledStart']) => {
+  const isScheduledOnDate = (scheduledStart: Task['scheduledStart'], date: Date) => {
     if (!scheduledStart) return false
-    const d = new Date(String(scheduledStart))
-    const now = new Date()
-    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
+    return isSameDay(new Date(String(scheduledStart)), date)
   }
 
-  const todayMidnight = new Date(); todayMidnight.setHours(23, 59, 59, 999)
-  const isDueByToday = (deadline: Task['deadline']) => {
+  const isDueOnDate = (deadline: Task['deadline'], date: Date) => {
     if (!deadline) return true // no deadline = always show
-    return new Date(String(deadline)) <= todayMidnight
+    return isSameDay(new Date(String(deadline)), date)
   }
 
-  // Apply keyword rules: override importance/urgency for tasks matching a keyword
   const applyKeywordRules = (task: Task): Task => {
     const title = task.title.toLowerCase()
     const match = keywordRules.find((r) => title.includes(r.keyword.toLowerCase()))
@@ -184,14 +184,19 @@ const [habitPanelOpen, setHabitPanelOpen] = useState(true)
     return { ...task, importance: match.importance, urgency: match.urgence }
   }
 
-  // Filter: only show tasks due today or overdue (no deadline = show), and scheduled on today (not future days).
   const filteredTasks = tasks
     .filter((t) =>
-      (!t.scheduledStart || isScheduledToday(t.scheduledStart)) &&
-      isDueByToday(t.deadline) &&
+      (!t.scheduledStart || isScheduledOnDate(t.scheduledStart, selectedDate)) &&
+      isDueOnDate(t.deadline, selectedDate) &&
       !isExcludedFromMatrix(t.title)
     )
     .map(applyKeywordRules)
+
+  const isSelectedToday = isSameDay(selectedDate, new Date())
+  const dateFnsLocale = language === 'fr' ? fr : language === 'zh' ? zhTW : enUS
+  const prevDay = () => setSelectedDate((d) => { const n = new Date(d); n.setDate(n.getDate() - 1); return n })
+  const nextDay = () => setSelectedDate((d) => { const n = new Date(d); n.setDate(n.getDate() + 1); return n })
+  const goToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); setSelectedDate(d) }
 
   if (loading) return <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#a87f3e]" /></div>
 
@@ -208,6 +213,33 @@ const [habitPanelOpen, setHabitPanelOpen] = useState(true)
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {/* Day picker */}
+          <div className="flex items-center gap-0.5 rounded-xl border border-[#e2d6bc] bg-white/60 px-1 py-1">
+            <button onClick={prevDay} className="p-1 rounded-lg hover:bg-[#f3ecdd] text-[#8a7a5e] transition-colors">
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => dateInputRef.current?.showPicker()}
+              className="relative px-2 text-xs font-medium text-[#3a3326] hover:text-[#ab3326] transition-colors min-w-[80px] text-center"
+            >
+              {format(selectedDate, 'd MMM yyyy', { locale: dateFnsLocale })}
+              <input
+                ref={dateInputRef}
+                type="date"
+                className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                value={format(selectedDate, 'yyyy-MM-dd')}
+                onChange={(e) => { if (e.target.value) { const d = new Date(e.target.value); d.setHours(0,0,0,0); setSelectedDate(d) } }}
+              />
+            </button>
+            <button onClick={nextDay} className="p-1 rounded-lg hover:bg-[#f3ecdd] text-[#8a7a5e] transition-colors">
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+            {!isSelectedToday && (
+              <button onClick={goToday} className="ml-0.5 px-1.5 py-0.5 rounded-lg text-[10px] bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 transition-colors">
+                {language === 'fr' ? 'Auj.' : language === 'zh' ? '今天' : 'Today'}
+              </button>
+            )}
+          </div>
           <button
             onClick={() => setSettingsPanelOpen((o) => !o)}
             className={cn(

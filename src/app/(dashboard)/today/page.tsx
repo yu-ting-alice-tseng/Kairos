@@ -15,10 +15,10 @@ import { Candle } from '@/components/ui/Candle'
 import { InkLoader } from '@/components/ui/InkLoader'
 import { generatePriorityList, formatDate, formatTime, cn } from '@/lib/utils'
 import {
-  Plus, Sparkles, Sun, Flame, RefreshCw, MessageSquare, ChevronRight,
+  Plus, Sparkles, Sun, Flame, RefreshCw, MessageSquare, ChevronRight, ChevronLeft,
   CheckCircle2, Clock, Loader2, X, AlarmCheck, Zap, CalendarDays, SlidersHorizontal,
 } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, isSameDay } from 'date-fns'
 import { fr, enUS, zhTW } from 'date-fns/locale'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
 import {
@@ -176,8 +176,15 @@ export default function TodayPage() {
   const [rescheduleLoading, setRescheduleLoading] = useState(false)
   const [todayEvents, setTodayEvents] = useState<CalendarEvent[]>([])
   const [tomorrowEvents, setTomorrowEvents] = useState<CalendarEvent[]>([])
+  const [selectedDate, setSelectedDate] = useState<Date>(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d })
+  const dateInputRef = React.useRef<HTMLInputElement>(null)
 
-  const today = format(new Date(), 'PPPP', { locale: language === 'fr' ? fr : language === 'zh' ? zhTW : enUS })
+  const dateFnsLocale = language === 'fr' ? fr : language === 'zh' ? zhTW : enUS
+  const today = format(selectedDate, 'PPPP', { locale: dateFnsLocale })
+  const isSelectedToday = isSameDay(selectedDate, new Date())
+  const prevDay = () => setSelectedDate((d) => { const n = new Date(d); n.setDate(n.getDate() - 1); return n })
+  const nextDay = () => setSelectedDate((d) => { const n = new Date(d); n.setDate(n.getDate() + 1); return n })
+  const goToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); setSelectedDate(d) }
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -199,11 +206,10 @@ export default function TodayPage() {
     if (calendarAccounts.length === 0) return
     const fetchEvents = async () => {
       try {
-        const now = new Date()
-        const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
-        const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999)
-        const tmrStart = new Date(now); tmrStart.setDate(tmrStart.getDate() + 1); tmrStart.setHours(0, 0, 0, 0)
-        const tmrEnd = new Date(now); tmrEnd.setDate(tmrEnd.getDate() + 1); tmrEnd.setHours(23, 59, 59, 999)
+        const todayStart = new Date(selectedDate); todayStart.setHours(0, 0, 0, 0)
+        const todayEnd = new Date(selectedDate); todayEnd.setHours(23, 59, 59, 999)
+        const tmrStart = new Date(selectedDate); tmrStart.setDate(tmrStart.getDate() + 1); tmrStart.setHours(0, 0, 0, 0)
+        const tmrEnd = new Date(selectedDate); tmrEnd.setDate(tmrEnd.getDate() + 1); tmrEnd.setHours(23, 59, 59, 999)
 
         const [todayRes, tmrRes] = await Promise.all([
           fetch(`/api/calendar/events?start=${todayStart.toISOString()}&end=${todayEnd.toISOString()}`),
@@ -215,7 +221,7 @@ export default function TodayPage() {
     }
     fetchEvents()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calendarAccounts.length])
+  }, [calendarAccounts.length, selectedDate])
 
   const isExcludedFromToday = (title: string) =>
     todayExcludePatterns.some((p) => p && title.toLowerCase().includes(p.toLowerCase()))
@@ -231,10 +237,9 @@ export default function TodayPage() {
       .map((t) => t.id)
   )
 
-  const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999)
-  const isDueByToday = (deadline: string | Date | null | undefined) => {
+  const isDueOnDate = (deadline: string | Date | null | undefined, date: Date) => {
     if (!deadline) return true
-    return new Date(String(deadline)) <= todayEnd
+    return isSameDay(new Date(String(deadline)), date)
   }
 
   const applyKeywordRules = (task: Task): Task => {
@@ -251,7 +256,7 @@ export default function TodayPage() {
       t.parentTaskId === null &&
       (!t.calendarEventId || allDayLinkedTaskIds.has(t.id)) &&
       !t.scheduledStart &&
-      isDueByToday(t.deadline) &&
+      isDueOnDate(t.deadline, selectedDate) &&
       !isExcludedFromToday(t.title)
     ).map(applyKeywordRules)
   )
@@ -270,8 +275,7 @@ export default function TodayPage() {
     scheduledTasks.filter((t) => t.scheduledStart && new Date(String(t.scheduledStart)).getHours() === hour)
 
   const completedToday = tasks.filter(
-    (t) => t.status === 'COMPLETED' && t.completedAt &&
-      new Date(t.completedAt).toDateString() === new Date().toDateString()
+    (t) => t.status === 'COMPLETED' && t.completedAt && isSameDay(new Date(t.completedAt), selectedDate)
   )
 
   const handleComplete = async (id: string) => {
@@ -504,6 +508,33 @@ export default function TodayPage() {
           <p className="text-[13px] text-[#8a7a5e] mt-1 capitalize pl-[42px]">{today}</p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Day picker */}
+          <div className="flex items-center gap-0.5 rounded-xl border border-[#e2d6bc] bg-white/60 px-1 py-1">
+            <button onClick={prevDay} className="p-1 rounded-lg hover:bg-[#f3ecdd] text-[#8a7a5e] transition-colors">
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => dateInputRef.current?.showPicker()}
+              className="relative px-2 text-xs font-medium text-[#3a3326] hover:text-[#ab3326] transition-colors min-w-[80px] text-center"
+            >
+              {format(selectedDate, 'd MMM yyyy', { locale: dateFnsLocale })}
+              <input
+                ref={dateInputRef}
+                type="date"
+                className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                value={format(selectedDate, 'yyyy-MM-dd')}
+                onChange={(e) => { if (e.target.value) { const d = new Date(e.target.value); d.setHours(0,0,0,0); setSelectedDate(d) } }}
+              />
+            </button>
+            <button onClick={nextDay} className="p-1 rounded-lg hover:bg-[#f3ecdd] text-[#8a7a5e] transition-colors">
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+            {!isSelectedToday && (
+              <button onClick={goToday} className="ml-0.5 px-1.5 py-0.5 rounded-lg text-[10px] bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 transition-colors">
+                {language === 'fr' ? 'Auj.' : language === 'zh' ? '今天' : 'Today'}
+              </button>
+            )}
+          </div>
           {AI_ENABLED && (
             <Button variant="outline" size="sm" onClick={handleGenerateRecap} disabled={recapLoading}
               className="border-[#e2d6bc] text-[#5c5347] hover:bg-[#f3ecdd] hover:border-[#cba968] transition-all">
