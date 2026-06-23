@@ -1554,7 +1554,7 @@ function EventDetailPanel({
               {lang === 'fr' ? 'Lier une tâche' : lang === 'zh' ? '連結任務' : 'Link task'}
             </button>
             <button
-              onClick={() => router.push(`/retroplanning?event=${encodeURIComponent(event.title)}&date=${encodeURIComponent(event.start)}`)}
+              onClick={() => router.push(`/retroplanning?event=${encodeURIComponent(event.title)}&date=${encodeURIComponent(String(event.start))}`)}
               className="flex-1 flex items-center justify-center gap-1.5 text-xs text-white bg-[#ab3326] hover:bg-[#861f17] rounded-lg px-3 py-2 transition-colors"
             >
               <Plus className="h-3 w-3" />
