@@ -145,6 +145,7 @@ export default function CalendarPage() {
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
   const [eventSaving, setEventSaving] = useState(false)
   const [viewingHabit, setViewingHabit] = useState<Habit | null>(null)
+  const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null)
   const [userTemplates, setUserTemplates] = useState<RetroTemplate[]>([])
   const [retroSuggestion, setRetroSuggestion] = useState<RetroSuggestion | null>(null)
   const [retroSuggestionSaving, setRetroSuggestionSaving] = useState(false)
@@ -806,11 +807,12 @@ export default function CalendarPage() {
                     const isDraggingThis = draggingEventId === ev.id
                     const linkedTask = tasks.find((t) => t.calendarEventId === ev.id)
                     const isLinkedDone = linkedTask?.status === 'COMPLETED'
+                    const isHighlighted = linkedTask?.id === highlightedTaskId
                     return (
                       <div
                         key={ev.id}
-                        className={cn('rounded px-1.5 py-0.5 text-xs mb-0.5 border border-dashed flex items-center gap-1 min-w-0', ev.editable && !isDragging ? 'cursor-grab' : '', isDraggingThis && 'opacity-40', isLinkedDone && 'opacity-50')}
-                        style={{ backgroundColor: color + '22', borderColor: color }}
+                        className={cn('rounded px-1.5 py-0.5 text-xs mb-0.5 border flex items-center gap-1 min-w-0 transition-all duration-300', ev.editable && !isDragging ? 'cursor-grab' : '', isDraggingThis && 'opacity-40', isLinkedDone && 'opacity-50', isHighlighted ? 'border-solid shadow-md' : 'border-dashed')}
+                        style={{ backgroundColor: isHighlighted ? color + '55' : color + '22', borderColor: color, boxShadow: isHighlighted ? `0 0 0 2px ${color}` : undefined }}
                         title={ev.title}
                         onMouseDown={(e) => { if (ev.editable) startAllDayDrag(e, ev) }}
                         onClick={(e) => { e.stopPropagation(); if (!isDragging) setEditingEvent(ev) }}
@@ -848,14 +850,16 @@ export default function CalendarPage() {
                     const q = EISENHOWER_QUADRANTS.find((qq) => qq.id === qId)
                     const acc = calendarAccounts.find((a) => a.id === task.calendarAccountId)
                     const borderColor = acc?.color ?? (q ? undefined : '#a99873')
+                    const isHighlightedTask = task.id === highlightedTaskId
                     return (
                       <div
                         key={task.id}
                         className={cn(
                           'rounded px-1.5 py-0.5 text-xs mb-0.5 truncate border cursor-pointer hover:brightness-95 transition-all',
-                          done ? 'opacity-50 bg-emerald-50 border-emerald-200' : cn(q?.bgColor, 'border-[#e2d6bc]')
+                          done ? 'opacity-50 bg-emerald-50 border-emerald-200' : cn(q?.bgColor, 'border-[#e2d6bc]'),
+                          isHighlightedTask && 'shadow-md'
                         )}
-                        style={!done && borderColor ? { borderLeftColor: borderColor, borderLeftWidth: 2 } : {}}
+                        style={{ ...(!done && borderColor ? { borderLeftColor: borderColor, borderLeftWidth: 2 } : {}), ...(isHighlightedTask ? { boxShadow: `0 0 0 2px ${borderColor ?? '#c97b4b'}` } : {}) }}
                         title={`${task.title} — I:${task.importance} U:${task.urgency}`}
                         onClick={(e) => { e.stopPropagation(); handleTaskClick(task) }}
                       >
@@ -1065,13 +1069,13 @@ export default function CalendarPage() {
             const res = await fetch('/api/tasks')
             if (res.ok) setTasks(await res.json())
           }}
-          onNavigateToDate={(date: Date) => {
-            // Jump to the Monday of the week containing `date`
+          onNavigateToDate={(date: Date, taskId?: string) => {
             const d = new Date(date); d.setHours(0, 0, 0, 0)
             const dow = d.getDay()
             const toMon = dow === 0 ? -6 : 1 - dow
             d.setDate(d.getDate() + toMon)
             setStartDate(d)
+            if (taskId) { setHighlightedTaskId(taskId); setTimeout(() => setHighlightedTaskId(null), 3000) }
           }}
         />
       ) : viewingHabit ? (
@@ -1276,7 +1280,7 @@ function EventDetailPanel({
   onDelete: (ev: CalendarEvent) => void
   onClose: () => void
   onTasksRefresh: () => void
-  onNavigateToDate?: (date: Date) => void
+  onNavigateToDate?: (date: Date, taskId?: string) => void
 }) {
   const toLocal = (d: Date | string) => {
     const dt = new Date(d)
@@ -1311,9 +1315,12 @@ function EventDetailPanel({
   const chainSiblings = React.useMemo(() => {
     if (!chainParent) return []
     const byParent = tasks.filter((t) => t.parentTaskId === chainParent.id)
-    const directExtras = directlyLinkedTasks.filter(
-      (t) => t.id !== chainParent.id && !byParent.some((s) => s.id === t.id)
-    )
+    // Only add directExtras when the chainParent was found via a sub-task's parent,
+    // not when chainParent itself IS a directly linked task (avoids duplicate rows)
+    const parentIsDirectlyLinked = directlyLinkedTasks.some((t) => t.id === chainParent.id)
+    const directExtras = parentIsDirectlyLinked
+      ? []
+      : directlyLinkedTasks.filter((t) => t.id !== chainParent.id && !byParent.some((s) => s.id === t.id))
     return [...byParent, ...directExtras]
   }, [chainParent, tasks, directlyLinkedTasks])
   // Fallback: fuzzy title match for old tasks not linked via calendarEventId
@@ -1550,7 +1557,7 @@ function EventDetailPanel({
                 <>
                   <div
                     className={cn('flex items-center gap-2 text-xs rounded-lg px-2.5 py-1.5 bg-red-50 border border-red-200', chainParent.deadline && onNavigateToDate ? 'cursor-pointer hover:bg-red-100 transition-colors' : '')}
-                    onClick={() => chainParent.deadline && onNavigateToDate?.(new Date(String(chainParent.deadline)))}
+                    onClick={() => chainParent.deadline && onNavigateToDate?.(new Date(String(chainParent.deadline)), chainParent.id)}
                   >
                     <GitBranch className="h-3 w-3 text-red-600 shrink-0" />
                     <span className="text-[#3a3326] truncate flex-1 font-medium">{chainParent.title}</span>
@@ -1565,7 +1572,7 @@ function EventDetailPanel({
                     <div
                       key={t.id}
                       className={cn('flex items-center gap-2 text-xs rounded-lg px-2.5 py-1.5 bg-[#f3ecdd] border border-[#ece2cb] ml-3', t.deadline && onNavigateToDate ? 'cursor-pointer hover:bg-[#ece2cb] transition-colors' : '')}
-                      onClick={() => t.deadline && onNavigateToDate?.(new Date(String(t.deadline)))}
+                      onClick={() => t.deadline && onNavigateToDate?.(new Date(String(t.deadline)), t.id)}
                     >
                       <span className="h-1.5 w-1.5 rounded-full bg-[#a99873] shrink-0" />
                       <span className={`truncate flex-1 ${t.calendarEventId === event.id ? 'text-[#ab3326] font-medium' : 'text-[#3a3326]'}`}>{t.title}</span>
