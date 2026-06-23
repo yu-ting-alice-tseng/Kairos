@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAppStore } from '@/stores/useAppStore'
 import { Task, CalendarEvent, Habit, RetroTemplate } from '@/types'
 import { t } from '@/lib/i18n'
@@ -1282,6 +1283,7 @@ function EventDetailPanel({
   onTasksRefresh: () => void
   onNavigateToDate?: (date: Date, taskId?: string) => void
 }) {
+  const router = useRouter()
   const toLocal = (d: Date | string) => {
     const dt = new Date(d)
     const offset = dt.getTimezoneOffset() * 60000
@@ -1335,12 +1337,9 @@ function EventDetailPanel({
   }, [event.title, tasks, chainParent])
 
   const [linkingChain, setLinkingChain] = React.useState(false)
-  const [linkMode, setLinkMode] = React.useState<'tasks' | 'events'>('tasks')
-  const [availableEvents, setAvailableEvents] = React.useState<{ id: string; title: string; start: string }[]>([])
-  const [selectedLinkIds, setSelectedLinkIds] = React.useState<Set<string>>(new Set())
+  const [selectedLinkId, setSelectedLinkId] = React.useState<string | null>(null)
   const [linkSaving, setLinkSaving] = React.useState(false)
   const [linkSearch, setLinkSearch] = React.useState('')
-  const [newTaskSaving, setNewTaskSaving] = React.useState(false)
 
   // Relevance: count event-title chars found in task title (higher = more relevant)
   const relevanceScore = React.useCallback((taskTitle: string): number => {
@@ -1352,91 +1351,27 @@ function EventDetailPanel({
     return score
   }, [event.title])
 
-  const handleCreateTask = async () => {
-    setNewTaskSaving(true)
-    try {
-      await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: event.title, calendarEventId: event.id, deadline: event.start, importance: 7, urgency: 6 }),
-      })
-      onTasksRefresh()
-    } catch { /* ignore */ } finally { setNewTaskSaving(false) }
+  const openLinkDialog = () => {
+    setLinkingChain(true)
+    setSelectedLinkId(null)
+    setLinkSearch('')
   }
 
-  const handleLinkExistingTasks = async () => {
-    if (selectedLinkIds.size === 0) return
+  const handleLinkTask = async () => {
+    if (!selectedLinkId) return
     setLinkSaving(true)
     try {
-      await Promise.all([...selectedLinkIds].map((id) =>
-        fetch(`/api/tasks/${id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ calendarEventId: event.id }),
-        })
-      ))
+      // If this event already has a chain, add the task to that chain
+      const patch: Record<string, unknown> = { calendarEventId: event.id }
+      if (chainParent) patch.parentTaskId = chainParent.id
+      await fetch(`/api/tasks/${selectedLinkId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
       onTasksRefresh()
       setLinkingChain(false)
     } catch { /* ignore */ } finally { setLinkSaving(false) }
-  }
-
-  const openLinkDialog = async (mode: 'tasks' | 'events' = 'tasks') => {
-    setLinkMode(mode)
-    setLinkingChain(true)
-    setSelectedLinkIds(new Set())
-    setLinkSearch('')
-    if (mode === 'events') {
-      const start = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString() // 1 year back
-      const end = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
-      try {
-        const res = await fetch(`/api/calendar/events?start=${start}&end=${end}`)
-        if (res.ok) {
-          const evs: { id: string; title: string; start: string }[] = await res.json()
-          setAvailableEvents(evs.filter((e) => e.id !== event.id))
-        }
-      } catch { /* best-effort */ }
-    }
-  }
-
-  const handleCreateChain = async () => {
-    if (selectedLinkIds.size === 0) return
-    setLinkSaving(true)
-    try {
-      // Create parent task representing this event chain
-      const parentRes = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: event.title,
-          deadline: event.start,
-          calendarEventId: event.id,
-          importance: 7,
-          urgency: 6,
-        }),
-      })
-      if (!parentRes.ok) throw new Error()
-      const parent = await parentRes.json()
-      // Create sub-tasks for each selected event
-      const selected = availableEvents.filter((e) => selectedLinkIds.has(e.id))
-      await Promise.all(selected.map((e) =>
-        fetch('/api/tasks', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: e.title,
-            deadline: e.start,
-            calendarEventId: e.id,
-            parentTaskId: parent.id,
-            importance: 7,
-            urgency: 6,
-          }),
-        })
-      ))
-      onTasksRefresh()
-    } catch { /* ignore */ } finally {
-      setLinkSaving(false)
-      setLinkingChain(false)
-    }
   }
 
   const links = React.useMemo(() => {
@@ -1612,28 +1547,26 @@ function EventDetailPanel({
           {/* Always-visible add buttons */}
           <div className="flex gap-1.5">
             <button
-              onClick={() => openLinkDialog('tasks')}
+              onClick={openLinkDialog}
               className="flex-1 flex items-center justify-center gap-1.5 text-xs text-[#8a7a5e] hover:text-[#ab3326] border border-dashed border-[#e2d6bc] rounded-lg px-3 py-2 hover:border-red-300 transition-colors"
             >
               <GitBranch className="h-3 w-3" />
               {lang === 'fr' ? 'Lier une tâche' : lang === 'zh' ? '連結任務' : 'Link task'}
             </button>
             <button
-              onClick={handleCreateTask}
-              disabled={newTaskSaving}
-              className="flex-1 flex items-center justify-center gap-1.5 text-xs text-white bg-[#ab3326] hover:bg-[#861f17] rounded-lg px-3 py-2 transition-colors disabled:opacity-50"
+              onClick={() => router.push(`/retroplanning?event=${encodeURIComponent(event.title)}&date=${encodeURIComponent(event.start)}`)}
+              className="flex-1 flex items-center justify-center gap-1.5 text-xs text-white bg-[#ab3326] hover:bg-[#861f17] rounded-lg px-3 py-2 transition-colors"
             >
-              {newTaskSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-              {lang === 'fr' ? 'Créer' : lang === 'zh' ? '新增' : 'New task'}
+              <Plus className="h-3 w-3" />
+              {lang === 'fr' ? 'Créer' : lang === 'zh' ? '新增' : 'Create'}
             </button>
           </div>
         </div>
 
-        {/* Link chain dialog */}
+        {/* Link task dialog */}
         {linkingChain && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setLinkingChain(false)}>
-            <div className="bg-[#fbf7ee] rounded-2xl border border-[#e2d6bc] shadow-xl w-80 max-h-[75vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-              {/* Header */}
+            <div className="bg-[#fbf7ee] rounded-2xl border border-[#e2d6bc] shadow-xl w-80 max-h-[70vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
               <div className="px-4 py-3 border-b border-[#ece2cb] flex items-center justify-between">
                 <p className="text-sm font-semibold text-[#2a2420]">
                   {lang === 'zh' ? '連結任務' : lang === 'fr' ? 'Lier une tâche' : 'Link a task'}
@@ -1642,89 +1575,54 @@ function EventDetailPanel({
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
-              {/* Mode tabs */}
-              <div className="px-4 pt-2 pb-1 flex gap-1">
-                {(['tasks', 'events'] as const).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => { setLinkMode(m); setSelectedLinkIds(new Set()); if (m === 'events' && availableEvents.length === 0) openLinkDialog('events') }}
-                    className={`flex-1 text-[11px] rounded-lg py-1.5 font-medium transition-colors ${linkMode === m ? 'bg-[#ab3326] text-white' : 'bg-[#ece2cb] text-[#5c5347] hover:bg-[#e2d6bc]'}`}
-                  >
-                    {m === 'tasks'
-                      ? (lang === 'zh' ? '既有任務' : lang === 'fr' ? 'Tâches existantes' : 'Existing tasks')
-                      : (lang === 'zh' ? '日曆行程' : lang === 'fr' ? 'Événements' : 'Calendar events')}
-                  </button>
-                ))}
-              </div>
-              {/* Search */}
+              {chainParent && (
+                <p className="px-4 pt-2 text-[11px] text-[#8a7a5e]">
+                  {lang === 'fr' ? `Sera ajouté à la chaîne « ${chainParent.title} »` : lang === 'zh' ? `將加入任務練「${chainParent.title}」` : `Will be added to chain "${chainParent.title}"`}
+                </p>
+              )}
               <div className="px-4 py-2 border-b border-[#ece2cb]">
                 <input
+                  autoFocus
                   className="w-full border border-[#e2d6bc] rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-red-300 bg-white"
-                  placeholder={lang === 'zh' ? '搜尋...' : lang === 'fr' ? 'Rechercher...' : 'Search...'}
+                  placeholder={lang === 'zh' ? '搜尋任務...' : lang === 'fr' ? 'Rechercher une tâche...' : 'Search tasks...'}
                   value={linkSearch}
                   onChange={(e) => setLinkSearch(e.target.value)}
                 />
               </div>
-              {/* List */}
               <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1">
-                {linkMode === 'tasks' ? (
-                  tasks
-                    .filter((t) => !linkSearch || t.title.toLowerCase().includes(linkSearch.toLowerCase()))
-                    .sort((a, b) => relevanceScore(b.title) - relevanceScore(a.title))
-                    .slice(0, 40)
-                    .map((t) => (
-                      <button
-                        key={t.id}
-                        onClick={() => setSelectedLinkIds((prev) => { const n = new Set(prev); n.has(t.id) ? n.delete(t.id) : n.add(t.id); return n })}
-                        className={`flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 text-left transition-colors ${selectedLinkIds.has(t.id) ? 'bg-red-50 border border-red-200' : 'hover:bg-[#f3ecdd] border border-transparent'}`}
-                      >
-                        <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${selectedLinkIds.has(t.id) ? 'bg-red-600 border-red-600' : 'border-[#c4b48a]'}`}>
-                          {selectedLinkIds.has(t.id) && <Check className="h-2.5 w-2.5 text-white" />}
-                        </span>
-                        <span className="truncate flex-1 text-[#3a3326]">{t.title}</span>
-                        {t.deadline && (
-                          <span className="text-[#a99873] shrink-0 text-[10px]">
-                            {new Date(String(t.deadline)).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
-                          </span>
-                        )}
-                      </button>
-                    ))
-                ) : (
-                  availableEvents
-                    .filter((e) => !linkSearch || e.title.toLowerCase().includes(linkSearch.toLowerCase()))
-                    .slice(0, 30)
-                    .map((e) => (
-                      <button
-                        key={e.id}
-                        onClick={() => setSelectedLinkIds((prev) => { const n = new Set(prev); n.has(e.id) ? n.delete(e.id) : n.add(e.id); return n })}
-                        className={`flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 text-left transition-colors ${selectedLinkIds.has(e.id) ? 'bg-red-50 border border-red-200' : 'hover:bg-[#f3ecdd] border border-transparent'}`}
-                      >
-                        <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${selectedLinkIds.has(e.id) ? 'bg-red-600 border-red-600' : 'border-[#c4b48a]'}`}>
-                          {selectedLinkIds.has(e.id) && <Check className="h-2.5 w-2.5 text-white" />}
-                        </span>
-                        <span className="truncate flex-1 text-[#3a3326]">{e.title}</span>
+                {tasks
+                  .filter((t) => !linkSearch || t.title.toLowerCase().includes(linkSearch.toLowerCase()))
+                  .sort((a, b) => relevanceScore(b.title) - relevanceScore(a.title))
+                  .slice(0, 40)
+                  .map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => setSelectedLinkId(t.id === selectedLinkId ? null : t.id)}
+                      className={`flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 text-left transition-colors ${selectedLinkId === t.id ? 'bg-red-50 border border-red-200' : 'hover:bg-[#f3ecdd] border border-transparent'}`}
+                    >
+                      <span className={`h-3.5 w-3.5 rounded-full border flex items-center justify-center shrink-0 ${selectedLinkId === t.id ? 'bg-red-600 border-red-600' : 'border-[#c4b48a]'}`}>
+                        {selectedLinkId === t.id && <Check className="h-2.5 w-2.5 text-white" />}
+                      </span>
+                      <span className="truncate flex-1 text-[#3a3326]">{t.title}</span>
+                      {t.deadline && (
                         <span className="text-[#a99873] shrink-0 text-[10px]">
-                          {new Date(e.start).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
+                          {new Date(String(t.deadline)).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
                         </span>
-                      </button>
-                    ))
-                )}
-                {linkMode === 'events' && availableEvents.length === 0 && (
-                  <p className="text-xs text-[#a99873] text-center py-4">{lang === 'zh' ? '載入中...' : 'Loading...'}</p>
-                )}
+                      )}
+                    </button>
+                  ))}
               </div>
-              {/* Footer */}
               <div className="px-4 py-3 border-t border-[#ece2cb] flex gap-2">
                 <button onClick={() => setLinkingChain(false)} className="flex-1 rounded-xl border border-[#e2d6bc] text-[#5c5347] text-xs py-2 hover:bg-[#ece2cb] transition-colors">
                   {lang === 'zh' ? '取消' : lang === 'fr' ? 'Annuler' : 'Cancel'}
                 </button>
                 <button
-                  onClick={linkMode === 'tasks' ? handleLinkExistingTasks : handleCreateChain}
-                  disabled={selectedLinkIds.size === 0 || linkSaving}
+                  onClick={handleLinkTask}
+                  disabled={!selectedLinkId || linkSaving}
                   className="flex-1 rounded-xl bg-[#ab3326] text-white text-xs py-2 hover:bg-[#861f17] transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
                 >
                   {linkSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitBranch className="h-3.5 w-3.5" />}
-                  {lang === 'zh' ? `連結 (${selectedLinkIds.size})` : lang === 'fr' ? `Lier (${selectedLinkIds.size})` : `Link (${selectedLinkIds.size})`}
+                  {lang === 'zh' ? '連結' : lang === 'fr' ? 'Lier' : 'Link'}
                 </button>
               </div>
             </div>
