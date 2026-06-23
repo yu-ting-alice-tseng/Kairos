@@ -10,24 +10,49 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params
   const body = await req.json()
 
-  // If calendarAccountId changed or is newly set, create a calendar event for today
-  if (body.calendarAccountId && body.calendarId) {
+  // Sanitize: only keep known Prisma Habit scalar fields
+  const allowedFields = ['title', 'description', 'color', 'icon', 'frequency', 'targetDays', 'scheduledTime', 'durationMinutes', 'calendarAccountId', 'calendarId', 'calendarEventId', 'isActive', 'streak', 'longestStreak']
+  const data: Record<string, unknown> = Object.fromEntries(Object.entries(body).filter(([k]) => allowedFields.includes(k)))
+
+  // If calendarAccountId changed or is newly set, recreate the recurring calendar event
+  if (data.calendarAccountId && data.calendarId) {
     const existing = await prisma.habit.findFirst({ where: { id, userId: session.user.id } })
-    if (!existing?.calendarEventId || existing.calendarAccountId !== body.calendarAccountId) {
+    if (!existing?.calendarEventId || existing.calendarAccountId !== data.calendarAccountId) {
       try {
         const account = await prisma.calendarAccount.findFirst({
-          where: { id: body.calendarAccountId, userId: session.user.id },
+          where: { id: data.calendarAccountId as string, userId: session.user.id },
         })
         if (account?.accessToken) {
+          const frequency = (data.frequency ?? existing?.frequency ?? 'DAILY') as string
+          const rruleMap: Record<string, string> = {
+            DAILY: 'RRULE:FREQ=DAILY',
+            WEEKDAYS: 'RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR',
+            WEEKENDS: 'RRULE:FREQ=WEEKLY;BYDAY=SA,SU',
+            WEEKLY: 'RRULE:FREQ=WEEKLY',
+            CUSTOM: 'RRULE:FREQ=DAILY',
+          }
+          const recurrence = [rruleMap[frequency] ?? 'RRULE:FREQ=DAILY']
+
+          const scheduledTime = (data.scheduledTime ?? existing?.scheduledTime) as string | undefined
+          const durationMinutes = (data.durationMinutes ?? existing?.durationMinutes ?? 30) as number
           const today = new Date()
-          today.setHours(0, 0, 0, 0)
-          const tomorrow = new Date(today)
-          tomorrow.setDate(tomorrow.getDate() + 1)
-          body.calendarEventId = await createGoogleEvent(
+          let start: Date, end: Date, allDay: boolean
+          if (scheduledTime) {
+            const [h, m] = scheduledTime.split(':').map(Number)
+            start = new Date(today.getFullYear(), today.getMonth(), today.getDate(), h, m)
+            end = new Date(start.getTime() + durationMinutes * 60000)
+            allDay = false
+          } else {
+            start = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+            end = new Date(start); end.setDate(end.getDate() + 1)
+            allDay = true
+          }
+
+          data.calendarEventId = await createGoogleEvent(
             account.id,
             account.accessToken,
-            body.calendarId,
-            { title: body.title ?? existing?.title ?? '', allDay: true, start: today, end: tomorrow },
+            data.calendarId as string,
+            { title: (data.title ?? existing?.title ?? '') as string, allDay, start, end, recurrence },
             account.refreshToken,
             account.expiresAt
           )
@@ -40,7 +65,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const habit = await prisma.habit.update({
     where: { id, userId: session.user.id },
-    data: body,
+    data,
   })
 
   return NextResponse.json(habit)

@@ -12,7 +12,7 @@ const createHabitSchema = z.object({
   icon: z.string().optional(),
   frequency: z.enum(['DAILY', 'WEEKLY', 'WEEKDAYS', 'WEEKENDS', 'CUSTOM']).default('DAILY'),
   targetDays: z.string().optional(),
-  scheduledTime: z.string().optional(),
+  scheduledTime: z.string().optional().transform((v) => v || undefined),
   durationMinutes: z.number().optional(),
   calendarAccountId: z.string().optional(),
   calendarId: z.string().optional(),
@@ -58,15 +58,33 @@ export async function POST(req: NextRequest) {
         where: { id: parsed.data.calendarAccountId, userId: session.user.id },
       })
       if (account?.accessToken) {
+        const rruleMap: Record<string, string> = {
+          DAILY: 'RRULE:FREQ=DAILY',
+          WEEKDAYS: 'RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR',
+          WEEKENDS: 'RRULE:FREQ=WEEKLY;BYDAY=SA,SU',
+          WEEKLY: 'RRULE:FREQ=WEEKLY',
+          CUSTOM: 'RRULE:FREQ=DAILY',
+        }
+        const recurrence = [rruleMap[parsed.data.frequency]]
+
         const today = new Date()
-        today.setHours(0, 0, 0, 0)
-        const tomorrow = new Date(today)
-        tomorrow.setDate(tomorrow.getDate() + 1)
+        let start: Date, end: Date, allDay: boolean
+        if (parsed.data.scheduledTime) {
+          const [h, m] = parsed.data.scheduledTime.split(':').map(Number)
+          start = new Date(today.getFullYear(), today.getMonth(), today.getDate(), h, m)
+          end = new Date(start.getTime() + (parsed.data.durationMinutes ?? 30) * 60000)
+          allDay = false
+        } else {
+          start = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+          end = new Date(start); end.setDate(end.getDate() + 1)
+          allDay = true
+        }
+
         calendarEventId = await createGoogleEvent(
           account.id,
           account.accessToken,
           parsed.data.calendarId,
-          { title: parsed.data.title, allDay: true, start: today, end: tomorrow },
+          { title: parsed.data.title, allDay, start, end, recurrence },
           account.refreshToken,
           account.expiresAt
         )

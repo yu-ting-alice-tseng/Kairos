@@ -106,6 +106,7 @@ export async function createGoogleEvent(
     end: Date
     colorId?: string
     allDay?: boolean
+    recurrence?: string[]
   },
   refreshToken?: string | null,
   expiresAt?: Date | null
@@ -123,6 +124,7 @@ export async function createGoogleEvent(
       start: event.allDay ? { date: toDateStr(event.start) } : { dateTime: event.start.toISOString() },
       end: event.allDay ? { date: toDateStr(event.end) } : { dateTime: event.end.toISOString() },
       colorId: event.colorId,
+      recurrence: event.recurrence,
     },
   })
   await flush()

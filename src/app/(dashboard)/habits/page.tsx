@@ -209,23 +209,46 @@ export default function HabitsPage() {
   useEffect(() => { loadHabits() }, [loadHabits])
 
   const handleSave = async (data: Partial<Habit>) => {
+    const errorMsg = language === 'fr' ? 'Erreur lors de la sauvegarde' : language === 'zh' ? '儲存失敗，請稍後再試' : 'Failed to save, please try again'
     if (editingHabit) {
-      const res = await fetch(`/api/habits/${editingHabit.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      if (res.ok) setHabits(habits.map((h) => h.id === editingHabit.id ? { ...h, ...data } : h))
+      try {
+        const res = await fetch(`/api/habits/${editingHabit.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        })
+        if (res.ok) {
+          const updated = await res.json()
+          setHabits(habits.map((h) => h.id === editingHabit.id ? updated : h))
+          toast({ title: language === 'fr' ? 'Habitude mise à jour !' : language === 'zh' ? '習慣已更新！' : 'Habit updated!', variant: 'success' })
+        } else {
+          const err = await res.json().catch(() => ({}))
+          console.error('PATCH habit error:', err)
+          toast({ title: errorMsg, variant: 'error' })
+        }
+      } catch (e) {
+        console.error(e)
+        toast({ title: errorMsg, variant: 'error' })
+      }
     } else {
-      const res = await fetch('/api/habits', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      if (res.ok) {
-        const created = await res.json()
-        setHabits([...habits, created])
-        toast({ title: language === 'fr' ? 'Habitude créée !' : language === 'zh' ? '習慣已建立！' : 'Habit created!', variant: 'success' })
+      try {
+        const res = await fetch('/api/habits', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        })
+        if (res.ok) {
+          const created = await res.json()
+          setHabits([...habits, created])
+          toast({ title: language === 'fr' ? 'Habitude créée !' : language === 'zh' ? '習慣已建立！' : 'Habit created!', variant: 'success' })
+        } else {
+          const err = await res.json().catch(() => ({}))
+          console.error('POST habit error:', err)
+          toast({ title: errorMsg, variant: 'error' })
+        }
+      } catch (e) {
+        console.error(e)
+        toast({ title: errorMsg, variant: 'error' })
       }
     }
     setEditingHabit(null)
