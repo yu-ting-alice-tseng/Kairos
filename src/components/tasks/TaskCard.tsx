@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { t } from '@/lib/i18n'
 import { formatDate, formatDuration, getQuadrant, EISENHOWER_QUADRANTS, isOverdue } from '@/lib/utils'
+import { isSameDay } from 'date-fns'
 import {
   CheckCircle2, Circle, Clock, Calendar, Sparkles, ChevronDown, ChevronRight,
   MoreHorizontal, RefreshCw, Scissors, Edit2, Trash2, AlertTriangle, Loader2
@@ -20,6 +21,7 @@ interface TaskCardProps {
   onReschedule: (task: Task) => void
   lang?: 'fr' | 'en' | 'zh'
   compact?: boolean
+  selectedDate?: Date
 }
 
 const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === 'true'
@@ -33,6 +35,7 @@ export function TaskCard({
   onReschedule,
   lang = 'fr',
   compact = false,
+  selectedDate,
 }: TaskCardProps) {
   const [showActions, setShowActions] = useState(false)
   const [showSubtasks, setShowSubtasks] = useState(false)
@@ -113,7 +116,7 @@ export function TaskCard({
                 {formatDate(task.scheduledStart, lang)}
               </span>
             )}
-            {task.deadline && (
+            {task.deadline && !(selectedDate && isSameDay(new Date(String(task.deadline)), selectedDate)) && (
               <Badge variant={overdue ? 'destructive' : 'warning'} className="text-xs py-0">
                 {overdue && <AlertTriangle className="h-3 w-3 mr-1" />}
                 {formatDate(task.deadline, lang)}

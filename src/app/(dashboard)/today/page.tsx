@@ -28,7 +28,7 @@ import {
 
 const SCHEDULE_HOURS = Array.from({ length: 16 }, (_, i) => i + 7) // 07–22
 
-function DraggableTaskRow({ task, index, onComplete, onEdit, onDelete, onBreakdown, onReschedule, lang }: {
+function DraggableTaskRow({ task, index, onComplete, onEdit, onDelete, onBreakdown, onReschedule, lang, selectedDate }: {
   task: Task; index: number
   onComplete: (id: string) => Promise<void>
   onEdit: (t: Task) => void
@@ -36,6 +36,7 @@ function DraggableTaskRow({ task, index, onComplete, onEdit, onDelete, onBreakdo
   onBreakdown: (t: Task) => void
   onReschedule: (t: Task) => void
   lang: 'fr' | 'en' | 'zh'
+  selectedDate?: Date
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id })
   return (
@@ -60,7 +61,7 @@ function DraggableTaskRow({ task, index, onComplete, onEdit, onDelete, onBreakdo
         </svg>
       </div>
       <div className="flex-1 min-w-0">
-        <TaskCard task={task} onComplete={onComplete} onEdit={onEdit} onDelete={onDelete} onBreakdown={onBreakdown} onReschedule={onReschedule} lang={lang} />
+        <TaskCard task={task} onComplete={onComplete} onEdit={onEdit} onDelete={onDelete} onBreakdown={onBreakdown} onReschedule={onReschedule} lang={lang} selectedDate={selectedDate} />
       </div>
     </div>
   )
@@ -796,6 +797,7 @@ export default function TodayPage() {
                         onBreakdown={setBreakdownTask}
                         onReschedule={handleReschedule}
                         lang={language}
+                        selectedDate={selectedDate}
                       />
                     ))}
                     {unmatchedAllDayEvents.map((ev) => (
