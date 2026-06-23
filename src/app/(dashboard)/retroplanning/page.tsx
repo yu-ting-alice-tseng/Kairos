@@ -108,16 +108,18 @@ interface ChainNode {
 }
 
 function ChainCard({
-  node, isSelected, onClick, onEdit,
+  node, isSelected, onClick, onEdit, onComplete,
   lang,
 }: {
   node: ChainNode
   isSelected: boolean
   onClick: () => void
   onEdit: (t: Task) => void
+  onComplete: (t: Task) => void
   lang: 'fr' | 'en' | 'zh'
 }) {
   const { task, isParent } = node
+  const [completing, setCompleting] = React.useState(false)
   const done = task.status === 'COMPLETED'
   const deadline = task.deadline ? new Date(task.deadline) : null
   const overdue = deadline && !done && isOverdue(deadline)
@@ -151,17 +153,31 @@ function ChainCard({
       )}
     >
       <div className="flex items-start gap-3">
-        <div className={cn(
-          'shrink-0 mt-0.5 rounded-full flex items-center justify-center',
-          isParent ? 'h-7 w-7 bg-red-100' : 'h-5 w-5 bg-[#ece2cb]'
-        )}>
-          {done
+        <button
+          onClick={async (e) => {
+            e.stopPropagation()
+            if (completing) return
+            setCompleting(true)
+            await onComplete(task)
+            setCompleting(false)
+          }}
+          className={cn(
+            'shrink-0 mt-0.5 rounded-full flex items-center justify-center transition-transform hover:scale-110',
+            isParent ? 'h-7 w-7 bg-red-100' : 'h-5 w-5 bg-[#ece2cb]'
+          )}
+          title={done
+            ? (lang === 'fr' ? 'Marquer comme non terminé' : lang === 'zh' ? '標記為未完成' : 'Mark as incomplete')
+            : (lang === 'fr' ? 'Marquer comme terminé' : lang === 'zh' ? '標記為已完成' : 'Mark as complete')}
+        >
+          {completing
+            ? <Loader2 className={cn('animate-spin text-red-400', isParent ? 'h-4 w-4' : 'h-3 w-3')} />
+            : done
             ? <CheckCircle2 className={cn('text-emerald-500', isParent ? 'h-4 w-4' : 'h-3 w-3')} />
             : isParent
             ? <GitBranch className="h-3.5 w-3.5 text-red-800" />
             : <Circle className={cn('text-[#a99873]', 'h-3 w-3')} />
           }
-        </div>
+        </button>
         <div className="flex-1 min-w-0">
           <p className={cn(
             'font-medium text-[#2a2420] truncate',
@@ -774,6 +790,19 @@ export default function RetroplanningPage() {
     setEditingTask(null)
   }
 
+  const handleCompleteTask = async (task: Task) => {
+    const newStatus = task.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED'
+    const res = await fetch(`/api/tasks/${task.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setTasks(tasks.map((t) => t.id === task.id ? updated : t))
+    }
+  }
+
   // Which chain is selected (highlight all tasks in it)
   const selectedChain = selectedChainId ? chains.find((c) => c.parent.id === selectedChainId) : null
 
@@ -1053,6 +1082,7 @@ export default function RetroplanningPage() {
                             isSelected={false}
                             onClick={() => {}}
                             onEdit={setEditingTask}
+                            onComplete={handleCompleteTask}
                             lang={lang}
                           />
                         </div>
@@ -1110,6 +1140,7 @@ export default function RetroplanningPage() {
                                       isSelected={false}
                                       onClick={() => setSelectedChainId(parent.id)}
                                       onEdit={setEditingTask}
+                                      onComplete={handleCompleteTask}
                                       lang={lang}
                                     />
                                   </div>

@@ -1370,12 +1370,16 @@ function EventDetailPanel({
   }
 
   const handleUnlinkFromChain = async (taskId: string) => {
-    await fetch(`/api/tasks/${taskId}`, {
+    const res = await fetch(`/api/tasks/${taskId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ parentTaskId: null }),
     })
-    onTasksRefresh()
+    if (res.ok) {
+      onTasksRefresh()
+    } else {
+      console.error('Failed to unlink task from chain', await res.text())
+    }
   }
 
   const handleLinkTask = async () => {
@@ -1551,7 +1555,7 @@ function EventDetailPanel({
                       )}
                       <button
                         onClick={(e) => { e.stopPropagation(); handleUnlinkFromChain(t.id) }}
-                        className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-100 hover:text-red-500 text-[#a99873] transition-all"
+                        className="shrink-0 p-0.5 rounded hover:bg-red-100 hover:text-red-500 text-[#c4b48a] transition-all"
                         title={lang === 'fr' ? 'Retirer de la chaîne' : lang === 'zh' ? '從任務練移除' : 'Remove from chain'}
                       >
                         <X className="h-3 w-3" />
