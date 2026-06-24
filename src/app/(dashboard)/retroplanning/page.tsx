@@ -434,7 +434,7 @@ function TemplateEditor({
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function RetroplanningPage() {
-  const { language, tasks, setTasks, calendarAccounts } = useAppStore()
+  const { language, tasks, setTasks, updateTask, removeTask, calendarAccounts } = useAppStore()
   const { toast } = useGlobalToast()
   const lang = language
 
@@ -488,7 +488,8 @@ export default function RetroplanningPage() {
     try {
       if (mode === 'delete') {
         await Promise.all([...childIds, parentId].map((id) => fetch(`/api/tasks/${id}`, { method: 'DELETE' })))
-        setTasks(tasks.filter((t) => t.id !== parentId && !childIds.includes(t.id)))
+        const delRes = await fetch('/api/tasks')
+        if (delRes.ok) setTasks(await delRes.json())
       } else {
         // Unlink: remove parentTaskId from children, keep all tasks
         await Promise.all(childIds.map((id) =>
@@ -813,14 +814,15 @@ export default function RetroplanningPage() {
     })
     if (res.ok) {
       const updated = await res.json()
-      setTasks(tasks.map((t) => t.id === editingTask.id ? updated : t))
+      updateTask(editingTask.id, updated)
     }
     setEditingTask(null)
   }
 
   const handleDeleteTask = async (id: string) => {
     await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
-    setTasks(tasks.filter((t) => t.id !== id))
+    const fresh = await fetch('/api/tasks')
+    if (fresh.ok) setTasks(await fresh.json())
     setEditingTask(null)
   }
 
@@ -863,7 +865,7 @@ export default function RetroplanningPage() {
     })
     if (res.ok) {
       const updated = await res.json()
-      setTasks(tasks.map((t) => t.id === task.id ? updated : t))
+      updateTask(task.id, updated)
     }
   }
 

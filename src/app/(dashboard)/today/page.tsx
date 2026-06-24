@@ -160,7 +160,7 @@ function DroppableTasksPanel({ children, isHighlight }: { children: React.ReactN
 const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === 'true'
 
 export default function TodayPage() {
-  const { language, tasks, habits, setTasks, setHabits, calendarAccounts, todayExcludePatterns, setTodayExcludePatterns, keywordRules } = useAppStore()
+  const { language, tasks, habits, setTasks, updateTask, removeTask, addTask, setHabits, calendarAccounts, todayExcludePatterns, setTodayExcludePatterns, keywordRules } = useAppStore()
   const { toast } = useGlobalToast()
 
   const [loading, setLoading] = useState(true)
@@ -290,7 +290,7 @@ export default function TodayPage() {
     const nowStr = new Date().toISOString()
 
     // Optimistic update — UI responds immediately
-    setTasks(tasks.map((t) => t.id === id ? { ...t, status: newStatus, completedAt: isCompleted ? null : nowStr } : t))
+    updateTask(id, { status: newStatus, completedAt: isCompleted ? null : nowStr })
 
     const res = await fetch(`/api/tasks/${id}`, {
       method: 'PATCH',
@@ -299,7 +299,7 @@ export default function TodayPage() {
     })
     if (!res.ok) {
       // Revert on error
-      setTasks(tasks.map((t) => t.id === id ? task : t))
+      updateTask(id, task)
       toast({ title: language === 'fr' ? 'Erreur de mise à jour' : language === 'zh' ? '更新失敗' : 'Update failed', variant: 'error' })
     } else if (!isCompleted) {
       toast({ title: language === 'fr' ? 'Tâche terminée !' : language === 'zh' ? '任務已完成！' : 'Task completed!', variant: 'success' })
@@ -315,7 +315,7 @@ export default function TodayPage() {
       })
       if (res.ok) {
         const updated = await res.json()
-        setTasks(tasks.map((t) => t.id === editingTask.id ? updated : t))
+        updateTask(editingTask.id, updated)
       }
     } else {
       // Sync new task to Google Calendar if a calendar account is selected
@@ -349,7 +349,7 @@ export default function TodayPage() {
       })
       if (res.ok) {
         const created = await res.json()
-        setTasks([...tasks, created])
+        addTask(created)
         toast({ title: language === 'fr' ? 'Tâche créée !' : language === 'zh' ? '任務已建立！' : 'Task created!', variant: 'success' })
       }
     }
@@ -358,7 +358,8 @@ export default function TodayPage() {
 
   const handleDelete = async (id: string) => {
     await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
-    setTasks(tasks.filter((t) => t.id !== id))
+    const fresh = await fetch('/api/tasks')
+    if (fresh.ok) setTasks(await fresh.json())
   }
 
   const handleBreakdownAccept = async (task: Task, subTasks: { title: string; description: string; estimatedMinutes: number; importance: number; urgency: number }[]) => {
@@ -468,7 +469,7 @@ export default function TodayPage() {
       })
       if (res.ok) {
         const updated = await res.json()
-        setTasks(tasks.map((t) => t.id === taskId ? updated : t))
+        updateTask(taskId, updated)
         setEditingTask(updated)
         setShowTaskForm(true)
         toast({ title: language === 'fr' ? 'Retiré du planning' : language === 'zh' ? '已移出行程' : 'Removed from schedule', variant: 'success' })
@@ -491,7 +492,7 @@ export default function TodayPage() {
     })
     if (res.ok) {
       const updated = await res.json()
-      setTasks(tasks.map((t) => t.id === activeId ? updated : t))
+      updateTask(activeId, updated)
       toast({
         title: language === 'fr' ? `Planifié à ${String(hour).padStart(2,'0')}:00` : language === 'zh' ? `已排定於 ${String(hour).padStart(2,'0')}:00` : `Scheduled at ${String(hour).padStart(2,'0')}:00`,
         variant: 'success',

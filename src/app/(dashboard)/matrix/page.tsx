@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils'
 const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === 'true'
 
 export default function MatrixPage() {
-  const { language, tasks, setTasks, habits, setHabits, calendarAccounts, matrixExcludePatterns, setMatrixExcludePatterns, keywordRules, setKeywordRules } = useAppStore()
+  const { language, tasks, setTasks, updateTask, removeTask, addTask, habits, setHabits, calendarAccounts, matrixExcludePatterns, setMatrixExcludePatterns, keywordRules, setKeywordRules } = useAppStore()
   const { toast } = useGlobalToast()
   const [loading, setLoading] = useState(true)
   const [showTaskForm, setShowTaskForm] = useState(false)
@@ -107,7 +107,7 @@ export default function MatrixPage() {
     })
     if (res.ok) {
       const updated = await res.json()
-      setTasks(tasks.map((t) => t.id === id ? updated : t))
+      updateTask(id, updated)
       toast({ title: language === 'fr' ? 'Tâche déplacée' : language === 'zh' ? '任務已移動' : 'Task moved', variant: 'info' })
     }
   }
@@ -119,7 +119,7 @@ export default function MatrixPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
-      if (res.ok) setTasks(tasks.map((t) => t.id === editingTask.id ? { ...t, ...data } : t))
+      if (res.ok) { const updated = await res.json(); updateTask(editingTask.id, updated) }
     } else {
       const res = await fetch('/api/tasks', {
         method: 'POST',
@@ -128,7 +128,7 @@ export default function MatrixPage() {
       })
       if (res.ok) {
         const created = await res.json()
-        setTasks([...tasks, created])
+        addTask(created)
       }
     }
     setEditingTask(null)
@@ -136,7 +136,8 @@ export default function MatrixPage() {
 
   const handleDeleteTask = async (id: string) => {
     await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
-    setTasks(tasks.filter((t) => t.id !== id))
+    const fresh = await fetch('/api/tasks')
+    if (fresh.ok) setTasks(await fresh.json())
     setEditingTask(null)
   }
 
@@ -144,7 +145,7 @@ export default function MatrixPage() {
     const task = tasks.find((t) => t.id === id)
     if (!task) return
     const newStatus = task.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED'
-    setTasks(tasks.map((t) => t.id === id ? { ...t, status: newStatus } : t))
+    updateTask(id, { status: newStatus })
     await fetch(`/api/tasks/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: newStatus }) })
   }
 

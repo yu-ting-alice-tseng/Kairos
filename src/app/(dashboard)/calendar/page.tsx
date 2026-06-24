@@ -133,7 +133,7 @@ interface UndoItem {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
-  const { language, tasks, setTasks, calendarAccounts, habits, setHabits } = useAppStore()
+  const { language, tasks, setTasks, updateTask, removeTask, addTask, calendarAccounts, habits, setHabits } = useAppStore()
   const { toast } = useGlobalToast()
   // startDate is always Monday of the current week (Sunday → next Monday)
   const [startDate, setStartDate] = useState(() => {
@@ -175,11 +175,11 @@ export default function CalendarPage() {
   // Undo stack for drag moves
   const undoStackRef = useRef<UndoItem[]>([])
 
-  // Dismissed suggestion IDs — persisted in sessionStorage so navigation re-mounts don't re-show them
+  // Dismissed suggestion IDs — persisted in localStorage so navigation re-mounts don't re-show them
   const dismissedRef = useRef<Set<string>>(new Set<string>())
   if (dismissedRef.current.size === 0) {
     try {
-      const raw = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('retro_dismissed') : null
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('retro_dismissed') : null
       if (raw) JSON.parse(raw).forEach((id: string) => dismissedRef.current.add(id))
     } catch { /* ignore */ }
   }
@@ -452,13 +452,13 @@ export default function CalendarPage() {
   const handleCompleteTask = useCallback(async (task: Task) => {
     const isCompleted = task.status === 'COMPLETED'
     const newStatus = isCompleted ? 'PENDING' : 'COMPLETED'
-    setTasks(tasks.map((t) => t.id === task.id ? { ...t, status: newStatus, completedAt: isCompleted ? null : new Date().toISOString() } : t))
+    updateTask(task.id, { status: newStatus, completedAt: isCompleted ? null : new Date().toISOString() })
     await fetch(`/api/tasks/${task.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: newStatus, completedAt: isCompleted ? null : new Date().toISOString() }),
     })
-  }, [tasks, setTasks])
+  }, [updateTask])
 
   const handleCompleteHabit = useCallback(async (habit: Habit) => {
     const alreadyDone = (habit.completions?.length ?? 0) > 0
@@ -493,7 +493,7 @@ export default function CalendarPage() {
       })
       if (res.ok) {
         const updated = await res.json()
-        setTasks(tasks.map((task) => task.id === editingTask.id ? updated : task))
+        updateTask(editingTask.id, updated)
         toast({ title: language === 'fr' ? 'Tâche modifiée' : language === 'zh' ? '任務已更新' : 'Task updated', variant: 'success' })
       }
     } else {
@@ -532,7 +532,7 @@ export default function CalendarPage() {
       })
       if (res.ok) {
         const created = await res.json()
-        setTasks([...tasks, created])
+        addTask(created)
         toast({ title: language === 'fr' ? 'Tâche créée !' : language === 'zh' ? '任務已建立！' : 'Task created!', variant: 'success' })
       }
     }
@@ -542,11 +542,9 @@ export default function CalendarPage() {
 
   const handleDeleteTask = async (id: string) => {
     await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
-    // Remove the deleted task and clear parentTaskId for any children that pointed to it
-    setTasks(tasks
-      .filter((task) => task.id !== id)
-      .map((task) => task.parentTaskId === id ? { ...task, parentTaskId: null } : task)
-    )
+    // Re-fetch so children's parentTaskId (cleared by API) reflects in the store
+    const fresh = await fetch('/api/tasks')
+    if (fresh.ok) setTasks(await fresh.json())
     setEditingTask(null)
   }
 
@@ -633,7 +631,7 @@ export default function CalendarPage() {
   const persistDismissed = (id: string) => {
     dismissedRef.current.add(id)
     try {
-      sessionStorage.setItem('retro_dismissed', JSON.stringify([...dismissedRef.current]))
+      localStorage.setItem('retro_dismissed', JSON.stringify([...dismissedRef.current]))
     } catch { /* ignore */ }
   }
 
