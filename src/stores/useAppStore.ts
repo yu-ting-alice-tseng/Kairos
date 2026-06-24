@@ -22,6 +22,7 @@ export interface AppState {
   matrixExcludePatterns: string[]
   todayExcludePatterns: string[]
   keywordRules: KeywordRule[]
+  hideHabitsViews: string[]
 
   setLanguage: (lang: Language) => void
   setTasks: (tasks: Task[]) => void
@@ -42,6 +43,7 @@ export interface AppState {
   addKeywordRule: (rule: KeywordRule) => void
   updateKeywordRule: (id: string, updates: Partial<KeywordRule>) => void
   removeKeywordRule: (id: string) => void
+  toggleHabitsView: (view: string) => void
 }
 
 export const useAppStore = create<AppState>()(
@@ -57,6 +59,7 @@ export const useAppStore = create<AppState>()(
       matrixExcludePatterns: [],
       todayExcludePatterns: [],
       keywordRules: [],
+      hideHabitsViews: [],
 
       setLanguage: (lang) => set({ language: lang }),
       setTasks: (tasks) => set({ tasks }),
@@ -89,6 +92,12 @@ export const useAppStore = create<AppState>()(
         })),
       removeKeywordRule: (id) =>
         set((state) => ({ keywordRules: state.keywordRules.filter((r) => r.id !== id) })),
+      toggleHabitsView: (view) =>
+        set((state) => ({
+          hideHabitsViews: state.hideHabitsViews.includes(view)
+            ? state.hideHabitsViews.filter((v) => v !== view)
+            : [...state.hideHabitsViews, view],
+        })),
     }),
     {
       name: 'flowplan-store',
@@ -97,6 +106,7 @@ export const useAppStore = create<AppState>()(
         activeView: state.activeView,
         matrixExcludePatterns: state.matrixExcludePatterns,
         todayExcludePatterns: state.todayExcludePatterns,
+        hideHabitsViews: state.hideHabitsViews,
         // keywordRules loaded from DB on login — not persisted in localStorage
       }),
     }

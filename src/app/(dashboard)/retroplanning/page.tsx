@@ -525,7 +525,7 @@ export default function RetroplanningPage() {
     try { return new Set(JSON.parse(localStorage.getItem('kairos:dismissed-scans') ?? '[]')) } catch { return new Set() }
   })
 
-  const scanKey = (m: ScanMatch) => `${m.title}::${m.start.slice(0, 10)}`
+  const scanKey = (m: ScanMatch) => m.title.toLowerCase().trim()
   const dismissScan = (key: string) => {
     dismissedScanKeys.add(key)
     try { localStorage.setItem('kairos:dismissed-scans', JSON.stringify([...dismissedScanKeys])) } catch { /* ignore */ }

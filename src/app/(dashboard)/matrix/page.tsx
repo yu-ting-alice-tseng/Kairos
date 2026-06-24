@@ -18,7 +18,8 @@ import { cn } from '@/lib/utils'
 const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === 'true'
 
 export default function MatrixPage() {
-  const { language, tasks, setTasks, updateTask, removeTask, addTask, habits, setHabits, calendarAccounts, matrixExcludePatterns, setMatrixExcludePatterns, keywordRules, setKeywordRules } = useAppStore()
+  const { language, tasks, setTasks, updateTask, removeTask, addTask, habits, setHabits, calendarAccounts, matrixExcludePatterns, setMatrixExcludePatterns, keywordRules, setKeywordRules, hideHabitsViews, toggleHabitsView } = useAppStore()
+  const habitsHiddenMatrix = hideHabitsViews.includes('matrix')
   const { toast } = useGlobalToast()
   const [loading, setLoading] = useState(true)
   const [showTaskForm, setShowTaskForm] = useState(false)
@@ -279,6 +280,20 @@ export default function MatrixPage() {
       {/* Settings panel: filters + keyword rules */}
       {settingsPanelOpen && (
         <div className="border-b border-[#ece2cb] bg-[#f8f4ea] px-6 py-4 flex flex-col gap-5">
+          {/* Habits visibility */}
+          {habits.length > 0 && (
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-semibold text-[#5c5347]">
+                {language === 'zh' ? '習慣' : language === 'fr' ? 'Habitudes' : 'Habits'}
+              </span>
+              <button
+                onClick={() => toggleHabitsView('matrix')}
+                className={`text-[10px] rounded-full px-2.5 py-0.5 border transition-colors ${habitsHiddenMatrix ? 'border-[#d1c9b8] text-[#a99873]' : 'border-[#4f6f5e]/40 text-[#4f6f5e] bg-[#4f6f5e]/10'}`}
+              >
+                {habitsHiddenMatrix ? (language === 'zh' ? '顯示' : language === 'fr' ? 'Afficher' : 'Show') : (language === 'zh' ? '隱藏' : language === 'fr' ? 'Masquer' : 'Hide')}
+              </button>
+            </div>
+          )}
           {/* Exclude patterns */}
           <div>
             <p className="text-xs font-semibold text-[#5c5347] mb-2 flex items-center gap-1.5">
@@ -357,7 +372,7 @@ export default function MatrixPage() {
 
         <EisenhowerMatrix
           tasks={filteredTasks}
-          habits={todayHabits}
+          habits={habitsHiddenMatrix ? [] : todayHabits}
           onTaskUpdate={handleTaskUpdate}
           onTaskClick={handleTaskClick}
           onComplete={handleCompleteTask}

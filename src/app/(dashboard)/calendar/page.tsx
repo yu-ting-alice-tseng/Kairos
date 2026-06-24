@@ -133,7 +133,8 @@ interface UndoItem {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
-  const { language, tasks, setTasks, updateTask, removeTask, addTask, calendarAccounts, habits, setHabits } = useAppStore()
+  const { language, tasks, setTasks, updateTask, removeTask, addTask, calendarAccounts, habits, setHabits, hideHabitsViews, toggleHabitsView } = useAppStore()
+  const habitsHidden = hideHabitsViews.includes('calendar')
   const { toast } = useGlobalToast()
   // startDate is always Monday of the current week (Sunday → next Monday)
   const [startDate, setStartDate] = useState(() => {
@@ -345,7 +346,7 @@ export default function CalendarPage() {
   }
 
   const getHabitsAllDayForDay = (day: Date) =>
-    habits.filter((h) => !h.scheduledTime && isHabitActiveOnDay(h, day))
+    habitsHidden ? [] : habits.filter((h) => !h.scheduledTime && isHabitActiveOnDay(h, day))
 
   const getDayBlocks = (day: Date): DayBlock[] => {
     type Raw = { id: string; kind: DayBlock['kind']; start: number; end: number; data: CalendarEvent | Task | Habit }
@@ -368,7 +369,7 @@ export default function CalendarPage() {
     })
 
     habits.forEach((h) => {
-      if (!h.scheduledTime || !isHabitActiveOnDay(h, day)) return
+      if (habitsHidden || !h.scheduledTime || !isHabitActiveOnDay(h, day)) return
       const [hh, mm] = h.scheduledTime.split(':').map(Number)
       const start = hh * 60 + mm - GRID_START_HOUR * 60
       raw.push({ id: `habit-${h.id}`, kind: 'habit', start, end: start + (h.durationMinutes ?? 30), data: h })
@@ -766,6 +767,23 @@ export default function CalendarPage() {
                   </button>
                 )
               })}
+              {habits.length > 0 && (
+                <button
+                  title={habitsHidden ? (language === 'zh' ? '習慣（已隱藏）' : language === 'fr' ? 'Habitudes (masquées)' : 'Habits (hidden)') : (language === 'zh' ? '習慣' : language === 'fr' ? 'Habitudes' : 'Habits')}
+                  onClick={() => toggleHabitsView('calendar')}
+                  className="flex items-center gap-1.5 rounded-full px-2 py-0.5 border transition-all text-xs hover:opacity-80"
+                  style={{
+                    borderColor: habitsHidden ? '#d1c9b8' : '#22c55e',
+                    backgroundColor: habitsHidden ? 'transparent' : '#22c55e20',
+                    color: habitsHidden ? '#a99873' : '#16a34a',
+                    textDecoration: habitsHidden ? 'line-through' : 'none',
+                    opacity: habitsHidden ? 0.5 : 1,
+                  }}
+                >
+                  <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: habitsHidden ? '#a99873' : '#22c55e' }} />
+                  <span>{language === 'zh' ? '習慣' : language === 'fr' ? 'Habitudes' : 'Habits'}</span>
+                </button>
+              )}
             </div>
           )}
           <Button size="sm" onClick={() => { setSelectedDate(new Date()); setShowTaskForm(true) }}>
@@ -1390,7 +1408,7 @@ function EventDetailPanel({
   onSave: (ev: CalendarEvent, title: string, start: string, end: string) => void
   onDelete: (ev: CalendarEvent) => void
   onClose: () => void
-  onTasksRefresh: () => void
+  onTasksRefresh: () => void | Promise<void>
   onNavigateToDate?: (date: Date, taskId?: string) => void
 }) {
   const router = useRouter()
@@ -1432,9 +1450,13 @@ function EventDetailPanel({
     return [...byParent, ...directExtras]
       .filter((t) => { if (seenIds.has(t.id)) return false; seenIds.add(t.id); return true })
       .sort((a, b) => {
+        if (!a.deadline && !b.deadline) return a.title.localeCompare(b.title)
         if (!a.deadline) return 1
         if (!b.deadline) return -1
-        return new Date(String(a.deadline)).getTime() - new Date(String(b.deadline)).getTime()
+        const da = new Date(String(a.deadline)).getTime()
+        const db = new Date(String(b.deadline)).getTime()
+        if (da !== db) return da - db
+        return a.title.localeCompare(b.title)
       })
   }, [chainParent, tasks, directlyLinkedTasks])
   // Fallback: fuzzy title match for old tasks not linked via calendarEventId
@@ -1475,10 +1497,12 @@ function EventDetailPanel({
     return new Set([...childIds, ...validParentIds])
   }, [tasks])
 
-  const openLinkDialog = () => {
-    setLinkingChain(true)
+  const openLinkDialog = async () => {
     setLinkSearch('')
-    // Auto-select tasks whose titles match event keywords (excluding already-chained and completed)
+    // Always fetch fresh tasks so renamed/deleted tasks are reflected
+    await onTasksRefresh()
+    setLinkingChain(true)
+    // Auto-select tasks whose titles match event keywords (excluding completed)
     const autoSelect = new Set(
       tasks
         .filter((t) => t.status !== 'COMPLETED' && eventKeywords.some((kw) => t.title.toLowerCase().includes(kw)))
@@ -1514,8 +1538,17 @@ function EventDetailPanel({
           })
         ))
       } else {
-        // No chain root yet — first selected task becomes the root (gets calendarEventId), rest become children
-        const [rootId, ...childIds] = [...selectedLinkIds]
+        // No chain root yet — task with latest deadline becomes root (retroplanning works backwards from final goal)
+        const selectedArr = [...selectedLinkIds]
+          .map((id) => tasks.find((t) => t.id === id))
+          .filter((t): t is Task => !!t)
+        selectedArr.sort((a, b) => {
+          const da = a.deadline ? new Date(String(a.deadline)).getTime() : 0
+          const db = b.deadline ? new Date(String(b.deadline)).getTime() : 0
+          return db - da
+        })
+        const rootId = selectedArr[0]?.id ?? [...selectedLinkIds][0]
+        const childIds = selectedArr.slice(1).map((t) => t.id)
         await fetch(`/api/tasks/${rootId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -1652,8 +1685,8 @@ function EventDetailPanel({
             {lang === 'fr' ? 'Chaîne de tâches' : lang === 'zh' ? '任務鏈' : 'Task chain'}
           </p>
 
-          {/* Existing chain display — show whenever a chain root exists */}
-          {(chainParent || relatedChains.length > 0) && (
+          {/* Existing chain display — only show when there's a real chain (≥2 tasks) */}
+          {((chainParent && (chainSiblings.length > 0 || !!chainParent.parentTaskId)) || relatedChains.length > 0) && (
             <div className="flex flex-col gap-1">
               {chainParent ? (
                 <>
@@ -1808,7 +1841,6 @@ function EventDetailPanel({
                 {tasks
                   .filter((t) => !linkSearch || t.title.toLowerCase().includes(linkSearch.toLowerCase()))
                   .sort((a, b) => relevanceScore(b.title) - relevanceScore(a.title))
-                  .slice(0, 40)
                   .map((t) => {
                     const selected = selectedLinkIds.has(t.id)
                     const inChain = chainedTaskIds.has(t.id)

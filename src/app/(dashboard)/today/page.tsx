@@ -160,7 +160,8 @@ function DroppableTasksPanel({ children, isHighlight }: { children: React.ReactN
 const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === 'true'
 
 export default function TodayPage() {
-  const { language, tasks, habits, setTasks, updateTask, removeTask, addTask, setHabits, calendarAccounts, todayExcludePatterns, setTodayExcludePatterns, keywordRules } = useAppStore()
+  const { language, tasks, habits, setTasks, updateTask, removeTask, addTask, setHabits, calendarAccounts, todayExcludePatterns, setTodayExcludePatterns, keywordRules, hideHabitsViews, toggleHabitsView } = useAppStore()
+  const habitsHidden = hideHabitsViews.includes('today')
   const { toast } = useGlobalToast()
 
   const [loading, setLoading] = useState(true)
@@ -701,8 +702,14 @@ export default function TodayPage() {
               <h2 className="text-sm font-semibold text-[#5c5347] mb-3 flex items-center gap-2">
                 <Candle className="h-4 w-3.5" />
                 {t('habits', language)}
+                <button
+                  onClick={() => toggleHabitsView('today')}
+                  className={`ml-auto text-[10px] rounded-full px-2 py-0.5 border transition-colors ${habitsHidden ? 'border-[#d1c9b8] text-[#a99873] bg-transparent' : 'border-[#4f6f5e]/40 text-[#4f6f5e] bg-[#4f6f5e]/10'}`}
+                >
+                  {habitsHidden ? (language === 'zh' ? '顯示' : language === 'fr' ? 'Afficher' : 'Show') : (language === 'zh' ? '隱藏' : language === 'fr' ? 'Masquer' : 'Hide')}
+                </button>
               </h2>
-              <div className="flex flex-wrap gap-2">
+              {!habitsHidden && <div className="flex flex-wrap gap-2">
                 {todayHabits.map((habit) => {
                   const doneToday = (habit as Habit & { completions?: { id: string }[] }).completions?.length ?? 0
                   return (
@@ -728,7 +735,7 @@ export default function TodayPage() {
                     </button>
                   )
                 })}
-              </div>
+              </div>}
             </div>
           )}
 
