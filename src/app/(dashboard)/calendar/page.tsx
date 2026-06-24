@@ -1428,23 +1428,17 @@ function EventDetailPanel({
   }, [directlyLinkedTasks, tasks])
   const chainSiblings = React.useMemo(() => {
     if (!chainParent) return []
-    const parentIsDirectlyLinked = directlyLinkedTasks.some((t) => t.id === chainParent.id)
-    const byParent = tasks.filter((t) => {
-      if (t.parentTaskId !== chainParent.id) return false
-      // If the parent is already the linked event, don't also show sibling tasks
-      // that link to the same event (they'd appear as duplicates of the parent row)
-      if (parentIsDirectlyLinked && t.calendarEventId === event.id) return false
-      return true
-    })
-    const directExtras = parentIsDirectlyLinked
-      ? []
-      : directlyLinkedTasks.filter((t) => t.id !== chainParent.id && !byParent.some((s) => s.id === t.id))
-    return [...byParent, ...directExtras].sort((a, b) => {
-      if (!a.deadline) return 1
-      if (!b.deadline) return -1
-      return new Date(String(a.deadline)).getTime() - new Date(String(b.deadline)).getTime()
-    })
-  }, [chainParent, tasks, directlyLinkedTasks, event.id])
+    const seenIds = new Set<string>([chainParent.id])
+    const byParent = tasks.filter((t) => t.parentTaskId === chainParent.id && t.id !== chainParent.id)
+    const directExtras = directlyLinkedTasks.filter((t) => t.id !== chainParent.id && !byParent.some((s) => s.id === t.id))
+    return [...byParent, ...directExtras]
+      .filter((t) => { if (seenIds.has(t.id)) return false; seenIds.add(t.id); return true })
+      .sort((a, b) => {
+        if (!a.deadline) return 1
+        if (!b.deadline) return -1
+        return new Date(String(a.deadline)).getTime() - new Date(String(b.deadline)).getTime()
+      })
+  }, [chainParent, tasks, directlyLinkedTasks])
   // Fallback: fuzzy title match for old tasks not linked via calendarEventId
   const relatedChains = React.useMemo(() => {
     if (chainParent) return []
