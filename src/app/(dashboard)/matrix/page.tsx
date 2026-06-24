@@ -61,7 +61,15 @@ export default function MatrixPage() {
         const allDayEvents = events.filter((e) => e.allDay)
         if (allDayEvents.length === 0) return
         const existingCalIds = new Set(tasks.filter((t) => t.calendarEventId).map((t) => t.calendarEventId))
-        const toCreate = allDayEvents.filter((e) => !existingCalIds.has(e.id))
+        // Also dedupe by title+today to handle recurring events that get new IDs each day
+        const todayTaskTitles = new Set(
+          tasks
+            .filter((t) => isSameDay(new Date(String(t.createdAt)), today))
+            .map((t) => t.title.toLowerCase().trim())
+        )
+        const toCreate = allDayEvents.filter((e) =>
+          !existingCalIds.has(e.id) && !todayTaskTitles.has(e.title.toLowerCase().trim())
+        )
         if (toCreate.length === 0) return
         await Promise.all(toCreate.map((e) =>
           fetch('/api/tasks', {
@@ -73,6 +81,7 @@ export default function MatrixPage() {
               urgency: 5,
               calendarEventId: e.id,
               calendarAccountId: e.calendarAccountId,
+              deadline: today.toISOString(),
             }),
           })
         ))
@@ -175,8 +184,11 @@ export default function MatrixPage() {
     matrixExcludePatterns.some((p) => p && title.toLowerCase().includes(p.toLowerCase()))
 
   const isDueOnDate = (task: Task, date: Date) => {
-    if (!task.deadline) return task.status !== 'COMPLETED'
-    return isSameDay(new Date(String(task.deadline)), date)
+    if (task.deadline) return isSameDay(new Date(String(task.deadline)), date)
+    // Auto-imported tasks (have calendarEventId) without deadline: pin to creation date
+    if (task.calendarEventId) return isSameDay(new Date(String(task.createdAt)), date)
+    // Manually created tasks without deadline: show only when viewing today
+    return isSameDay(date, new Date())
   }
 
   const applyKeywordRules = (task: Task): Task => {

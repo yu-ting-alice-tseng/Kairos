@@ -447,6 +447,7 @@ export default function RetroplanningPage() {
   const [deleteChainDialog, setDeleteChainDialog] = useState<{ parentId: string; parentTitle: string; childIds: string[] } | null>(null)
   const [deleteChainLoading, setDeleteChainLoading] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [historySearch, setHistorySearch] = useState('')
 
   // Prefer the first Google calendar account for event creation
   const googleCalendarAccount = calendarAccounts.find((a) => (a as { provider?: string }).provider === 'GOOGLE') ?? calendarAccounts[0] ?? null
@@ -652,18 +653,22 @@ export default function RetroplanningPage() {
   }, [tasks])
 
   const now = new Date()
-  // A chain is "past" when every child's deadline (or the parent's) is before today
+  // History = fully completed chains; Active = everything else (including overdue-but-incomplete)
   const { activeChains, pastChains } = React.useMemo(() => {
     const active: typeof chains = []
     const past: typeof chains = []
     for (const c of chains) {
-      const allDates = [...c.children.map((ch) => ch.deadline), c.parent.deadline].filter(Boolean) as string[]
-      const allPast = allDates.length > 0 && allDates.every((d) => new Date(d) < now)
-      if (allPast) past.push(c)
+      const allCompleted = c.parent.status === 'COMPLETED' && c.children.every((ch) => ch.status === 'COMPLETED')
+      if (allCompleted) past.push(c)
       else active.push(c)
     }
+    // History: most recently completed (latest deadline) first
+    past.sort((a, b) => {
+      const da = a.parent.deadline ? new Date(a.parent.deadline).getTime() : 0
+      const db = b.parent.deadline ? new Date(b.parent.deadline).getTime() : 0
+      return db - da
+    })
     return { activeChains: active, pastChains: past }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chains])
 
   // Suggested tasks: tasks with no children but matching a template keyword
@@ -1057,7 +1062,7 @@ export default function RetroplanningPage() {
           {chains.length === 0 && suggestedTasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#e2d6bc] py-20 text-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo_v5/empty state retroplanning.png" alt="" className="h-28 w-auto mb-5 object-contain" />
+              <img src="/logo_v5/empty state retroplanning.png" alt="" className="h-28 w-auto mb-5 object-contain" style={{ mixBlendMode: 'multiply' }} />
               <p className="text-sm font-medium text-[#8a7a5e] max-w-xs">
                 {lang === 'fr'
                   ? 'Aucune chaîne de tâches. Ouvrez une tâche avec deadline et cliquez sur "Rétroplanifier".'
@@ -1082,6 +1087,8 @@ export default function RetroplanningPage() {
                 {activeChains.map(({ parent, children }) => {
                   const isActive = selectedChainId === parent.id
                   const allDone = parent.status === 'COMPLETED' && children.every((c) => c.status === 'COMPLETED')
+                  const parentDeadlinePast = parent.deadline && new Date(parent.deadline) < now
+                  const isOverdueChain = !allDone && parentDeadlinePast
                   const donePct = Math.round(
                     ([parent, ...children].filter((t) => t.status === 'COMPLETED').length / (1 + children.length)) * 100
                   )
@@ -1091,7 +1098,7 @@ export default function RetroplanningPage() {
                       key={parent.id}
                       className={cn(
                         'rounded-2xl border bg-[#fbf7ee] overflow-hidden transition-all',
-                        isActive ? 'border-red-300 shadow-md shadow-red-100' : 'border-[#ece2cb]',
+                        isActive ? 'border-red-300 shadow-md shadow-red-100' : isOverdueChain ? 'border-red-200' : 'border-[#ece2cb]',
                         allDone && 'opacity-70'
                       )}
                     >
@@ -1111,10 +1118,16 @@ export default function RetroplanningPage() {
                           />
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
+                          {isOverdueChain && (
+                            <span className="flex items-center gap-1 text-[10px] font-medium text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5 shrink-0">
+                              <AlertTriangle className="h-2.5 w-2.5" />
+                              {lang === 'zh' ? '逾期' : lang === 'fr' ? 'En retard' : 'Overdue'}
+                            </span>
+                          )}
                           <div className="flex items-center gap-1.5">
                             <div className="w-20 h-1.5 rounded-full bg-[#ece2cb] overflow-hidden">
                               <div
-                                className={cn('h-full rounded-full transition-all', allDone ? 'bg-emerald-500' : 'bg-red-500')}
+                                className={cn('h-full rounded-full transition-all', allDone ? 'bg-emerald-500' : isOverdueChain ? 'bg-red-400' : 'bg-red-500')}
                                 style={{ width: `${donePct}%` }}
                               />
                             </div>
@@ -1181,7 +1194,7 @@ export default function RetroplanningPage() {
             </div>
               )}
 
-              {/* History: chains where all stages are in the past */}
+              {/* History: fully completed chains */}
               {pastChains.length > 0 && (
                 <div>
                   <button
@@ -1198,71 +1211,77 @@ export default function RetroplanningPage() {
 
                   {historyOpen && (
                     <div className="flex flex-col gap-3 mt-3">
-                      {pastChains.map(({ parent, children }) => {
-                        const isActive = selectedChainId === parent.id
-                        const donePct = Math.round(
-                          ([parent, ...children].filter((t) => t.status === 'COMPLETED').length / (1 + children.length)) * 100
-                        )
-                        return (
-                          <div
-                            key={parent.id}
-                            className={cn(
-                              'rounded-2xl border bg-[#f9f5ec] overflow-hidden transition-all opacity-70',
-                              isActive ? 'border-[#c4b48a] shadow-sm' : 'border-[#e2d6bc]'
-                            )}
-                          >
+                      {/* Search */}
+                      <input
+                        className="w-full border border-[#e2d6bc] rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-red-200 bg-white placeholder-[#c4b48a]"
+                        placeholder={lang === 'zh' ? '搜尋歷史記錄...' : lang === 'fr' ? 'Rechercher dans l\'historique...' : 'Search history...'}
+                        value={historySearch}
+                        onChange={(e) => setHistorySearch(e.target.value)}
+                      />
+                      {pastChains
+                        .filter((c) => !historySearch || c.parent.title.toLowerCase().includes(historySearch.toLowerCase()) || c.children.some((ch) => ch.title.toLowerCase().includes(historySearch.toLowerCase())))
+                        .map(({ parent, children }) => {
+                          const isActive = selectedChainId === parent.id
+                          const donePct = Math.round(
+                            ([parent, ...children].filter((t) => t.status === 'COMPLETED').length / (1 + children.length)) * 100
+                          )
+                          return (
                             <div
-                              className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[#f0e8d4] transition-colors"
-                              onClick={() => setSelectedChainId(isActive ? null : parent.id)}
+                              key={parent.id}
+                              className={cn(
+                                'rounded-2xl border bg-[#f9f5ec] overflow-hidden transition-all opacity-70',
+                                isActive ? 'border-[#c4b48a] shadow-sm' : 'border-[#e2d6bc]'
+                              )}
                             >
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-[#8a7a5e] truncate line-through">{parent.title}</p>
-                                <p className="text-[11px] text-[#a99873] mt-0.5">
-                                  {children.length} {lang === 'zh' ? '個階段' : lang === 'fr' ? 'étapes' : 'stages'}
-                                  {parent.deadline && ` · ${new Date(parent.deadline).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <div className="w-16 h-1.5 rounded-full bg-[#ece2cb] overflow-hidden">
-                                  <div
-                                    className="h-full rounded-full bg-emerald-400 transition-all"
-                                    style={{ width: `${donePct}%` }}
-                                  />
+                              <div
+                                className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[#f0e8d4] transition-colors"
+                                onClick={() => setSelectedChainId(isActive ? null : parent.id)}
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-[#8a7a5e] truncate line-through">{parent.title}</p>
+                                  <p className="text-[11px] text-[#a99873] mt-0.5">
+                                    {children.length} {lang === 'zh' ? '個階段' : lang === 'fr' ? 'étapes' : 'stages'}
+                                    {parent.deadline && ` · ${formatDateShort(new Date(parent.deadline), lang)}`}
+                                  </p>
                                 </div>
-                                <span className="text-xs text-[#a99873] font-mono">{donePct}%</span>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setDeleteChainDialog({ parentId: parent.id, parentTitle: parent.title, childIds: children.map((c) => c.id) }) }}
-                                  className="p-1 rounded-lg hover:bg-red-50 text-[#c4b48a] hover:text-red-500 transition-colors"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                                {isActive ? <ChevronDown className="h-4 w-4 text-[#a99873]" /> : <ChevronRight className="h-4 w-4 text-[#a99873]" />}
-                              </div>
-                            </div>
-                            {isActive && (
-                              <div className="px-4 pb-3 flex flex-col gap-1.5 border-t border-[#f0e8d4]">
-                                <p className="text-[11px] text-[#a99873] mt-2 mb-1 uppercase tracking-wider font-semibold">
-                                  {lang === 'zh' ? '回顧' : lang === 'fr' ? 'Révision' : 'Review'}
-                                </p>
-                                {children.map((child) => (
-                                  <div key={child.id} className="flex items-center gap-2 rounded-lg bg-[#f3ecdd] px-3 py-1.5">
-                                    {child.status === 'COMPLETED'
-                                      ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                                      : <Circle className="h-3.5 w-3.5 text-[#c4b48a] shrink-0" />
-                                    }
-                                    <span className={cn('text-xs flex-1 truncate', child.status === 'COMPLETED' ? 'line-through text-[#a99873]' : 'text-[#5c5347]')}>{child.title}</span>
-                                    {child.deadline && (
-                                      <span className="text-[10px] text-[#a99873] shrink-0">
-                                        {new Date(child.deadline).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-US', { month: 'short', day: 'numeric' })}
-                                      </span>
-                                    )}
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <div className="w-16 h-1.5 rounded-full bg-[#ece2cb] overflow-hidden">
+                                    <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${donePct}%` }} />
                                   </div>
-                                ))}
+                                  <span className="text-xs text-[#a99873] font-mono">{donePct}%</span>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setDeleteChainDialog({ parentId: parent.id, parentTitle: parent.title, childIds: children.map((c) => c.id) }) }}
+                                    className="p-1 rounded-lg hover:bg-red-50 text-[#c4b48a] hover:text-red-500 transition-colors"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                  {isActive ? <ChevronDown className="h-4 w-4 text-[#a99873]" /> : <ChevronRight className="h-4 w-4 text-[#a99873]" />}
+                                </div>
                               </div>
-                            )}
-                          </div>
-                        )
-                      })}
+                              {isActive && (
+                                <div className="px-4 pb-3 flex flex-col gap-1.5 border-t border-[#f0e8d4]">
+                                  <p className="text-[11px] text-[#a99873] mt-2 mb-1 uppercase tracking-wider font-semibold">
+                                    {lang === 'zh' ? '回顧' : lang === 'fr' ? 'Révision' : 'Review'}
+                                  </p>
+                                  {children.map((child) => (
+                                    <div key={child.id} className="flex items-center gap-2 rounded-lg bg-[#f3ecdd] px-3 py-1.5">
+                                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                                      <span className="text-xs flex-1 truncate line-through text-[#a99873]">{child.title}</span>
+                                      {child.deadline && (
+                                        <span className="text-[10px] text-[#a99873] shrink-0">{formatDateShort(new Date(child.deadline), lang)}</span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      {pastChains.filter((c) => !historySearch || c.parent.title.toLowerCase().includes(historySearch.toLowerCase())).length === 0 && (
+                        <p className="text-xs text-[#c4b48a] text-center py-2">
+                          {lang === 'zh' ? '找不到符合的記錄' : lang === 'fr' ? 'Aucun résultat' : 'No results'}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
