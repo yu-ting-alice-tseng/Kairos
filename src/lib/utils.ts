@@ -17,7 +17,15 @@ export function formatDate(date: Date | string, lang = 'fr') {
   const locale = getLocale(lang)
   if (isToday(d)) return lang === 'fr' ? "Aujourd'hui" : lang === 'zh' ? '今天' : 'Today'
   if (isTomorrow(d)) return lang === 'fr' ? 'Demain' : lang === 'zh' ? '明天' : 'Tomorrow'
-  return format(d, 'PPP', { locale })
+  const sameYear = d.getFullYear() === new Date().getFullYear()
+  if (sameYear) {
+    if (lang === 'zh') return format(d, 'M月d日', { locale })
+    if (lang === 'fr') return format(d, 'd MMM', { locale })
+    return format(d, 'MMM d', { locale })
+  }
+  if (lang === 'zh') return format(d, 'yyyy年M月d日', { locale })
+  if (lang === 'fr') return format(d, 'd MMM yyyy', { locale })
+  return format(d, 'MMM d, yyyy', { locale })
 }
 
 export function formatTime(date: Date | string, lang = 'fr') {

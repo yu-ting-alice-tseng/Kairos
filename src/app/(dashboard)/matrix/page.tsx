@@ -9,7 +9,7 @@ import { GoalsSection } from '@/components/matrix/GoalsSection'
 import { TaskForm } from '@/components/tasks/TaskForm'
 import { BreakdownDialog } from '@/components/ai/BreakdownDialog'
 import { Button } from '@/components/ui/button'
-import { Plus, LayoutGrid, Loader2, Repeat2, CheckCircle2, Circle, Settings, Wand2, Trash2, SlidersHorizontal, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, LayoutGrid, Loader2, Settings, Wand2, Trash2, SlidersHorizontal, ChevronLeft, ChevronRight } from 'lucide-react'
 import { isSameDay, format } from 'date-fns'
 import { fr, enUS, zhTW } from 'date-fns/locale'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
@@ -24,7 +24,6 @@ export default function MatrixPage() {
   const [showTaskForm, setShowTaskForm] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [breakdownTask, setBreakdownTask] = useState<Task | null>(null)
-const [habitPanelOpen, setHabitPanelOpen] = useState(true)
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false)
   const [newRuleKeyword, setNewRuleKeyword] = useState('')
   const [newRuleImportance, setNewRuleImportance] = useState(5)
@@ -162,7 +161,7 @@ const [habitPanelOpen, setHabitPanelOpen] = useState(true)
   }
 
   const todayHabits = (() => {
-    const dow = new Date().getDay()
+    const dow = selectedDate.getDay()
     return habits.filter((h) => {
       if (!h.isActive) return false
       if (h.frequency === 'DAILY') return true
@@ -175,16 +174,8 @@ const [habitPanelOpen, setHabitPanelOpen] = useState(true)
   const isExcludedFromMatrix = (title: string) =>
     matrixExcludePatterns.some((p) => p && title.toLowerCase().includes(p.toLowerCase()))
 
-  const isScheduledOnDate = (scheduledStart: Task['scheduledStart'], date: Date) => {
-    if (!scheduledStart) return false
-    return isSameDay(new Date(String(scheduledStart)), date)
-  }
-
   const isDueOnDate = (task: Task, date: Date) => {
-    if (!task.deadline) {
-      // No deadline: show only if not completed (completed undated tasks are "done forever")
-      return task.status !== 'COMPLETED'
-    }
+    if (!task.deadline) return task.status !== 'COMPLETED'
     return isSameDay(new Date(String(task.deadline)), date)
   }
 
@@ -195,10 +186,11 @@ const [habitPanelOpen, setHabitPanelOpen] = useState(true)
     return { ...task, importance: match.importance, urgency: match.urgence }
   }
 
+  // Only unscheduled tasks (no scheduledStart) — same distinction as Calendar vs Matrix
   const filteredTasks = tasks
     .filter((t) =>
       t.status !== 'CANCELLED' &&
-      (!t.scheduledStart || isScheduledOnDate(t.scheduledStart, selectedDate)) &&
+      !t.scheduledStart &&
       isDueOnDate(t, selectedDate) &&
       !isExcludedFromMatrix(t.title)
     )
@@ -350,59 +342,18 @@ const [habitPanelOpen, setHabitPanelOpen] = useState(true)
       <div className="flex-1 overflow-y-auto p-6">
         <GoalsSection lang={language} />
 
-        {/* Habits panel */}
-        {todayHabits.length > 0 && (
-          <div className="mb-6 border border-[#e2d6bc] rounded-2xl bg-[#fbf7ee] overflow-hidden">
-            <button
-              onClick={() => setHabitPanelOpen((o) => !o)}
-              className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#f3ecdd] transition-colors"
-            >
-              <div className="flex items-center gap-2 text-sm font-medium text-[#5c5347]">
-                <Repeat2 className="h-4 w-4 text-amber-500" />
-                {language === 'fr' ? "Habitudes du jour" : language === 'zh' ? '今日習慣' : "Today's habits"}
-                <span className="text-xs font-normal text-[#a99873]">
-                  ({todayHabits.filter((h) => ((h as Habit & { completions?: { id: string }[] }).completions?.length ?? 0) > 0).length}/{todayHabits.length})
-                </span>
-              </div>
-              {habitPanelOpen ? <ChevronUp className="h-4 w-4 text-[#a99873]" /> : <ChevronDown className="h-4 w-4 text-[#a99873]" />}
-            </button>
-            {habitPanelOpen && (
-              <div className="px-4 pb-4 border-t border-[#ece2cb]">
-                <div className="flex flex-wrap gap-2 pt-3">
-                  {todayHabits.map((habit) => {
-                    const doneToday = ((habit as Habit & { completions?: { id: string }[] }).completions?.length ?? 0) > 0
-                    return (
-                      <button
-                        key={habit.id}
-                        onClick={() => doneToday ? handleUncompleteHabit(habit.id) : handleCompleteHabit(habit.id)}
-                        className={cn(
-                          'flex items-center gap-2 rounded-xl px-3 py-2 text-sm border transition-all',
-                          doneToday
-                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-red-50 hover:border-red-200 hover:text-red-600'
-                            : 'bg-[#fbf7ee] border-[#e2d6bc] text-[#5c5347] hover:border-amber-300 hover:bg-amber-50'
-                        )}
-                      >
-                        {doneToday
-                          ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                          : <Circle className="h-3.5 w-3.5 text-[#cbb98e]" />
-                        }
-                        <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: habit.color }} />
-                        <span className={cn(doneToday && 'line-through')}>{habit.icon} {habit.title}</span>
-                        {habit.scheduledTime && <span className="text-xs opacity-60">{habit.scheduledTime}</span>}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
         <EisenhowerMatrix
           tasks={filteredTasks}
+          habits={todayHabits}
           onTaskUpdate={handleTaskUpdate}
           onTaskClick={handleTaskClick}
           onComplete={handleCompleteTask}
+          onCompleteHabit={(id) => {
+            const habit = habits.find((h) => h.id === id)
+            const doneToday = ((habit as (Habit & { completions?: { id: string }[] }) | undefined)?.completions?.length ?? 0) > 0
+            if (doneToday) handleUncompleteHabit(id)
+            else handleCompleteHabit(id)
+          }}
           lang={language}
         />
       </div>

@@ -77,8 +77,10 @@ function stageDate(deadline: Date, daysBeforeDeadline: number): Date {
   return addDays(deadline, -daysBeforeDeadline)
 }
 
-function formatDateShort(d: Date): string {
-  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+function formatDateShort(d: Date, lang: 'fr' | 'en' | 'zh' = 'fr'): string {
+  const sameYear = d.getFullYear() === new Date().getFullYear()
+  const locale = lang === 'zh' ? 'zh-TW' : lang === 'en' ? 'en-GB' : 'fr-FR'
+  return d.toLocaleDateString(locale, { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) })
 }
 
 function isOverdue(d: Date): boolean {
@@ -194,7 +196,7 @@ function ChainCard({
               )}>
                 {overdue && !done && <AlertTriangle className="h-3 w-3" />}
                 <Clock className="h-3 w-3" />
-                {formatDateShort(deadline)}
+                {formatDateShort(deadline, lang)}
               </span>
             )}
             {done && (
@@ -543,9 +545,21 @@ export default function RetroplanningPage() {
           stages: t.stages,
         }))
 
+      // Build set of words from tasks already in chains (parent or child)
+      const chainParentIds = new Set(tasks.filter((t) => t.parentTaskId).map((t) => t.parentTaskId!))
+      const chainedTasks = tasks.filter((t) => !!t.parentTaskId || chainParentIds.has(t.id))
+      const chainedWords = chainedTasks.flatMap((t) =>
+        t.title.toLowerCase().split(/[\s|:,\-]+/).filter((w) => w.length > 2)
+      )
+      const chainedWordSet = new Set(chainedWords)
+
       const matches: ScanMatch[] = []
       for (const ev of events) {
         const lower = ev.title.toLowerCase()
+        // Skip if event title keywords overlap with any chained task (chain already exists)
+        const evWords = lower.split(/[\s|:,\-]+/).filter((w) => w.length > 2)
+        if (evWords.some((w) => chainedWordSet.has(w))) continue
+
         for (const tmpl of allTemplates) {
           const matchedKw = tmpl.keywords.find((kw) => lower.includes(kw.toLowerCase()))
           if (matchedKw) {
@@ -564,7 +578,7 @@ export default function RetroplanningPage() {
       }
       setScanMatches(matches.filter((m) => !dismissedScanKeys.has(scanKey(m))))
     } catch { /* best-effort */ }
-  }, [calendarAccounts.length, userTemplates, lang, dismissedScanKeys])
+  }, [calendarAccounts.length, userTemplates, lang, dismissedScanKeys, tasks])
 
   const handleCreateFromScan = async (m: ScanMatch) => {
     setScanCreating(m.title)
@@ -1013,7 +1027,7 @@ export default function RetroplanningPage() {
                         {task.deadline && (
                           <p className="text-xs text-[#8a7a5e] mt-0.5">
                             <Clock className="h-3 w-3 inline mr-1" />
-                            {formatDateShort(new Date(task.deadline))}
+                            {formatDateShort(new Date(task.deadline), lang)}
                           </p>
                         )}
                       </div>

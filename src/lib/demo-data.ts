@@ -23,9 +23,9 @@ export function getDemoTasks() {
 export function getDemoHabits() {
   const now = new Date()
   return [
-    { id: 'demo-h1', userId: DEMO_USER_ID, title: 'Méditation', icon: '🧘', color: '#8B5CF6', frequency: 'DAILY', scheduledTime: '07:00', durationMinutes: 10, streak: 5, longestStreak: 12, isActive: true, description: null, targetDays: null, calendarEventId: null, createdAt: now, updatedAt: now, completions: [] },
-    { id: 'demo-h2', userId: DEMO_USER_ID, title: 'Sport', icon: '💪', color: '#EF4444', frequency: 'WEEKDAYS', scheduledTime: '07:30', durationMinutes: 30, streak: 3, longestStreak: 21, isActive: true, description: null, targetDays: null, calendarEventId: null, createdAt: now, updatedAt: now, completions: [] },
-    { id: 'demo-h3', userId: DEMO_USER_ID, title: 'Lecture', icon: '📚', color: '#F59E0B', frequency: 'DAILY', scheduledTime: '21:00', durationMinutes: 20, streak: 8, longestStreak: 30, isActive: true, description: null, targetDays: null, calendarEventId: null, createdAt: now, updatedAt: now, completions: [] },
-    { id: 'demo-h4', userId: DEMO_USER_ID, title: 'Eau (2L)', icon: '💧', color: '#06B6D4', frequency: 'DAILY', scheduledTime: null, durationMinutes: 1, streak: 2, longestStreak: 7, isActive: true, description: null, targetDays: null, calendarEventId: null, createdAt: now, updatedAt: now, completions: [] },
+    { id: 'demo-h1', userId: DEMO_USER_ID, title: 'Méditation', icon: '🧘', color: '#8B5CF6', frequency: 'DAILY', scheduledTime: '07:00', durationMinutes: 10, importance: 8, urgency: 7, streak: 5, longestStreak: 12, isActive: true, description: null, targetDays: null, createdAt: now, updatedAt: now, completions: [] },
+    { id: 'demo-h2', userId: DEMO_USER_ID, title: 'Sport', icon: '💪', color: '#EF4444', frequency: 'WEEKDAYS', scheduledTime: '07:30', durationMinutes: 30, importance: 9, urgency: 6, streak: 3, longestStreak: 21, isActive: true, description: null, targetDays: null, createdAt: now, updatedAt: now, completions: [] },
+    { id: 'demo-h3', userId: DEMO_USER_ID, title: 'Lecture', icon: '📚', color: '#F59E0B', frequency: 'DAILY', scheduledTime: '21:00', durationMinutes: 20, importance: 7, urgency: 4, streak: 8, longestStreak: 30, isActive: true, description: null, targetDays: null, createdAt: now, updatedAt: now, completions: [] },
+    { id: 'demo-h4', userId: DEMO_USER_ID, title: 'Eau (2L)', icon: '💧', color: '#06B6D4', frequency: 'DAILY', scheduledTime: null, durationMinutes: 1, importance: 8, urgency: 8, streak: 2, longestStreak: 7, isActive: true, description: null, targetDays: null, createdAt: now, updatedAt: now, completions: [] },
   ]
 }

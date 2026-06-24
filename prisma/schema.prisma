@@ -142,10 +142,9 @@ model Habit {
   targetDays      String?
   scheduledTime   String?
   durationMinutes Int?
-  calendarEventId   String?
-  calendarAccountId String?
-  calendarId        String?
-  isActive          Boolean  @default(true)
+  importance      Int      @default(5)
+  urgency         Int      @default(5)
+  isActive        Boolean  @default(true)
   streak          Int      @default(0)
   longestStreak   Int      @default(0)
   createdAt       DateTime @default(now())

@@ -74,6 +74,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const existing = await prisma.task.findUnique({ where: { id, userId: session.user.id } })
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  // Unlink any children that point to this task as parent (detach from chain)
+  await prisma.task.updateMany({
+    where: { parentTaskId: id, userId: session.user.id },
+    data: { parentTaskId: null },
+  })
+
   await prisma.task.delete({ where: { id } })
   return NextResponse.json({ success: true })
 }

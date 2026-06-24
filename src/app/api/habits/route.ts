@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isDemoUser, getDemoHabits } from '@/lib/demo-data'
-import { createGoogleEvent } from '@/lib/calendar/google'
 import { z } from 'zod'
 
 const createHabitSchema = z.object({
@@ -12,10 +11,10 @@ const createHabitSchema = z.object({
   icon: z.string().optional(),
   frequency: z.enum(['DAILY', 'WEEKLY', 'WEEKDAYS', 'WEEKENDS', 'CUSTOM']).default('DAILY'),
   targetDays: z.string().optional(),
-  scheduledTime: z.string().optional().transform((v) => v || undefined),
+  scheduledTime: z.string().optional(),
   durationMinutes: z.number().optional(),
-  calendarAccountId: z.string().optional(),
-  calendarId: z.string().optional(),
+  importance: z.number().int().min(1).max(10).default(5),
+  urgency: z.number().int().min(1).max(10).default(5),
 })
 
 export async function GET() {
@@ -50,53 +49,30 @@ export async function POST(req: NextRequest) {
   const parsed = createHabitSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 })
 
-  let calendarEventId: string | undefined
-
-  if (parsed.data.calendarAccountId && parsed.data.calendarId) {
-    try {
-      const account = await prisma.calendarAccount.findFirst({
-        where: { id: parsed.data.calendarAccountId, userId: session.user.id },
-      })
-      if (account?.accessToken) {
-        const rruleMap: Record<string, string> = {
-          DAILY: 'RRULE:FREQ=DAILY',
-          WEEKDAYS: 'RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR',
-          WEEKENDS: 'RRULE:FREQ=WEEKLY;BYDAY=SA,SU',
-          WEEKLY: 'RRULE:FREQ=WEEKLY',
-          CUSTOM: 'RRULE:FREQ=DAILY',
-        }
-        const recurrence = [rruleMap[parsed.data.frequency]]
-
-        const today = new Date()
-        let start: Date, end: Date, allDay: boolean
-        if (parsed.data.scheduledTime) {
-          const [h, m] = parsed.data.scheduledTime.split(':').map(Number)
-          start = new Date(today.getFullYear(), today.getMonth(), today.getDate(), h, m)
-          end = new Date(start.getTime() + (parsed.data.durationMinutes ?? 30) * 60000)
-          allDay = false
-        } else {
-          start = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-          end = new Date(start); end.setDate(end.getDate() + 1)
-          allDay = true
-        }
-
-        calendarEventId = await createGoogleEvent(
-          account.id,
-          account.accessToken,
-          parsed.data.calendarId,
-          { title: parsed.data.title, allDay, start, end, recurrence },
-          account.refreshToken,
-          account.expiresAt
-        )
-      }
-    } catch (err) {
-      console.error('Failed to create habit calendar event:', err)
-    }
+  const d = parsed.data
+  try {
+    const habit = await prisma.habit.create({
+      data: {
+        userId: session.user.id,
+        title: d.title,
+        color: d.color,
+        frequency: d.frequency,
+        importance: d.importance,
+        urgency: d.urgency,
+        isActive: true,
+        description: d.description || undefined,
+        icon: d.icon || undefined,
+        targetDays: d.targetDays || undefined,
+        scheduledTime: d.scheduledTime || undefined,
+        durationMinutes: d.durationMinutes || undefined,
+      },
+      include: {
+        completions: true,
+      },
+    })
+    return NextResponse.json(habit, { status: 201 })
+  } catch (err) {
+    console.error('[POST /api/habits] Prisma create failed:', err)
+    return NextResponse.json({ error: 'Database error', detail: String(err) }, { status: 500 })
   }
-
-  const habit = await prisma.habit.create({
-    data: { userId: session.user.id, ...parsed.data, ...(calendarEventId ? { calendarEventId } : {}) },
-  })
-
-  return NextResponse.json(habit, { status: 201 })
 }

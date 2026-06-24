@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react'
 import { useAppStore } from '@/stores/useAppStore'
-import { Habit, CalendarAccount } from '@/types'
+import { Habit } from '@/types'
 import { t } from '@/lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
-import { Repeat2, Plus, Flame, CheckCircle2, Trophy, Loader2, Trash2, Edit2, Clock, CalendarDays } from 'lucide-react'
+import { Repeat2, Plus, Flame, CheckCircle2, Trophy, Loader2, Trash2, Edit2, Clock } from 'lucide-react'
 import { Candle } from '@/components/ui/Candle'
 import { InkLoader } from '@/components/ui/InkLoader'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
@@ -24,15 +24,32 @@ const HABIT_ICONS = ['🎯', '📚', '💪', '🧘', '🏃', '💧', '🌿', '�
 
 const FREQUENCIES = ['DAILY', 'WEEKDAYS', 'WEEKENDS', 'WEEKLY'] as const
 
-type SubCalendarItem = { externalId: string; name: string; color?: string }
+function ScoreSlider({ label, value, onChange, color }: { label: string; value: number; onChange: (v: number) => void; color: string }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex justify-between items-center">
+        <Label className="text-xs">{label}</Label>
+        <span className="text-xs font-bold" style={{ color }}>{value}/10</span>
+      </div>
+      <input
+        type="range" min={1} max={10} step={1} value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
+        style={{ accentColor: color }}
+      />
+      <div className="flex justify-between text-[10px] text-[#a99873]">
+        <span>1</span><span>5</span><span>10</span>
+      </div>
+    </div>
+  )
+}
 
-function HabitForm({ open, onClose, onSave, habit, lang, calendarAccounts }: {
+function HabitForm({ open, onClose, onSave, habit, lang }: {
   open: boolean
   onClose: () => void
   onSave: (data: Partial<Habit>) => Promise<void>
   habit?: Habit | null
   lang: 'fr' | 'en' | 'zh'
-  calendarAccounts: CalendarAccount[]
 }) {
   const [title, setTitle] = useState(habit?.title ?? '')
   const [description, setDescription] = useState(habit?.description ?? '')
@@ -41,9 +58,8 @@ function HabitForm({ open, onClose, onSave, habit, lang, calendarAccounts }: {
   const [frequency, setFrequency] = useState<typeof FREQUENCIES[number]>(habit?.frequency as typeof FREQUENCIES[number] ?? 'DAILY')
   const [scheduledTime, setScheduledTime] = useState(habit?.scheduledTime ?? '')
   const [durationMinutes, setDurationMinutes] = useState(habit?.durationMinutes ?? 15)
-  const [calendarAccountId, setCalendarAccountId] = useState(habit?.calendarAccountId ?? '')
-  const [calendarId, setCalendarId] = useState(habit?.calendarId ?? '')
-  const [subCalendars, setSubCalendars] = useState<SubCalendarItem[]>([])
+  const [importance, setImportance] = useState(habit?.importance ?? 5)
+  const [urgency, setUrgency] = useState(habit?.urgency ?? 5)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -54,31 +70,29 @@ function HabitForm({ open, onClose, onSave, habit, lang, calendarAccounts }: {
     setFrequency((habit?.frequency as typeof FREQUENCIES[number]) ?? 'DAILY')
     setScheduledTime(habit?.scheduledTime ?? '')
     setDurationMinutes(habit?.durationMinutes ?? 15)
-    setCalendarAccountId(habit?.calendarAccountId ?? '')
-    setCalendarId(habit?.calendarId ?? '')
+    setImportance(habit?.importance ?? 5)
+    setUrgency(habit?.urgency ?? 5)
   }, [habit?.id])
 
-  useEffect(() => {
-    if (!calendarAccountId) { setSubCalendars([]); return }
-    fetch(`/api/calendar/accounts/${calendarAccountId}/calendars`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) setSubCalendars(data.map((sc: { externalId: string; name: string; color?: string }) => ({ externalId: sc.externalId, name: sc.name, color: sc.color })))
-      })
-      .catch(() => setSubCalendars([]))
-  }, [calendarAccountId])
-
-  const freqLabels = {
+  const freqLabels: Record<typeof FREQUENCIES[number], string> = {
     DAILY: lang === 'fr' ? 'Quotidien' : lang === 'zh' ? '每天' : 'Daily',
     WEEKDAYS: lang === 'fr' ? 'Jours de semaine' : lang === 'zh' ? '平日' : 'Weekdays',
     WEEKENDS: lang === 'fr' ? 'Week-ends' : lang === 'zh' ? '週末' : 'Weekends',
     WEEKLY: lang === 'fr' ? 'Hebdomadaire' : lang === 'zh' ? '每週' : 'Weekly',
   }
 
+  const quadrantLabel = () => {
+    const highI = importance >= 6, highU = urgency >= 6
+    if (highI && highU) return lang === 'zh' ? '🔴 重要且緊急' : lang === 'fr' ? '🔴 Important & urgent' : '🔴 Important & urgent'
+    if (highI && !highU) return lang === 'zh' ? '🟡 重要不緊急' : lang === 'fr' ? '🟡 Important, pas urgent' : '🟡 Important, not urgent'
+    if (!highI && highU) return lang === 'zh' ? '🟠 緊急不重要' : lang === 'fr' ? '🟠 Urgent, pas important' : '🟠 Urgent, not important'
+    return lang === 'zh' ? '⚪ 不重要不緊急' : lang === 'fr' ? '⚪ Ni urgent ni important' : '⚪ Neither urgent nor important'
+  }
+
   const handleSave = async () => {
     if (!title.trim()) return
     setSaving(true)
-    await onSave({ title, description, color, icon, frequency, scheduledTime, durationMinutes, calendarAccountId: calendarAccountId || undefined, calendarId: calendarId || undefined })
+    await onSave({ title, description, color, icon, frequency, scheduledTime, durationMinutes, importance, urgency })
     setSaving(false)
     onClose()
   }
@@ -94,6 +108,7 @@ function HabitForm({ open, onClose, onSave, habit, lang, calendarAccounts }: {
             <Label>{t('habits', lang)}</Label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={lang === 'fr' ? 'Ex: Méditation du matin' : lang === 'zh' ? '例如：晨間靜坐' : 'E.g. Morning meditation'} autoFocus />
           </div>
+
           <div className="flex flex-col gap-2">
             <Label>{lang === 'fr' ? 'Icône' : lang === 'zh' ? '圖示' : 'Icon'}</Label>
             <div className="flex gap-2 flex-wrap">
@@ -104,6 +119,7 @@ function HabitForm({ open, onClose, onSave, habit, lang, calendarAccounts }: {
               ))}
             </div>
           </div>
+
           <div className="flex flex-col gap-2">
             <Label>{lang === 'fr' ? 'Couleur' : lang === 'zh' ? '顏色' : 'Color'}</Label>
             <div className="flex gap-2 flex-wrap">
@@ -112,6 +128,7 @@ function HabitForm({ open, onClose, onSave, habit, lang, calendarAccounts }: {
               ))}
             </div>
           </div>
+
           <div className="flex flex-col gap-2">
             <Label>{lang === 'fr' ? 'Fréquence' : lang === 'zh' ? '頻率' : 'Frequency'}</Label>
             <div className="flex gap-2 flex-wrap">
@@ -122,6 +139,7 @@ function HabitForm({ open, onClose, onSave, habit, lang, calendarAccounts }: {
               ))}
             </div>
           </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label>{lang === 'fr' ? 'Heure' : lang === 'zh' ? '時間' : 'Time'}</Label>
@@ -133,50 +151,24 @@ function HabitForm({ open, onClose, onSave, habit, lang, calendarAccounts }: {
             </div>
           </div>
 
-          {calendarAccounts.filter((a) => a.provider === 'GOOGLE').length > 0 && (
-            <div className="flex flex-col gap-2">
-              <Label className="flex items-center gap-1.5">
-                <CalendarDays className="h-3.5 w-3.5" />
-                {lang === 'fr' ? 'Synchroniser avec Google Calendar' : lang === 'zh' ? '同步至 Google 日曆' : 'Sync to Google Calendar'}
-              </Label>
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  onClick={() => { setCalendarAccountId(''); setCalendarId('') }}
-                  className={cn('rounded-xl px-3 py-1.5 text-sm border transition-all', !calendarAccountId ? 'bg-red-50 border-red-300 text-red-900' : 'border-[#e2d6bc] text-[#6e6147] hover:bg-[#f3ecdd]')}
-                >
-                  {lang === 'fr' ? 'Aucun' : lang === 'zh' ? '無' : 'None'}
-                </button>
-                {calendarAccounts.filter((a) => a.provider === 'GOOGLE').map((acc) => (
-                  <button
-                    key={acc.id}
-                    onClick={() => { setCalendarAccountId(acc.id); setCalendarId('') }}
-                    className={cn('flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm border transition-all', calendarAccountId === acc.id ? 'border-red-300 text-red-900' : 'border-[#e2d6bc] text-[#6e6147] hover:bg-[#f3ecdd]')}
-                    style={calendarAccountId === acc.id ? { backgroundColor: acc.color + '20', borderColor: acc.color } : {}}
-                  >
-                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: acc.color }} />
-                    {acc.name}
-                  </button>
-                ))}
-              </div>
-              {calendarAccountId && subCalendars.length > 0 && (
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs text-[#8a7a5e]">{lang === 'fr' ? 'Sous-calendrier' : lang === 'zh' ? '子日曆' : 'Sub-calendar'}</Label>
-                  <div className="flex gap-2 flex-wrap">
-                    {subCalendars.map((sc) => (
-                      <button
-                        key={sc.externalId}
-                        onClick={() => setCalendarId(sc.externalId)}
-                        className={cn('rounded-xl px-3 py-1.5 text-sm border transition-all flex items-center gap-1.5', calendarId === sc.externalId ? 'border-red-300 bg-red-50 text-red-900' : 'border-[#e2d6bc] text-[#6e6147] hover:bg-[#f3ecdd]')}
-                      >
-                        {sc.color && <span className="h-2 w-2 rounded-full" style={{ backgroundColor: sc.color }} />}
-                        {sc.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+          <div className="flex flex-col gap-3 rounded-xl border border-[#e2d6bc] p-3 bg-[#faf6ed]">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">{lang === 'zh' ? '矩陣定位' : lang === 'fr' ? 'Position dans la matrice' : 'Matrix position'}</Label>
+              <span className="text-xs text-[#6e6147]">{quadrantLabel()}</span>
             </div>
-          )}
+            <ScoreSlider
+              label={lang === 'zh' ? '重要性' : lang === 'fr' ? 'Importance' : 'Importance'}
+              value={importance}
+              onChange={setImportance}
+              color="#3B82F6"
+            />
+            <ScoreSlider
+              label={lang === 'zh' ? '緊急性' : lang === 'fr' ? 'Urgence' : 'Urgency'}
+              value={urgency}
+              onChange={setUrgency}
+              color="#EF4444"
+            />
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t('cancel', lang)}</Button>
@@ -190,7 +182,7 @@ function HabitForm({ open, onClose, onSave, habit, lang, calendarAccounts }: {
 }
 
 export default function HabitsPage() {
-  const { language, habits, setHabits, calendarAccounts } = useAppStore()
+  const { language, habits, setHabits } = useAppStore()
   const { toast } = useGlobalToast()
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -238,13 +230,12 @@ export default function HabitsPage() {
           body: JSON.stringify(data),
         })
         if (res.ok) {
-          const created = await res.json()
-          setHabits([...habits, created])
+          await loadHabits()
           toast({ title: language === 'fr' ? 'Habitude créée !' : language === 'zh' ? '習慣已建立！' : 'Habit created!', variant: 'success' })
         } else {
           const err = await res.json().catch(() => ({}))
-          console.error('POST habit error:', err)
-          toast({ title: errorMsg, variant: 'error' })
+          console.error('POST habit error:', res.status, err)
+          toast({ title: errorMsg, description: `${res.status}: ${err.detail ?? err.error ?? 'unknown'}`, variant: 'error' })
         }
       } catch (e) {
         console.error(e)
@@ -295,7 +286,7 @@ export default function HabitsPage() {
         <div className="grid grid-cols-3 gap-4">
           {[
             { label: language === 'fr' ? 'Total habitudes' : language === 'zh' ? '習慣總數' : 'Total habits', value: habits.length, icon: Repeat2, color: 'text-[#4f6f5e]', bg: 'bg-[#4f6f5e]/10' },
-            { label: language === 'fr' ? 'Séries actives' : language === 'zh' ? '進行中的連續天數' : 'Active streaks', value: totalStreak, icon: Flame, color: 'text-[#ab3326]', bg: 'bg-[#ab3326]/8' },
+            { label: language === 'fr' ? 'Séries actives' : language === 'zh' ? '進行中連續天數' : 'Active streaks', value: totalStreak, icon: Flame, color: 'text-[#ab3326]', bg: 'bg-[#ab3326]/8' },
             { label: language === 'fr' ? 'Record' : language === 'zh' ? '最佳紀錄' : 'Best streak', value: topStreak, icon: Trophy, color: 'text-[#b08948]', bg: 'bg-[#b08948]/10' },
           ].map(({ label, value, icon: Icon, color, bg }) => (
             <div key={label} className={cn('rounded-2xl paper-surface border border-[#e2d6bc] p-4 flex items-center gap-3', bg)}>
@@ -322,6 +313,8 @@ export default function HabitsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {habits.map((habit) => {
               const completedToday = (habit as Habit & { completions?: { id: string }[] }).completions?.length ?? 0
+              const highI = habit.importance >= 6, highU = habit.urgency >= 6
+              const quadrantColor = highI && highU ? '#EF4444' : highI ? '#3B82F6' : highU ? '#F97316' : '#9CA3AF'
               return (
                 <div key={habit.id} className={cn('rounded-2xl border bg-[#fbf7ee] p-4 transition-all hover:shadow-md', completedToday > 0 ? 'border-emerald-200' : 'border-[#ece2cb]')}>
                   <div className="flex items-start justify-between mb-3">
@@ -342,7 +335,7 @@ export default function HabitsPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 mb-3">
+                  <div className="flex items-center gap-3 mb-3 flex-wrap">
                     <div className="flex items-center gap-1.5">
                       <Candle className="h-5 w-6" lit={habit.streak > 0} />
                       <span className="text-sm font-bold text-[#2a2420]">{habit.streak}</span>
@@ -357,6 +350,9 @@ export default function HabitsPage() {
                     {habit.durationMinutes && (
                       <div className="text-xs text-[#8a7a5e]">{habit.durationMinutes} min</div>
                     )}
+                    <span className="text-xs px-1.5 py-0.5 rounded-full border" style={{ color: quadrantColor, borderColor: quadrantColor + '40', backgroundColor: quadrantColor + '12' }}>
+                      I{habit.importance} U{habit.urgency}
+                    </span>
                   </div>
 
                   <div className="mb-3">
@@ -396,7 +392,6 @@ export default function HabitsPage() {
         onSave={handleSave}
         habit={editingHabit}
         lang={language}
-        calendarAccounts={calendarAccounts}
       />
     </div>
   )

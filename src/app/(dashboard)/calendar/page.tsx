@@ -18,6 +18,12 @@ import {
 import { fr, enUS, zhTW } from 'date-fns/locale'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
 
+function fmtDate(d: Date, lang: 'fr' | 'en' | 'zh'): string {
+  const loc = lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB'
+  const sameYear = d.getFullYear() === new Date().getFullYear()
+  return d.toLocaleDateString(loc, { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) })
+}
+
 const HOURS = Array.from({ length: 14 }, (_, i) => i + 7)
 const GRID_START_HOUR = HOURS[0]
 const GRID_TOTAL_MIN = HOURS.length * 60
@@ -513,7 +519,11 @@ export default function CalendarPage() {
 
   const handleDeleteTask = async (id: string) => {
     await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
-    setTasks(tasks.filter((task) => task.id !== id))
+    // Remove the deleted task and clear parentTaskId for any children that pointed to it
+    setTasks(tasks
+      .filter((task) => task.id !== id)
+      .map((task) => task.parentTaskId === id ? { ...task, parentTaskId: null } : task)
+    )
     setEditingTask(null)
   }
 
@@ -1150,7 +1160,8 @@ function RetroSuggestionBanner({
               {stages.map((s, i) => {
                 const stageDate = new Date(eventDate)
                 stageDate.setDate(stageDate.getDate() - s.daysBeforeDeadline)
-                const stageDateStr = stageDate.toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })
+                const stageSameYear = stageDate.getFullYear() === new Date().getFullYear()
+                const stageDateStr = stageDate.toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short', ...(stageSameYear ? {} : { year: 'numeric' }) })
                 return (
                   <div key={i} className="flex items-center gap-2 bg-white/70 rounded-lg px-3 py-2 border border-amber-200">
                     <span className="h-5 w-5 rounded-full bg-amber-100 text-amber-800 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
@@ -1363,10 +1374,28 @@ function EventDetailPanel({
     return score
   }, [event.title])
 
+  // Keywords extracted from event title (tokens > 2 chars, ignoring separators)
+  const eventKeywords = React.useMemo(
+    () => event.title.toLowerCase().split(/[\s|:,\-]+/).filter((w) => w.length > 2),
+    [event.title]
+  )
+
+  // Already in any chain (parent or child)
+  const chainedTaskIds = React.useMemo(() => {
+    const parentIds = new Set(tasks.filter((t) => t.parentTaskId).map((t) => t.parentTaskId!))
+    return new Set(tasks.filter((t) => t.parentTaskId || parentIds.has(t.id)).map((t) => t.id))
+  }, [tasks])
+
   const openLinkDialog = () => {
     setLinkingChain(true)
-    setSelectedLinkIds(new Set())
     setLinkSearch('')
+    // Auto-select tasks whose titles match event keywords (excluding already-chained and completed)
+    const autoSelect = new Set(
+      tasks
+        .filter((t) => t.status !== 'COMPLETED' && eventKeywords.some((kw) => t.title.toLowerCase().includes(kw)))
+        .map((t) => t.id)
+    )
+    setSelectedLinkIds(autoSelect)
   }
 
   const handleUnlinkFromChain = async (taskId: string) => {
@@ -1386,15 +1415,33 @@ function EventDetailPanel({
     if (selectedLinkIds.size === 0) return
     setLinkSaving(true)
     try {
-      const patch: Record<string, unknown> = { calendarEventId: event.id }
-      if (chainParent) patch.parentTaskId = chainParent.id
-      await Promise.all([...selectedLinkIds].map((id) =>
-        fetch(`/api/tasks/${id}`, {
+      if (chainParent) {
+        // Chain root already exists — just set parentTaskId, preserve each task's own calendarEventId
+        await Promise.all([...selectedLinkIds].map((id) =>
+          fetch(`/api/tasks/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ parentTaskId: chainParent.id }),
+          })
+        ))
+      } else {
+        // No chain root yet — first selected task becomes the root (gets calendarEventId), rest become children
+        const [rootId, ...childIds] = [...selectedLinkIds]
+        await fetch(`/api/tasks/${rootId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(patch),
+          body: JSON.stringify({ calendarEventId: event.id }),
         })
-      ))
+        if (childIds.length > 0) {
+          await Promise.all(childIds.map((id) =>
+            fetch(`/api/tasks/${id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ parentTaskId: rootId }),
+            })
+          ))
+        }
+      }
       onTasksRefresh()
       setLinkingChain(false)
       setSelectedLinkIds(new Set())
@@ -1545,7 +1592,7 @@ function EventDetailPanel({
                         {dl && (
                           <span className={cn('shrink-0 text-[10px] flex items-center gap-0.5', done ? 'text-emerald-600' : overdue ? 'text-red-500' : isToday ? 'text-amber-700' : 'text-red-500')}>
                             {overdue && !done && <AlertTriangle className="h-2.5 w-2.5" />}
-                            {dl.toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
+                            {fmtDate(dl, lang)}
                             {onNavigateToDate && <ChevronRight className="h-2.5 w-2.5" />}
                           </span>
                         )}
@@ -1584,7 +1631,7 @@ function EventDetailPanel({
                             onClick={() => dl && onNavigateToDate?.(new Date(String(t.deadline)), t.id)}
                           >
                             {overdue && !done && <AlertTriangle className="h-2.5 w-2.5" />}
-                            {dl.toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
+                            {fmtDate(dl, lang)}
                             {onNavigateToDate && <ChevronRight className="h-2.5 w-2.5" />}
                           </span>
                         )}
@@ -1609,7 +1656,7 @@ function EventDetailPanel({
                     <span className="text-[#3a3326] truncate flex-1">{t.title}</span>
                     {t.deadline && (
                       <span className="text-[#a99873] ml-2 shrink-0 text-[10px] flex items-center gap-0.5">
-                        {new Date(t.deadline).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
+                        {fmtDate(new Date(t.deadline), lang)}
                         {onNavigateToDate && <ChevronRight className="h-2.5 w-2.5" />}
                       </span>
                     )}
@@ -1667,10 +1714,18 @@ function EventDetailPanel({
               <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1">
                 {tasks
                   .filter((t) => !linkSearch || t.title.toLowerCase().includes(linkSearch.toLowerCase()))
-                  .sort((a, b) => relevanceScore(b.title) - relevanceScore(a.title))
+                  .sort((a, b) => {
+                    // Already-chained tasks go to the bottom
+                    const aChained = chainedTaskIds.has(a.id) ? 1 : 0
+                    const bChained = chainedTaskIds.has(b.id) ? 1 : 0
+                    if (aChained !== bChained) return aChained - bChained
+                    return relevanceScore(b.title) - relevanceScore(a.title)
+                  })
                   .slice(0, 40)
                   .map((t) => {
                     const selected = selectedLinkIds.has(t.id)
+                    const inChain = chainedTaskIds.has(t.id)
+                    const keywordMatch = !inChain && eventKeywords.some((kw) => t.title.toLowerCase().includes(kw))
                     return (
                       <button
                         key={t.id}
@@ -1679,15 +1734,21 @@ function EventDetailPanel({
                           selected ? next.delete(t.id) : next.add(t.id)
                           return next
                         })}
-                        className={`flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 text-left transition-colors ${selected ? 'bg-red-50 border border-red-200' : 'hover:bg-[#f3ecdd] border border-transparent'}`}
+                        className={cn(
+                          'flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 text-left transition-colors border',
+                          selected ? 'bg-red-50 border-red-200' : inChain ? 'border-transparent opacity-40' : 'hover:bg-[#f3ecdd] border-transparent',
+                          keywordMatch && !selected ? 'border-amber-200 bg-amber-50/50' : ''
+                        )}
                       >
                         <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-red-600 border-red-600' : 'border-[#c4b48a]'}`}>
                           {selected && <Check className="h-2.5 w-2.5 text-white" />}
                         </span>
-                        <span className="truncate flex-1 text-[#3a3326]">{t.title}</span>
+                        <span className={cn('truncate flex-1', inChain ? 'text-[#a99873] line-through' : 'text-[#3a3326]')}>{t.title}</span>
+                        {inChain && <span className="shrink-0 text-[9px] text-[#c4b48a] bg-[#f3ecdd] rounded px-1">chain</span>}
+                        {t.scheduledStart && !inChain && <span className="shrink-0 text-[9px] text-blue-400 bg-blue-50 rounded px-1">{lang === 'zh' ? '已排程' : lang === 'fr' ? 'planifié' : 'scheduled'}</span>}
                         {t.deadline && (
                           <span className="text-[#a99873] shrink-0 text-[10px]">
-                            {new Date(String(t.deadline)).toLocaleDateString(lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB', { day: 'numeric', month: 'short' })}
+                            {fmtDate(new Date(String(t.deadline)), lang)}
                           </span>
                         )}
                       </button>

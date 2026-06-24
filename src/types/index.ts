@@ -42,9 +42,8 @@ export interface Habit {
   targetDays?: string | null
   scheduledTime?: string | null
   durationMinutes?: number | null
-  calendarEventId?: string | null
-  calendarAccountId?: string | null
-  calendarId?: string | null
+  importance: number
+  urgency: number
   isActive: boolean
   streak: number
   longestStreak: number

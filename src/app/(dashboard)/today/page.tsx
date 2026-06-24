@@ -412,11 +412,12 @@ export default function TodayPage() {
   }
 
   const todayHabits = habits.filter((h) => {
-    const dow = new Date().getDay()
+    const dow = selectedDate.getDay()
+    if (!h.isActive) return false
     if (h.frequency === 'DAILY') return true
     if (h.frequency === 'WEEKDAYS') return dow >= 1 && dow <= 5
     if (h.frequency === 'WEEKENDS') return dow === 0 || dow === 6
-    return true
+    return false
   })
 
   const handleCompleteHabit = async (habitId: string) => {
