@@ -1473,10 +1473,14 @@ function EventDetailPanel({
     [event.title]
   )
 
-  // Already in any chain (parent or child)
+  // Tasks visibly in a chain: parentTaskId points to an existing task (no orphans)
   const chainedTaskIds = React.useMemo(() => {
-    const parentIds = new Set(tasks.filter((t) => t.parentTaskId).map((t) => t.parentTaskId!))
-    return new Set(tasks.filter((t) => t.parentTaskId || parentIds.has(t.id)).map((t) => t.id))
+    const taskIdSet = new Set(tasks.map((t) => t.id))
+    // A task is "truly chained" if its parentTaskId exists in the task list
+    const childIds = new Set(tasks.filter((t) => t.parentTaskId && taskIdSet.has(t.parentTaskId)).map((t) => t.id))
+    // Parents = tasks that are pointed to by at least one valid child
+    const validParentIds = new Set(tasks.filter((t) => t.parentTaskId && taskIdSet.has(t.parentTaskId)).map((t) => t.parentTaskId!))
+    return new Set([...childIds, ...validParentIds])
   }, [tasks])
 
   const openLinkDialog = () => {
@@ -1811,39 +1815,32 @@ function EventDetailPanel({
               <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1">
                 {tasks
                   .filter((t) => !linkSearch || t.title.toLowerCase().includes(linkSearch.toLowerCase()))
-                  .sort((a, b) => {
-                    // Already-chained tasks go to the bottom
-                    const aChained = chainedTaskIds.has(a.id) ? 1 : 0
-                    const bChained = chainedTaskIds.has(b.id) ? 1 : 0
-                    if (aChained !== bChained) return aChained - bChained
-                    return relevanceScore(b.title) - relevanceScore(a.title)
-                  })
+                  .sort((a, b) => relevanceScore(b.title) - relevanceScore(a.title))
                   .slice(0, 40)
                   .map((t) => {
                     const selected = selectedLinkIds.has(t.id)
                     const inChain = chainedTaskIds.has(t.id)
-                    const keywordMatch = !inChain && eventKeywords.some((kw) => t.title.toLowerCase().includes(kw))
+                    const keywordMatch = !selected && eventKeywords.some((kw) => t.title.toLowerCase().includes(kw))
                     return (
                       <button
                         key={t.id}
-                        disabled={inChain}
-                        onClick={() => !inChain && setSelectedLinkIds((prev) => {
+                        onClick={() => setSelectedLinkIds((prev) => {
                           const next = new Set(prev)
                           selected ? next.delete(t.id) : next.add(t.id)
                           return next
                         })}
                         className={cn(
                           'flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 text-left transition-colors border',
-                          inChain ? 'border-transparent opacity-35 cursor-not-allowed' : selected ? 'bg-red-50 border-red-200' : 'hover:bg-[#f3ecdd] border-transparent',
-                          keywordMatch && !selected && !inChain ? 'border-amber-200 bg-amber-50/50' : ''
+                          selected ? 'bg-red-50 border-red-200' : 'hover:bg-[#f3ecdd] border-transparent',
+                          keywordMatch && !selected ? 'border-amber-200 bg-amber-50/50' : ''
                         )}
                       >
                         <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-red-600 border-red-600' : 'border-[#c4b48a]'}`}>
                           {selected && <Check className="h-2.5 w-2.5 text-white" />}
                         </span>
-                        <span className={cn('truncate flex-1', inChain ? 'text-[#a99873] line-through' : 'text-[#3a3326]')}>{t.title}</span>
+                        <span className="truncate flex-1 text-[#3a3326]">{t.title}</span>
                         {inChain && <span className="shrink-0 text-[9px] text-[#c4b48a] bg-[#f3ecdd] rounded px-1">{lang === 'zh' ? '已連結' : lang === 'fr' ? 'chaîne' : 'chain'}</span>}
-                        {t.scheduledStart && !inChain && <span className="shrink-0 text-[9px] text-blue-400 bg-blue-50 rounded px-1">{lang === 'zh' ? '已排程' : lang === 'fr' ? 'planifié' : 'scheduled'}</span>}
+                        {t.scheduledStart && <span className="shrink-0 text-[9px] text-blue-400 bg-blue-50 rounded px-1">{lang === 'zh' ? '已排程' : lang === 'fr' ? 'planifié' : 'scheduled'}</span>}
                         {t.deadline && (
                           <span className="text-[#a99873] shrink-0 text-[10px]">
                             {fmtDate(new Date(String(t.deadline)), lang)}
