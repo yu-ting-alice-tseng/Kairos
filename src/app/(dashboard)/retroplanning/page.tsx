@@ -448,6 +448,11 @@ export default function RetroplanningPage() {
   const [deleteChainLoading, setDeleteChainLoading] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historySearch, setHistorySearch] = useState('')
+  const [linkDialog, setLinkDialog] = useState<{ parentId: string; parentTitle: string } | null>(null)
+  const [linkSearch, setLinkSearch] = useState('')
+  const [linkSelectedIds, setLinkSelectedIds] = useState<Set<string>>(new Set())
+  const [linkSaving, setLinkSaving] = useState(false)
+  const [freshTasks, setFreshTasks] = useState<Task[]>([])
 
   // Prefer the first Google calendar account for event creation
   const googleCalendarAccount = calendarAccounts.find((a) => (a as { provider?: string }).provider === 'GOOGLE') ?? calendarAccounts[0] ?? null
@@ -819,6 +824,36 @@ export default function RetroplanningPage() {
     setEditingTask(null)
   }
 
+  const openLinkDialog = async (parentId: string, parentTitle: string) => {
+    setLinkSearch('')
+    setLinkSelectedIds(new Set())
+    setLinkDialog({ parentId, parentTitle })
+    // Always fetch fresh tasks so renamed tasks show with current names
+    const res = await fetch('/api/tasks')
+    if (res.ok) {
+      const latest: Task[] = await res.json()
+      setFreshTasks(latest)
+      setTasks(latest) // also update global store
+    }
+  }
+
+  const handleLinkToChain = async () => {
+    if (!linkDialog || linkSelectedIds.size === 0) return
+    setLinkSaving(true)
+    try {
+      await Promise.all([...linkSelectedIds].map((id) =>
+        fetch(`/api/tasks/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ parentTaskId: linkDialog.parentId }),
+        })
+      ))
+      const res = await fetch('/api/tasks')
+      if (res.ok) { const latest = await res.json(); setTasks(latest); setFreshTasks(latest) }
+      setLinkDialog(null)
+    } catch { /* ignore */ } finally { setLinkSaving(false) }
+  }
+
   const handleCompleteTask = async (task: Task) => {
     const newStatus = task.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED'
     const res = await fetch(`/api/tasks/${task.id}`, {
@@ -1155,9 +1190,7 @@ export default function RetroplanningPage() {
 
                           {/* Timeline */}
                           <div className="relative pl-6">
-                            {/* Vertical line */}
                             <div className="absolute left-2 top-2 bottom-2 w-px bg-red-100" />
-
                             <div className="flex flex-col gap-2">
                               {children.map((child, i) => {
                                 const parentDeadline = parent.deadline ? new Date(parent.deadline) : null
@@ -1167,7 +1200,6 @@ export default function RetroplanningPage() {
                                   : undefined
                                 return (
                                   <div key={child.id} className="relative">
-                                    {/* Dot on timeline */}
                                     <div className={cn(
                                       'absolute -left-4 top-3 h-3 w-3 rounded-full border-2 border-white',
                                       child.status === 'COMPLETED' ? 'bg-emerald-500' : 'bg-red-300'
@@ -1185,6 +1217,14 @@ export default function RetroplanningPage() {
                               })}
                             </div>
                           </div>
+                          {/* Link existing task button */}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openLinkDialog(parent.id, parent.title) }}
+                            className="mt-2 flex items-center gap-1.5 text-xs text-[#a99873] hover:text-[#ab3326] border border-dashed border-[#e2d6bc] hover:border-red-300 rounded-xl px-3 py-1.5 transition-colors w-full"
+                          >
+                            <Plus className="h-3 w-3" />
+                            {lang === 'zh' ? '連結現有任務...' : lang === 'fr' ? 'Lier une tâche existante...' : 'Link existing task...'}
+                          </button>
                         </div>
                       )}
                     </div>
@@ -1356,6 +1396,79 @@ export default function RetroplanningPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      )}
+
+      {/* Link existing task dialog */}
+      {linkDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setLinkDialog(null)}>
+          <div className="bg-[#fbf7ee] rounded-2xl border border-[#e2d6bc] shadow-xl w-80 max-h-[70vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-4 py-3 border-b border-[#ece2cb] flex items-center justify-between">
+              <p className="text-sm font-semibold text-[#2a2420]">
+                {lang === 'zh' ? '連結任務' : lang === 'fr' ? 'Lier une tâche' : 'Link a task'}
+              </p>
+              <button onClick={() => setLinkDialog(null)} className="p-1 rounded-lg hover:bg-[#ece2cb] text-[#a99873]">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <p className="px-4 pt-2 text-[11px] text-[#8a7a5e]">
+              {lang === 'zh' ? `將加入任務鏈「${linkDialog.parentTitle}」` : lang === 'fr' ? `Sera ajouté à la chaîne « ${linkDialog.parentTitle} »` : `Will be added to chain "${linkDialog.parentTitle}"`}
+            </p>
+            <div className="px-4 py-2 border-b border-[#ece2cb]">
+              <input
+                autoFocus
+                className="w-full border border-[#e2d6bc] rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-red-300 bg-white"
+                placeholder={lang === 'zh' ? '搜尋任務...' : lang === 'fr' ? 'Rechercher une tâche...' : 'Search tasks...'}
+                value={linkSearch}
+                onChange={(e) => setLinkSearch(e.target.value)}
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1">
+              {(freshTasks.length > 0 ? freshTasks : tasks)
+                .filter((t) => t.id !== linkDialog.parentId && t.parentTaskId !== linkDialog.parentId)
+                .filter((t) => !linkSearch || t.title.toLowerCase().includes(linkSearch.toLowerCase()))
+                .sort((a, b) => {
+                  const aKw = a.title.toLowerCase().includes(linkDialog.parentTitle.split(/[\s|]+/)[0]?.toLowerCase() ?? '') ? -1 : 0
+                  const bKw = b.title.toLowerCase().includes(linkDialog.parentTitle.split(/[\s|]+/)[0]?.toLowerCase() ?? '') ? -1 : 0
+                  return aKw - bKw || a.title.localeCompare(b.title)
+                })
+                .slice(0, 40)
+                .map((t) => {
+                  const selected = linkSelectedIds.has(t.id)
+                  const alreadyChild = !!t.parentTaskId
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => setLinkSelectedIds((prev) => { const next = new Set(prev); selected ? next.delete(t.id) : next.add(t.id); return next })}
+                      className={cn(
+                        'flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 text-left transition-colors border',
+                        selected ? 'bg-red-50 border-red-200' : 'hover:bg-[#f3ecdd] border-transparent'
+                      )}
+                    >
+                      <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-red-600 border-red-600' : 'border-[#c4b48a]'}`}>
+                        {selected && <Check className="h-2.5 w-2.5 text-white" />}
+                      </span>
+                      <span className="truncate flex-1 text-[#3a3326]">{t.title}</span>
+                      {alreadyChild && <span className="shrink-0 text-[9px] text-[#c4b48a] bg-[#f3ecdd] rounded px-1">{lang === 'zh' ? '已連結' : lang === 'fr' ? 'chaîne' : 'chain'}</span>}
+                      {t.deadline && <span className="text-[#a99873] shrink-0 text-[10px]">{formatDateShort(new Date(t.deadline), lang)}</span>}
+                    </button>
+                  )
+                })}
+            </div>
+            <div className="px-4 py-3 border-t border-[#ece2cb] flex gap-2">
+              <button onClick={() => setLinkDialog(null)} className="flex-1 rounded-xl border border-[#e2d6bc] text-[#5c5347] text-xs py-2 hover:bg-[#ece2cb] transition-colors">
+                {lang === 'zh' ? '取消' : lang === 'fr' ? 'Annuler' : 'Cancel'}
+              </button>
+              <button
+                onClick={handleLinkToChain}
+                disabled={linkSelectedIds.size === 0 || linkSaving}
+                className="flex-1 rounded-xl bg-[#ab3326] text-white text-xs py-2 hover:bg-[#861f17] transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+              >
+                {linkSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitBranch className="h-3.5 w-3.5" />}
+                {lang === 'zh' ? `連結${linkSelectedIds.size > 0 ? ` (${linkSelectedIds.size})` : ''}` : lang === 'fr' ? `Lier${linkSelectedIds.size > 0 ? ` (${linkSelectedIds.size})` : ''}` : `Link${linkSelectedIds.size > 0 ? ` (${linkSelectedIds.size})` : ''}`}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Task edit form */}
