@@ -275,9 +275,12 @@ export default function TodayPage() {
   const scheduledTasksByHour = (hour: number) =>
     scheduledTasks.filter((t) => t.scheduledStart && new Date(String(t.scheduledStart)).getHours() === hour)
 
-  const completedToday = tasks.filter(
-    (t) => t.status === 'COMPLETED' && t.completedAt && isSameDay(new Date(t.completedAt), selectedDate)
-  )
+  // Show a completed task in the day whose DEADLINE matches, or (no deadline) in the day it was completed
+  const completedToday = tasks.filter((t) => {
+    if (t.status !== 'COMPLETED') return false
+    if (t.deadline) return isSameDay(new Date(String(t.deadline)), selectedDate)
+    return !!(t.completedAt && isSameDay(new Date(t.completedAt), selectedDate))
+  })
 
   const handleComplete = async (id: string) => {
     const task = tasks.find((t) => t.id === id)
@@ -769,11 +772,11 @@ export default function TodayPage() {
                   <h2 className="text-sm font-semibold text-[#2a1f12] flex items-center gap-2">
                     <Clock className="h-4 w-4 text-red-500" />
                     {language === 'fr' ? 'Tâches prioritaires' : language === 'zh' ? '優先任務' : 'Priority tasks'}
-                    <Badge variant="default" className="text-xs bg-red-100 text-red-900 border-0">{prioritizedTasks.length + unmatchedAllDayEvents.length}</Badge>
+                    <Badge variant="default" className="text-xs bg-red-100 text-red-900 border-0">{prioritizedTasks.length}</Badge>
                   </h2>
                 </div>
 
-                {prioritizedTasks.length === 0 && unmatchedAllDayEvents.length === 0 ? (
+                {prioritizedTasks.length === 0 ? (
                   <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#e7c894]/60 py-12 text-center bg-[#fbeacb]/40">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/logo_v5/empty-task.png" alt="" className="h-20 w-20 mb-4 opacity-70" />
@@ -787,7 +790,8 @@ export default function TodayPage() {
                   </div>
                 ) : (
                   <div className="flex flex-col gap-2.5 stagger">
-                    {prioritizedTasks.map((task, index) => (
+                    {/* Top 3: full card */}
+                    {prioritizedTasks.slice(0, 3).map((task, index) => (
                       <DraggableTaskRow
                         key={task.id}
                         task={task}
@@ -801,13 +805,26 @@ export default function TodayPage() {
                         selectedDate={selectedDate}
                       />
                     ))}
-                    {unmatchedAllDayEvents.map((ev) => (
-                      <div key={ev.id} className="flex items-center gap-3 rounded-2xl border border-[#e2d6bc] bg-[#f3ecdd]/60 px-4 py-3">
-                        <CalendarDays className="h-4 w-4 text-[#a99873] shrink-0" />
-                        <p className="text-sm text-[#3a3326] flex-1 truncate">{ev.title}</p>
-                        <span className="text-[10px] text-[#a99873] bg-[#ece2cb] rounded-full px-2 py-0.5 shrink-0">
-                          {language === 'zh' ? '全天行程' : language === 'fr' ? 'Toute la journée' : 'All day'}
+                    {/* Tasks 4+: compact single-line */}
+                    {prioritizedTasks.slice(3).map((task, extraIndex) => (
+                      <div
+                        key={task.id}
+                        className="flex items-center gap-2 rounded-xl border border-[#ece2cb] bg-[#fbf7ee] px-3 py-1.5 hover:bg-[#f3ecdd] transition-colors cursor-pointer"
+                        onClick={() => { setEditingTask(task); setShowTaskForm(true) }}
+                      >
+                        <span className="h-5 w-5 flex items-center justify-center rounded-full bg-[#f3ecdd] text-[10px] font-bold text-[#a99873] shrink-0 border border-[#e2d6bc]">
+                          {extraIndex + 4}
                         </span>
+                        <button
+                          onClick={async (e) => { e.stopPropagation(); await handleComplete(task.id) }}
+                          className="shrink-0 hover:scale-110 transition-transform"
+                        >
+                          <span className="h-3.5 w-3.5 rounded-full border-2 border-[#c4b48a] inline-block" />
+                        </button>
+                        <span className="flex-1 text-xs text-[#3a3326] truncate">{task.title}</span>
+                        {task.deadline && !isSameDay(new Date(String(task.deadline)), selectedDate) && (
+                          <span className="text-[10px] text-red-400 shrink-0">{formatDate(String(task.deadline), language)}</span>
+                        )}
                       </div>
                     ))}
                   </div>
