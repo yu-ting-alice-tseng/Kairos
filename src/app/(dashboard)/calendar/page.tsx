@@ -221,7 +221,11 @@ export default function CalendarPage() {
       const res = await fetch(
         `/api/calendar/events?start=${weekStart.toISOString()}&end=${weekEnd.toISOString()}`
       )
-      if (res.ok) setExternalEvents(await res.json())
+      if (res.ok) {
+        setExternalEvents(await res.json())
+        // Server auto-creates/syncs tasks during this fetch — refresh store to pick them up
+        loadTasks()
+      }
     } catch { /* best-effort */ }
     setEventsLoading(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2062,9 +2066,10 @@ function EventDetailPanel({
                     const aChain = a.id === chainParent?.id || chainSiblings.some((s) => s.id === a.id)
                     const bChain = b.id === chainParent?.id || chainSiblings.some((s) => s.id === b.id)
                     if (aChain !== bChain) return aChain ? -1 : 1
-                    const da = a.deadline ? new Date(String(a.deadline)).getTime() : 0
-                    const db = b.deadline ? new Date(String(b.deadline)).getTime() : 0
-                    return da - db
+                    // Most recent deadline first; tasks without deadline go to bottom
+                    const da = a.deadline ? new Date(String(a.deadline)).getTime() : Infinity
+                    const db = b.deadline ? new Date(String(b.deadline)).getTime() : Infinity
+                    return db - da
                   })
                   .map((t) => {
                     const selected = selectedLinkIds.has(t.id)
