@@ -1535,6 +1535,19 @@ function EventDetailPanel({
   const renameInputRef = React.useRef<HTMLInputElement>(null)
   const { updateTask, addTask } = useAppStore()
 
+  const commitTaskComplete = React.useCallback(async (task: Task) => {
+    const isCompleted = task.status === 'COMPLETED'
+    const newStatus = isCompleted ? 'PENDING' : 'COMPLETED'
+    updateTask(task.id, { status: newStatus, completedAt: isCompleted ? null : new Date().toISOString() })
+    const res = await fetch(`/api/tasks/${task.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    })
+    if (res.ok) { const data = await res.json(); updateTask(task.id, data) }
+    else updateTask(task.id, task)
+  }, [updateTask])
+
   const commitTaskRename = React.useCallback(async (taskId: string, originalTitle: string) => {
     const trimmed = renameDraft.trim()
     setRenamingTaskId(null)
@@ -1870,6 +1883,13 @@ function EventDetailPanel({
                         )}
                         onClick={() => navigateTo && onNavigateToDate?.(navigateTo, p.id)}
                       >
+                        <button
+                          onClick={(e) => { e.stopPropagation(); commitTaskComplete(p) }}
+                          className={cn('shrink-0 h-4 w-4 rounded-full border flex items-center justify-center transition-colors', done ? 'bg-emerald-500 border-emerald-500 hover:bg-emerald-400' : 'border-[#c4b48a] hover:border-emerald-400 hover:bg-emerald-50')}
+                          title={done ? (lang === 'zh' ? '標記未完成' : lang === 'fr' ? 'Marquer non fait' : 'Mark undone') : (lang === 'zh' ? '標記完成' : lang === 'fr' ? 'Marquer fait' : 'Mark done')}
+                        >
+                          {done && <Check className="h-2.5 w-2.5 text-white" />}
+                        </button>
                         <GitBranch className={cn('h-3 w-3 shrink-0', done ? 'text-emerald-500' : overdue ? 'text-red-500' : 'text-red-600')} />
                         {renamingTaskId === p.id ? (
                           <input
@@ -1921,7 +1941,13 @@ function EventDetailPanel({
                           done ? 'bg-emerald-50/60 border-emerald-100 opacity-70' : isToday ? 'bg-amber-50 border-amber-200 hover:bg-amber-100' : overdue ? 'bg-red-50/40 border-red-100 hover:bg-red-50' : 'bg-[#f3ecdd] border-[#ece2cb] hover:bg-[#ece2cb]'
                         )}
                       >
-                        <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', done ? 'bg-emerald-400' : overdue ? 'bg-red-400' : isToday ? 'bg-amber-400' : 'bg-[#a99873]')} />
+                        <button
+                          onClick={(e) => { e.stopPropagation(); commitTaskComplete(t) }}
+                          className={cn('shrink-0 h-4 w-4 rounded-full border flex items-center justify-center transition-colors', done ? 'bg-emerald-500 border-emerald-500 hover:bg-emerald-400' : 'border-[#c4b48a] hover:border-emerald-400 hover:bg-emerald-50')}
+                          title={done ? (lang === 'zh' ? '標記未完成' : lang === 'fr' ? 'Marquer non fait' : 'Mark undone') : (lang === 'zh' ? '標記完成' : lang === 'fr' ? 'Marquer fait' : 'Mark done')}
+                        >
+                          {done && <Check className="h-2.5 w-2.5 text-white" />}
+                        </button>
                         {renamingTaskId === t.id ? (
                           <input
                             ref={renameInputRef}
