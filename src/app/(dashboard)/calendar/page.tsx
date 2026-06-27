@@ -123,6 +123,13 @@ interface DragState {
   eventDurationMs: number
 }
 
+interface TaskDragState {
+  task: Task
+  startMouseY: number
+  startMouseX: number
+  taskDurationMs: number
+}
+
 interface UndoItem {
   event: CalendarEvent
   prevStart: string
@@ -169,7 +176,9 @@ export default function CalendarPage() {
 
   // Drag state
   const dragRef = useRef<DragState | null>(null)
+  const taskDragRef = useRef<TaskDragState | null>(null)
   const [draggingEventId, setDraggingEventId] = useState<string | null>(null)
+  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null)
   const [dragPreview, setDragPreview] = useState<{ dayIdx: number; hour: number } | null>(null)
   const gridRef = useRef<HTMLDivElement>(null)
 
@@ -259,8 +268,12 @@ export default function CalendarPage() {
       ...userTemplates.map((t) => ({ id: t.id, keywords: t.keywords, stages: t.stages.map((s) => ({ name: s.name, nameFr: s.name, nameZh: s.name, daysBeforeDeadline: s.daysBeforeDeadline })) })),
     ]
 
+    const now = new Date()
     for (const ev of externalEvents) {
-      if (dismissedRef.current.has(ev.id)) continue
+      // Skip past events and dismissed titles
+      if (ev.start && new Date(ev.start) < now) continue
+      const dismissKey = ev.title.toLowerCase().trim()
+      if (dismissedRef.current.has(dismissKey)) continue
 
       // Check if retro tasks already exist for this event (parent task matches event title)
       const parentTask = tasks.find(
@@ -624,20 +637,20 @@ export default function CalendarPage() {
       toast({ title: language === 'fr' ? 'Erreur' : language === 'zh' ? '建立失敗' : 'Failed to create', variant: 'error' })
     } finally {
       setRetroSuggestionSaving(false)
-      persistDismissed(suggestion.event.id)
+      persistDismissed(suggestion.event.title.toLowerCase().trim())
       setRetroSuggestion(null)
     }
   }
 
-  const persistDismissed = (id: string) => {
-    dismissedRef.current.add(id)
+  const persistDismissed = (key: string) => {
+    dismissedRef.current.add(key)
     try {
       localStorage.setItem('retro_dismissed', JSON.stringify([...dismissedRef.current]))
     } catch { /* ignore */ }
   }
 
   const handleDismissRetroSuggestion = () => {
-    if (retroSuggestion) persistDismissed(retroSuggestion.event.id)
+    if (retroSuggestion) persistDismissed(retroSuggestion.event.title.toLowerCase().trim())
     setRetroSuggestion(null)
   }
 
@@ -689,15 +702,49 @@ export default function CalendarPage() {
     document.addEventListener('mouseup', onMouseUp)
   }, [finalizeDrop])
 
+  const finalizeTaskDrop = useCallback(async (drag: TaskDragState, preview: { dayIdx: number; hour: number } | null) => {
+    if (!preview || preview.hour < GRID_START_HOUR) return
+    const targetDay = weekDaysRef.current[preview.dayIdx]
+    if (!targetDay) return
+    const newStart = new Date(targetDay); newStart.setHours(preview.hour, 0, 0, 0)
+    const newEnd = new Date(newStart.getTime() + drag.taskDurationMs)
+    updateTask(drag.task.id, { scheduledStart: newStart.toISOString(), scheduledEnd: newEnd.toISOString() })
+    const res = await fetch(`/api/tasks/${drag.task.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduledStart: newStart.toISOString(), scheduledEnd: newEnd.toISOString() }),
+    })
+    if (!res.ok) {
+      updateTask(drag.task.id, { scheduledStart: drag.task.scheduledStart, scheduledEnd: drag.task.scheduledEnd })
+      toast({ title: language === 'zh' ? '更新失敗' : language === 'fr' ? 'Erreur de mise à jour' : 'Failed to update', variant: 'error' })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [updateTask, language])
+
+  const startTaskDrag = useCallback((e: React.MouseEvent, task: Task) => {
+    e.preventDefault(); e.stopPropagation()
+    const start = task.scheduledStart ? new Date(String(task.scheduledStart)).getTime() : 0
+    const end = task.scheduledEnd ? new Date(String(task.scheduledEnd)).getTime() : start + 60 * 60 * 1000
+    taskDragRef.current = { task, startMouseY: e.clientY, startMouseX: e.clientX, taskDurationMs: Math.max(end - start, 30 * 60 * 1000) }
+    setDraggingTaskId(task.id)
+    const onMouseUp = () => {
+      document.removeEventListener('mouseup', onMouseUp)
+      const drag = taskDragRef.current; const preview = dragPreviewRef.current
+      taskDragRef.current = null; setDraggingTaskId(null); setDragPreview(null)
+      if (drag) finalizeTaskDrop(drag, preview)
+    }
+    document.addEventListener('mouseup', onMouseUp)
+  }, [finalizeTaskDrop])
+
   const handleCellMouseMove = useCallback((dayIdx: number, hour: number) => {
-    if (dragRef.current) setDragPreview({ dayIdx, hour })
+    if (dragRef.current || taskDragRef.current) setDragPreview({ dayIdx, hour })
   }, [])
 
   const handleAllDayCellMouseMove = useCallback((dayIdx: number) => {
     if (dragRef.current) setDragPreview({ dayIdx, hour: 0 })
   }, [])
 
-  const isDragging = draggingEventId !== null
+  const isDragging = draggingEventId !== null || draggingTaskId !== null
 
   if (loading) {
     return <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#a87f3e]" /></div>
@@ -1091,13 +1138,16 @@ export default function CalendarPage() {
                         const acc = calendarAccounts.find((a) => a.id === task.calendarAccountId)
                         const done = task.status === 'COMPLETED'
                         const isRetro = !!task.parentTaskId
+                        const isDraggingThisTask = draggingTaskId === task.id
                         return (
                           <div
                             key={block.id}
-                            onClick={(e) => { e.stopPropagation(); handleTaskClick(task) }}
+                            onMouseDown={(e) => { if (!isDragging) startTaskDrag(e, task) }}
+                            onClick={(e) => { e.stopPropagation(); if (!isDragging) handleTaskClick(task) }}
                             className={cn(
-                              'rounded-lg px-2 py-1 text-xs cursor-pointer border transition-all hover:shadow-sm overflow-hidden group relative',
-                              isDragging ? 'pointer-events-none' : 'pointer-events-auto',
+                              'rounded-lg px-2 py-1 text-xs border transition-all hover:shadow-sm overflow-hidden group relative',
+                              isDragging ? 'pointer-events-none' : 'cursor-grab pointer-events-auto',
+                              isDraggingThisTask && 'opacity-40',
                               done
                                 ? 'bg-emerald-50 border-emerald-200 text-emerald-700 opacity-70'
                                 : isRetro
@@ -1172,6 +1222,19 @@ export default function CalendarPage() {
                           style={{ top, height, left: 0, width: 'calc(100% - 4px)', backgroundColor: evColor + '30', borderColor: evColor, color: evColor }}
                         >
                           <p className="font-medium truncate">{drag.event.title}</p>
+                        </div>
+                      )
+                    })()}
+                    {isPreviewHere && taskDragRef.current && (() => {
+                      const drag = taskDragRef.current!
+                      const top = (dragPreview!.hour - GRID_START_HOUR) * 60
+                      const height = Math.max(drag.taskDurationMs / 60000, MIN_BLOCK_HEIGHT)
+                      return (
+                        <div
+                          className="absolute rounded-lg px-2 py-1 text-xs border-2 border-dashed pointer-events-none overflow-hidden"
+                          style={{ top, height, left: 0, width: 'calc(100% - 4px)', backgroundColor: '#7c3aed30', borderColor: '#7c3aed', color: '#7c3aed' }}
+                        >
+                          <p className="font-medium truncate">{drag.task.title}</p>
                         </div>
                       )
                     })()}
@@ -1843,19 +1906,21 @@ function EventDetailPanel({
                   .sort((a, b) => relevanceScore(b.title) - relevanceScore(a.title))
                   .map((t) => {
                     const selected = selectedLinkIds.has(t.id)
-                    const inChain = chainedTaskIds.has(t.id)
-                    const keywordMatch = !selected && eventKeywords.some((kw) => t.title.toLowerCase().includes(kw))
+                    const isCurrentChainMember = t.id === chainParent?.id || chainSiblings.some((s) => s.id === t.id)
+                    const inOtherChain = chainedTaskIds.has(t.id) && !isCurrentChainMember
+                    const keywordMatch = !selected && !inOtherChain && eventKeywords.some((kw) => t.title.toLowerCase().includes(kw))
                     return (
                       <button
                         key={t.id}
-                        onClick={() => setSelectedLinkIds((prev) => {
+                        disabled={inOtherChain}
+                        onClick={() => !inOtherChain && setSelectedLinkIds((prev) => {
                           const next = new Set(prev)
                           selected ? next.delete(t.id) : next.add(t.id)
                           return next
                         })}
                         className={cn(
                           'flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 text-left transition-colors border',
-                          selected ? 'bg-red-50 border-red-200' : 'hover:bg-[#f3ecdd] border-transparent',
+                          inOtherChain ? 'opacity-40 cursor-not-allowed border-transparent' : selected ? 'bg-red-50 border-red-200' : 'hover:bg-[#f3ecdd] border-transparent',
                           keywordMatch && !selected ? 'border-amber-200 bg-amber-50/50' : ''
                         )}
                       >
@@ -1863,7 +1928,7 @@ function EventDetailPanel({
                           {selected && <Check className="h-2.5 w-2.5 text-white" />}
                         </span>
                         <span className="truncate flex-1 text-[#3a3326]">{t.title}</span>
-                        {inChain && <span className="shrink-0 text-[9px] text-[#c4b48a] bg-[#f3ecdd] rounded px-1">{lang === 'zh' ? '已連結' : lang === 'fr' ? 'chaîne' : 'chain'}</span>}
+                        {inOtherChain && <span className="shrink-0 text-[9px] text-[#c4b48a] bg-[#f3ecdd] rounded px-1">{lang === 'zh' ? '已在其他任務練' : lang === 'fr' ? 'autre chaîne' : 'other chain'}</span>}
                         {t.scheduledStart && <span className="shrink-0 text-[9px] text-blue-400 bg-blue-50 rounded px-1">{lang === 'zh' ? '已排程' : lang === 'fr' ? 'planifié' : 'scheduled'}</span>}
                         {t.deadline && (
                           <span className="text-[#a99873] shrink-0 text-[10px]">
