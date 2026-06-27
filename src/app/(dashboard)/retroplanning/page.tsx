@@ -564,6 +564,10 @@ export default function RetroplanningPage() {
   const [scanMatches, setScanMatches] = useState<ScanMatch[]>([])
   const [scanCreating, setScanCreating] = useState<string | null>(null)
   const [previewScan, setPreviewScan] = useState<ScanMatch | null>(null)
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('retro-dismissed-suggestions') ?? '[]')) }
+    catch { return new Set() }
+  })
   const [dismissedScanKeys] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('kairos:dismissed-scans') ?? '[]')) } catch { return new Set() }
   })
@@ -728,11 +732,24 @@ export default function RetroplanningPage() {
 
   // Suggested tasks: tasks with no children but matching a template keyword
   const suggestedTasks = React.useMemo(() => {
+    const now = new Date()
     const parentIds = new Set(tasks.filter((t) => t.parentTaskId).map((t) => t.parentTaskId!))
     return tasks.filter(
-      (t) => !parentIds.has(t.id) && !t.parentTaskId && t.deadline && t.status !== 'COMPLETED' && matchesAnyTemplate(t.title, userTemplates)
+      (t) => !parentIds.has(t.id) && !t.parentTaskId && t.deadline && t.status !== 'COMPLETED'
+        && new Date(String(t.deadline)) >= now
+        && !dismissedSuggestions.has(t.id)
+        && matchesAnyTemplate(t.title, userTemplates)
     )
-  }, [tasks, userTemplates])
+  }, [tasks, userTemplates, dismissedSuggestions])
+
+  const dismissSuggestion = useCallback((taskId: string) => {
+    setDismissedSuggestions((prev) => {
+      const next = new Set(prev)
+      next.add(taskId)
+      try { localStorage.setItem('retro-dismissed-suggestions', JSON.stringify([...next])) } catch { /* ignore */ }
+      return next
+    })
+  }, [])
 
   const loadTemplates = useCallback(async () => {
     setLoadingTemplates(true)
@@ -1137,6 +1154,13 @@ export default function RetroplanningPage() {
                           </Button>
                         </div>
                       )}
+                      <button
+                        onClick={() => dismissSuggestion(task.id)}
+                        className="shrink-0 p-1 rounded-full text-[#c4b48a] hover:text-[#5c5347] hover:bg-[#ece2cb] transition-colors"
+                        title={lang === 'fr' ? 'Ne plus afficher' : lang === 'zh' ? '不再顯示' : 'Dismiss'}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   )
                 })}

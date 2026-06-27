@@ -1640,27 +1640,27 @@ function EventDetailPanel({
     return new Set([...childIds, ...validParentIds])
   }, [tasks])
 
-  const openLinkDialog = async () => {
+  const openLinkDialog = () => {
     setLinkSearch('')
-    setLinkEventsLoading(true)
-    // Fetch tasks + calendar events (broad range: 2 yrs back to 2 yrs forward)
-    const start = new Date(); start.setFullYear(start.getFullYear() - 2)
-    const end = new Date(); end.setFullYear(end.getFullYear() + 2)
-    const [, evRes] = await Promise.all([
-      onTasksRefresh(),
-      fetch(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}`),
-    ])
-    if (evRes.ok) setLinkCalEvents(await evRes.json())
-    setLinkEventsLoading(false)
     setLinkingChain(true)
     // Pre-select events whose tasks are already in this chain
     const chainEventIds = new Set<string>([
       ...(chainParent?.calendarEventId ? [chainParent.calendarEventId] : []),
       ...chainSiblings.map((s) => s.calendarEventId).filter((id): id is string => !!id),
-      // Always include the current event itself
       event.id,
     ])
     setSelectedLinkIds(chainEventIds)
+    // Load events in background after dialog opens
+    setLinkEventsLoading(true)
+    const start = new Date(); start.setFullYear(start.getFullYear() - 2)
+    const end = new Date(); end.setFullYear(end.getFullYear() + 2)
+    Promise.all([
+      onTasksRefresh(),
+      fetch(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}`),
+    ]).then(async ([, evRes]) => {
+      if (evRes.ok) setLinkCalEvents(await evRes.json())
+      setLinkEventsLoading(false)
+    })
   }
 
   const handleUnlinkFromChain = async (taskId: string) => {
@@ -1859,8 +1859,8 @@ function EventDetailPanel({
             {lang === 'fr' ? 'Chaîne de tâches' : lang === 'zh' ? '任務鏈' : 'Task chain'}
           </p>
 
-          {/* Existing chain display — only show when there's a real chain (≥2 tasks) */}
-          {((chainParent && (chainSiblings.length > 0 || !!chainParent.parentTaskId)) || relatedChains.length > 0) && (
+          {/* Show chain when there's any linked task or related chain */}
+          {(chainParent || relatedChains.length > 0) && (
             <div className="flex flex-col gap-1">
               {chainParent ? (
                 <>
@@ -2016,23 +2016,14 @@ function EventDetailPanel({
             </div>
           )}
 
-          {/* Always-visible add buttons */}
-          <div className="flex gap-1.5">
-            <button
-              onClick={openLinkDialog}
-              className="flex-1 flex items-center justify-center gap-1.5 text-xs text-[#8a7a5e] hover:text-[#ab3326] border border-dashed border-[#e2d6bc] rounded-lg px-3 py-2 hover:border-red-300 transition-colors"
-            >
-              <GitBranch className="h-3 w-3" />
-              {lang === 'fr' ? 'Lier une tâche' : lang === 'zh' ? '連結任務' : 'Link task'}
-            </button>
-            <button
-              onClick={() => router.push(`/retroplanning?event=${encodeURIComponent(event.title)}&date=${encodeURIComponent(String(event.start))}`)}
-              className="flex-1 flex items-center justify-center gap-1.5 text-xs text-white bg-[#ab3326] hover:bg-[#861f17] rounded-lg px-3 py-2 transition-colors"
-            >
-              <Plus className="h-3 w-3" />
-              {lang === 'fr' ? 'Créer' : lang === 'zh' ? '新增' : 'Create'}
-            </button>
-          </div>
+          {/* Link button */}
+          <button
+            onClick={openLinkDialog}
+            className="w-full flex items-center justify-center gap-1.5 text-xs text-[#8a7a5e] hover:text-[#ab3326] border border-dashed border-[#e2d6bc] rounded-lg px-3 py-2 hover:border-red-300 transition-colors"
+          >
+            <GitBranch className="h-3 w-3" />
+            {lang === 'fr' ? 'Lier une tâche' : lang === 'zh' ? '連結任務' : 'Link task'}
+          </button>
         </div>
 
         {/* Link task dialog */}
