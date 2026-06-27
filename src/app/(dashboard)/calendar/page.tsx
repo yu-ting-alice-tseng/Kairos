@@ -785,8 +785,8 @@ export default function CalendarPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 h-[72px] shrink-0 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10">
-        <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 px-6 h-[72px] shrink-0 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10 overflow-hidden">
+        <div className="flex items-center gap-4 shrink-0">
           <div className="flex items-center gap-2">
             <Calendar className="h-5 w-5 text-[#ab3326]" />
             <h1 className="text-2xl font-serif text-[#2a2420]">{t('calendar', language)}</h1>
@@ -806,7 +806,7 @@ export default function CalendarPage() {
             </Button>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 min-w-0 flex-1 justify-end overflow-hidden">
           {undoStackRef.current.length > 0 && (
             <Button
               variant="ghost"
@@ -822,7 +822,7 @@ export default function CalendarPage() {
           )}
           {eventsLoading && <Loader2 className="h-4 w-4 animate-spin text-[#a99873]" />}
           {calendarAccounts.length > 0 && (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1 min-w-0 overflow-x-auto scrollbar-none shrink-1">
               {calendarAccounts.map((acc) => {
                 const hidden = hiddenAccountIds.has(acc.id)
                 return (
@@ -830,7 +830,7 @@ export default function CalendarPage() {
                     key={acc.id}
                     title={hidden ? acc.name + ' (masqué)' : acc.name}
                     onClick={() => toggleAccount(acc.id)}
-                    className="flex items-center gap-1.5 rounded-full px-2 py-0.5 border transition-all text-xs hover:opacity-80"
+                    className="flex items-center gap-1 rounded-full px-1.5 py-0.5 border transition-all text-xs hover:opacity-80 shrink-0"
                     style={{
                       borderColor: hidden ? '#d1c9b8' : acc.color,
                       backgroundColor: hidden ? 'transparent' : acc.color + '20',
@@ -839,8 +839,8 @@ export default function CalendarPage() {
                       opacity: hidden ? 0.5 : 1,
                     }}
                   >
-                    <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: hidden ? '#a99873' : acc.color }} />
-                    <span className="max-w-[80px] truncate">{acc.name}</span>
+                    <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: hidden ? '#a99873' : acc.color }} />
+                    <span className="max-w-[48px] truncate">{acc.name}</span>
                   </button>
                 )
               })}
@@ -848,7 +848,7 @@ export default function CalendarPage() {
                 <button
                   title={habitsHidden ? (language === 'zh' ? '習慣（已隱藏）' : language === 'fr' ? 'Habitudes (masquées)' : 'Habits (hidden)') : (language === 'zh' ? '習慣' : language === 'fr' ? 'Habitudes' : 'Habits')}
                   onClick={() => toggleHabitsView('calendar')}
-                  className="flex items-center gap-1.5 rounded-full px-2 py-0.5 border transition-all text-xs hover:opacity-80"
+                  className="flex items-center gap-1 rounded-full px-1.5 py-0.5 border transition-all text-xs hover:opacity-80 shrink-0"
                   style={{
                     borderColor: habitsHidden ? '#d1c9b8' : '#22c55e',
                     backgroundColor: habitsHidden ? 'transparent' : '#22c55e20',
@@ -954,7 +954,7 @@ export default function CalendarPage() {
         )}
       </div>
 
-      {/* Calendar grid — swipe to change week */}
+      {/* Calendar grid — swipe / pointer-drag anywhere to change week */}
       <div
         className={cn('flex-1 overflow-auto min-w-0', isDragging && 'cursor-grabbing select-none')}
         style={{ touchAction: 'pan-y' }}
@@ -962,9 +962,22 @@ export default function CalendarPage() {
         onTouchEnd={(e) => {
           if (touchStartXRef.current === null) return
           const delta = e.changedTouches[0].clientX - touchStartXRef.current
-          if (delta > 40) setStartDate((d) => addDays(d, -1))
-          else if (delta < -40) setStartDate((d) => addDays(d, 1))
           touchStartXRef.current = null
+          if (Math.abs(delta) < 60) return
+          setStartDate((d) => addDays(d, delta > 0 ? -7 : 7))
+        }}
+        onPointerDown={(e) => {
+          // Only track background drags (not on interactive elements or during event/task drag)
+          const target = e.target as HTMLElement
+          if (isDragging || target.closest('button,a,[role="button"]')) return
+          touchStartXRef.current = e.clientX
+        }}
+        onPointerUp={(e) => {
+          if (touchStartXRef.current === null || e.pointerType === 'touch') return
+          const delta = e.clientX - touchStartXRef.current
+          touchStartXRef.current = null
+          if (Math.abs(delta) < 80) return
+          setStartDate((d) => addDays(d, delta > 0 ? -7 : 7))
         }}
       >
         <div className="min-w-[700px]">
