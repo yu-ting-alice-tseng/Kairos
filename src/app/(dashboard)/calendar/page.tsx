@@ -1642,15 +1642,14 @@ function EventDetailPanel({
 
   const openLinkDialog = () => {
     setLinkSearch('')
+    // Pre-select current chain members by task ID (immediate — from store, no network needed)
+    setSelectedLinkIds(new Set<string>([
+      ...(chainParent ? [chainParent.id] : []),
+      ...chainSiblings.map((s) => s.id),
+    ]))
     setLinkingChain(true)
-    // Pre-select events whose tasks are already in this chain
-    const chainEventIds = new Set<string>([
-      ...(chainParent?.calendarEventId ? [chainParent.calendarEventId] : []),
-      ...chainSiblings.map((s) => s.calendarEventId).filter((id): id is string => !!id),
-      event.id,
-    ])
-    setSelectedLinkIds(chainEventIds)
-    // Load events in background after dialog opens
+    // Background: refresh tasks + fetch calendar events for events-without-tasks section
+    // Do NOT clear linkCalEvents — keep previous results visible while new fetch loads
     setLinkEventsLoading(true)
     const start = new Date(); start.setFullYear(start.getFullYear() - 2)
     const end = new Date(); end.setFullYear(end.getFullYear() + 2)
@@ -1659,8 +1658,8 @@ function EventDetailPanel({
       fetch(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}`),
     ]).then(async ([, evRes]) => {
       if (evRes.ok) setLinkCalEvents(await evRes.json())
-      setLinkEventsLoading(false)
-    })
+    }).catch(() => { /* calendar events section stays with previous data */ })
+      .finally(() => { setLinkEventsLoading(false) })
   }
 
   const handleUnlinkFromChain = async (taskId: string) => {
@@ -1680,32 +1679,35 @@ function EventDetailPanel({
     if (selectedLinkIds.size === 0) return
     setLinkSaving(true)
     try {
-      // selectedLinkIds = calendarEvent IDs. Resolve to task IDs, creating tasks where needed.
-      const eventIdToTaskId = new Map<string, string>()
-      await Promise.all([...selectedLinkIds].map(async (eventId) => {
-        const existing = tasks.find((t) => t.calendarEventId === eventId)
-        if (existing) { eventIdToTaskId.set(eventId, existing.id); return }
-        // Auto-create a task for this calendar event
-        const calEv = linkCalEvents.find((e) => e.id === eventId)
-        if (!calEv) return
+      // selectedLinkIds may contain task IDs OR calendar event IDs (for events without tasks).
+      // Resolve everything to task IDs, auto-creating tasks for event-only selections.
+      const resolved = await Promise.all([...selectedLinkIds].map(async (id): Promise<string | null> => {
+        // Known task ID
+        if (tasks.find((t) => t.id === id)) return id
+        // Task already linked to this event ID
+        const taskWithEvent = tasks.find((t) => t.calendarEventId === id)
+        if (taskWithEvent) return taskWithEvent.id
+        // Calendar event without a task — auto-create
+        const calEv = linkCalEvents.find((e) => e.id === id)
+        if (!calEv) return null
         const deadline = calEv.allDay ? calEv.start : calEv.end
         const res = await fetch('/api/tasks', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             title: calEv.title,
-            calendarEventId: eventId,
+            calendarEventId: id,
             calendarAccountId: calEv.calendarAccountId,
             deadline: deadline ? new Date(deadline).toISOString() : undefined,
           }),
         })
-        if (res.ok) { const t = await res.json(); addTask(t); eventIdToTaskId.set(eventId, t.id) }
+        if (!res.ok) return null
+        const t = await res.json(); addTask(t); return t.id as string
       }))
-
-      const taskIds = [...selectedLinkIds].map((eid) => eventIdToTaskId.get(eid)).filter((id): id is string => !!id)
+      const resolvedTaskIds = resolved.filter((id): id is string => !!id)
 
       if (chainParent) {
-        await Promise.all(taskIds
+        await Promise.all(resolvedTaskIds
           .filter((id) => id !== chainParent.id)
           .map((id) => fetch(`/api/tasks/${id}`, {
             method: 'PATCH',
@@ -1715,16 +1717,16 @@ function EventDetailPanel({
         )
       } else {
         // Task with latest deadline becomes the chain root
-        const resolvedTasks = taskIds
+        const allResolved = resolvedTaskIds
           .map((id) => tasks.find((t) => t.id === id))
           .filter((t): t is Task => !!t)
-        resolvedTasks.sort((a, b) => {
+        allResolved.sort((a, b) => {
           const da = a.deadline ? new Date(String(a.deadline)).getTime() : 0
           const db = b.deadline ? new Date(String(b.deadline)).getTime() : 0
           return db - da
         })
-        const rootId = resolvedTasks[0]?.id ?? taskIds[0]
-        const childIds = taskIds.filter((id) => id !== rootId)
+        const rootId = allResolved[0]?.id ?? resolvedTaskIds[0]
+        const childIds = resolvedTaskIds.filter((id) => id !== rootId)
         await fetch(`/api/tasks/${rootId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -2053,52 +2055,76 @@ function EventDetailPanel({
                 />
               </div>
               <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1">
-                {linkEventsLoading ? (
-                  <div className="flex items-center justify-center py-6 text-[#a99873] text-xs gap-2">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    {lang === 'zh' ? '載入行事曆…' : lang === 'fr' ? 'Chargement…' : 'Loading…'}
-                  </div>
-                ) : linkCalEvents
-                  .filter((ev) => !linkSearch || ev.title.toLowerCase().includes(linkSearch.toLowerCase()))
+                {/* Tasks from DB — always shown immediately */}
+                {tasks
+                  .filter((t) => !linkSearch || t.title.toLowerCase().includes(linkSearch.toLowerCase()))
                   .sort((a, b) => {
-                    // Current event first, then by relevance, then by date
-                    if (a.id === event.id) return -1
-                    if (b.id === event.id) return 1
-                    return new Date(a.start).getTime() - new Date(b.start).getTime()
+                    const aChain = a.id === chainParent?.id || chainSiblings.some((s) => s.id === a.id)
+                    const bChain = b.id === chainParent?.id || chainSiblings.some((s) => s.id === b.id)
+                    if (aChain !== bChain) return aChain ? -1 : 1
+                    const da = a.deadline ? new Date(String(a.deadline)).getTime() : 0
+                    const db = b.deadline ? new Date(String(b.deadline)).getTime() : 0
+                    return da - db
                   })
+                  .map((t) => {
+                    const selected = selectedLinkIds.has(t.id)
+                    const isCurrentChainMember = t.id === chainParent?.id || chainSiblings.some((s) => s.id === t.id)
+                    const inOtherChain = chainedTaskIds.has(t.id) && !isCurrentChainMember
+                    return (
+                      <button
+                        key={t.id}
+                        disabled={inOtherChain}
+                        onClick={() => !inOtherChain && setSelectedLinkIds((prev) => {
+                          const next = new Set(prev)
+                          selected ? next.delete(t.id) : next.add(t.id)
+                          return next
+                        })}
+                        className={cn(
+                          'flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 text-left transition-colors border',
+                          inOtherChain ? 'opacity-40 cursor-not-allowed border-transparent' : selected ? 'bg-red-50 border-red-200' : 'hover:bg-[#f3ecdd] border-transparent',
+                        )}
+                      >
+                        <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-red-600 border-red-600' : 'border-[#c4b48a]'}`}>
+                          {selected && <Check className="h-2.5 w-2.5 text-white" />}
+                        </span>
+                        <span className="truncate flex-1 text-[#3a3326]">{t.title}</span>
+                        {inOtherChain && <span className="shrink-0 text-[9px] text-[#c4b48a] bg-[#f3ecdd] rounded px-1">{lang === 'zh' ? '已在其他任務鏈' : lang === 'fr' ? 'autre chaîne' : 'other chain'}</span>}
+                        {t.deadline && <span className="text-[#a99873] shrink-0 text-[10px]">{fmtDate(new Date(String(t.deadline)), lang)}</span>}
+                      </button>
+                    )
+                  })}
+                {/* Calendar events without tasks — shown after background fetch */}
+                {linkEventsLoading && (
+                  <div className="flex items-center gap-1.5 px-2 py-1 text-[#a99873] text-[10px]">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    {lang === 'zh' ? '載入其他行事曆事件…' : lang === 'fr' ? 'Chargement des événements…' : 'Loading calendar events…'}
+                  </div>
+                )}
+                {!linkEventsLoading && linkCalEvents
+                  .filter((ev) => !tasks.some((t) => t.calendarEventId === ev.id))
+                  .filter((ev) => !linkSearch || ev.title.toLowerCase().includes(linkSearch.toLowerCase()))
+                  .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
                   .map((calEv) => {
-                    const linkedTask = tasks.find((t) => t.calendarEventId === calEv.id)
                     const selected = selectedLinkIds.has(calEv.id)
-                    const isCurrentChainMember = calEv.id === event.id
-                      || calEv.id === chainParent?.calendarEventId
-                      || chainSiblings.some((s) => s.calendarEventId === calEv.id)
-                    const linkedTaskInOtherChain = linkedTask && chainedTaskIds.has(linkedTask.id) && !isCurrentChainMember
-                    const disabled = !!linkedTaskInOtherChain
                     return (
                       <button
                         key={calEv.id}
-                        disabled={disabled}
-                        onClick={() => !disabled && setSelectedLinkIds((prev) => {
+                        onClick={() => setSelectedLinkIds((prev) => {
                           const next = new Set(prev)
                           selected ? next.delete(calEv.id) : next.add(calEv.id)
                           return next
                         })}
                         className={cn(
                           'flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 text-left transition-colors border',
-                          disabled ? 'opacity-40 cursor-not-allowed border-transparent'
-                            : selected ? 'bg-red-50 border-red-200'
-                            : 'hover:bg-[#f3ecdd] border-transparent',
+                          selected ? 'bg-red-50 border-red-200' : 'hover:bg-[#f3ecdd] border-transparent',
                         )}
                       >
                         <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-red-600 border-red-600' : 'border-[#c4b48a]'}`}>
                           {selected && <Check className="h-2.5 w-2.5 text-white" />}
                         </span>
                         <span className="truncate flex-1 text-[#3a3326]">{calEv.title}</span>
-                        {disabled && <span className="shrink-0 text-[9px] text-[#c4b48a] bg-[#f3ecdd] rounded px-1">{lang === 'zh' ? '已在其他任務鏈' : lang === 'fr' ? 'autre chaîne' : 'other chain'}</span>}
-                        {!linkedTask && <span className="shrink-0 text-[9px] text-emerald-600 bg-emerald-50 rounded px-1">{lang === 'zh' ? '將建立任務' : lang === 'fr' ? 'créer tâche' : 'new task'}</span>}
-                        <span className="text-[#a99873] shrink-0 text-[10px]">
-                          {fmtDate(new Date(calEv.start), lang)}
-                        </span>
+                        <span className="shrink-0 text-[9px] text-emerald-600 bg-emerald-50 rounded px-1">{lang === 'zh' ? '將建立任務' : lang === 'fr' ? 'créer tâche' : 'new task'}</span>
+                        <span className="text-[#a99873] shrink-0 text-[10px]">{fmtDate(new Date(calEv.start), lang)}</span>
                       </button>
                     )
                   })}
