@@ -81,36 +81,64 @@ export async function GET(req: NextRequest) {
 
     const existingTasks = await prisma.task.findMany({
       where: { userId, calendarEventId: { in: syncEventIds } },
-      select: { id: true, calendarEventId: true, title: true, deadline: true, calendarAccountId: true },
+      select: { id: true, calendarEventId: true, title: true, deadline: true, calendarAccountId: true, importance: true, urgency: true, parentTaskId: true },
     })
-    const existingByEventId = new Map(existingTasks.map((t) => [t.calendarEventId!, t]))
+
+    // Determine which tasks are chain parents (other tasks point to them)
+    const taskIdSet = new Set(existingTasks.map((t) => t.id))
+    const chainParentIds = new Set(
+      existingTasks.filter((t) => t.parentTaskId && taskIdSet.has(t.parentTaskId)).map((t) => t.parentTaskId!)
+    )
+
+    // Deduplicate: if multiple tasks share the same calendarEventId, keep the most valuable one
+    function taskValue(t: typeof existingTasks[number]): number {
+      let score = 0
+      if (chainParentIds.has(t.id)) score += 100   // is a chain parent
+      if (t.parentTaskId) score += 50               // is in a chain
+      if (t.importance !== 5 || t.urgency !== 5) score += 10  // user-configured
+      return score
+    }
+    const byEventId = new Map<string, typeof existingTasks[number]>()
+    const dupeIds: string[] = []
+    for (const t of existingTasks) {
+      const key = t.calendarEventId!
+      const existing = byEventId.get(key)
+      if (!existing) { byEventId.set(key, t); continue }
+      if (taskValue(t) > taskValue(existing)) {
+        dupeIds.push(existing.id)
+        byEventId.set(key, t)
+      } else {
+        dupeIds.push(t.id)
+      }
+    }
+    if (dupeIds.length > 0) {
+      // Unlink children of tasks being deleted before removing them
+      await prisma.task.updateMany({ where: { parentTaskId: { in: dupeIds }, userId }, data: { parentTaskId: null } })
+      await prisma.task.deleteMany({ where: { id: { in: dupeIds }, userId } })
+    }
 
     // Auto-create tasks for events that don't have one yet
-    const toCreate = syncableEvents.filter((e) => !existingByEventId.has(e.id))
-    if (toCreate.length > 0) {
-      // Sequential creates to avoid race conditions (no unique constraint on calendarEventId)
-      for (const e of toCreate) {
-        const deadline = e.allDay ? new Date(e.start) : new Date(e.end)
-        await prisma.task.create({
-          data: {
-            userId,
-            title: e.title,
-            calendarEventId: e.id,
-            calendarAccountId: e.calendarAccountId ?? null,
-            deadline,
-            importance: 5,
-            urgency: 5,
-            priority: calculatePriority(5, 5),
-            status: 'PENDING',
-          },
-        })
-      }
+    const toCreate = syncableEvents.filter((e) => !byEventId.has(e.id))
+    for (const e of toCreate) {
+      const deadline = e.allDay ? new Date(e.start) : new Date(e.end)
+      await prisma.task.create({
+        data: {
+          userId,
+          title: e.title,
+          calendarEventId: e.id,
+          calendarAccountId: e.calendarAccountId ?? null,
+          deadline,
+          importance: 5,
+          urgency: 5,
+          priority: calculatePriority(5, 5),
+          status: 'PENDING',
+        },
+      })
     }
 
     // Sync title / deadline / calendarAccountId from calendar event → task
-    // Calendar is the source of truth: any change in Google Calendar propagates here
     for (const e of syncableEvents) {
-      const task = existingByEventId.get(e.id)
+      const task = byEventId.get(e.id)
       if (!task) continue
       const evDeadline = e.allDay ? new Date(e.start) : new Date(e.end)
       const taskDeadline = task.deadline ? new Date(String(task.deadline)) : null
@@ -128,13 +156,16 @@ export async function GET(req: NextRequest) {
     }
 
     // Delete tasks whose linked event no longer exists in this window
-    // (only for tasks with scheduledStart in range — avoids touching out-of-window tasks)
+    // Include both scheduled tasks and all-day tasks (deadline-based) to catch renamed/deleted events
     const fetchedEventIds = new Set(syncEventIds)
     const linkedInWindow = await prisma.task.findMany({
       where: {
         userId,
         calendarEventId: { not: null },
-        scheduledStart: { gte: timeMin, lte: timeMax },
+        OR: [
+          { scheduledStart: { gte: timeMin, lte: timeMax } },
+          { scheduledStart: null, deadline: { gte: timeMin, lte: timeMax } },
+        ],
       },
       select: { id: true, calendarEventId: true },
     })
@@ -142,7 +173,9 @@ export async function GET(req: NextRequest) {
       .filter((t) => t.calendarEventId && !fetchedEventIds.has(t.calendarEventId))
       .map((t) => t.id)
     if (orphanIds.length > 0) {
-      await prisma.task.deleteMany({ where: { id: { in: orphanIds } } })
+      // Unlink children before deleting to avoid broken parentTaskId references
+      await prisma.task.updateMany({ where: { parentTaskId: { in: orphanIds }, userId }, data: { parentTaskId: null } })
+      await prisma.task.deleteMany({ where: { id: { in: orphanIds }, userId } })
     }
   } catch (err) {
     console.error('[calendar/events] task sync failed:', err)

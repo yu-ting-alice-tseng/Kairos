@@ -205,6 +205,15 @@ export default function TodayPage() {
 
   useEffect(() => { loadData() }, [loadData])
 
+  // Background calendar sync on mount (separate from loadData to avoid re-triggering)
+  useEffect(() => {
+    fetch('/api/tasks/sync-calendar', { method: 'POST' })
+      .then((r) => r.ok ? r.json() : null)
+      .then((result) => { if (result?.synced > 0 || result?.dupes > 0) loadData() })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     if (calendarAccounts.length === 0) return
     const fetchEvents = async () => {

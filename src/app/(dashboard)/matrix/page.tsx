@@ -45,7 +45,15 @@ export default function MatrixPage() {
     setLoading(false)
   }, [setTasks])
 
-  useEffect(() => { loadTasks() }, [loadTasks])
+  useEffect(() => {
+    loadTasks()
+    // Background calendar sync: update task titles/dates from Google Calendar
+    fetch('/api/tasks/sync-calendar', { method: 'POST' })
+      .then((r) => r.ok ? r.json() : null)
+      .then((result) => { if (result?.synced > 0 || result?.dupes > 0) loadTasks() })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Auto-import today's all-day calendar events as tasks (no scheduled time = belongs in matrix)
   const importedRef = React.useRef(false)

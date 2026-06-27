@@ -681,6 +681,14 @@ export default function RetroplanningPage() {
   // Refresh tasks from API on mount so renamed/added/deleted tasks are always up to date
   useEffect(() => {
     fetch('/api/tasks').then((r) => r.ok ? r.json() : null).then((data) => { if (data) setTasks(data) }).catch(() => {})
+    // Background calendar sync: update task titles/dates from Google Calendar
+    fetch('/api/tasks/sync-calendar', { method: 'POST' })
+      .then((r) => r.ok ? r.json() : null)
+      .then((result) => {
+        if (result?.synced > 0 || result?.dupes > 0) {
+          fetch('/api/tasks').then((r) => r.ok ? r.json() : null).then((data) => { if (data) setTasks(data) })
+        }
+      }).catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
