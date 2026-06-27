@@ -5,6 +5,7 @@ import { listGoogleEvents, createGoogleEvent, updateGoogleEvent, deleteGoogleEve
 import { listOutlookEvents } from '@/lib/calendar/outlook'
 import { listNotionEvents } from '@/lib/calendar/notion'
 import { CalendarEvent } from '@/types'
+import { calculatePriority } from '@/lib/utils'
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -73,11 +74,63 @@ export async function GET(req: NextRequest) {
     })
   )
 
-  // Delete tasks whose linked calendar event no longer exists in this time window.
-  // Only checks tasks that have both calendarEventId and scheduledStart within the range.
+  // Sync tasks with fetched calendar events (non-habit events only)
   try {
-    const fetchedEventIds = new Set(allEvents.map((e) => e.id))
-    const linkedTasks = await prisma.task.findMany({
+    const syncableEvents = allEvents.filter((e) => !e.habitId)
+    const syncEventIds = syncableEvents.map((e) => e.id)
+
+    const existingTasks = await prisma.task.findMany({
+      where: { userId, calendarEventId: { in: syncEventIds } },
+      select: { id: true, calendarEventId: true, title: true, deadline: true, calendarAccountId: true },
+    })
+    const existingByEventId = new Map(existingTasks.map((t) => [t.calendarEventId!, t]))
+
+    // Auto-create tasks for events that don't have one yet
+    const toCreate = syncableEvents.filter((e) => !existingByEventId.has(e.id))
+    if (toCreate.length > 0) {
+      // Sequential creates to avoid race conditions (no unique constraint on calendarEventId)
+      for (const e of toCreate) {
+        const deadline = e.allDay ? new Date(e.start) : new Date(e.end)
+        await prisma.task.create({
+          data: {
+            userId,
+            title: e.title,
+            calendarEventId: e.id,
+            calendarAccountId: e.calendarAccountId ?? null,
+            deadline,
+            importance: 5,
+            urgency: 5,
+            priority: calculatePriority(5, 5),
+            status: 'PENDING',
+          },
+        })
+      }
+    }
+
+    // Sync title / deadline / calendarAccountId from calendar event → task
+    // Calendar is the source of truth: any change in Google Calendar propagates here
+    for (const e of syncableEvents) {
+      const task = existingByEventId.get(e.id)
+      if (!task) continue
+      const evDeadline = e.allDay ? new Date(e.start) : new Date(e.end)
+      const taskDeadline = task.deadline ? new Date(String(task.deadline)) : null
+      const deadlineChanged = evDeadline.toDateString() !== taskDeadline?.toDateString()
+      const titleChanged = e.title !== task.title
+      const accountChanged = (e.calendarAccountId ?? null) !== task.calendarAccountId
+      if (titleChanged || deadlineChanged || accountChanged) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const updateData: Record<string, any> = {}
+        if (titleChanged) updateData.title = e.title
+        if (deadlineChanged) updateData.deadline = evDeadline
+        if (accountChanged) updateData.calendarAccountId = e.calendarAccountId ?? null
+        await prisma.task.update({ where: { id: task.id }, data: updateData })
+      }
+    }
+
+    // Delete tasks whose linked event no longer exists in this window
+    // (only for tasks with scheduledStart in range — avoids touching out-of-window tasks)
+    const fetchedEventIds = new Set(syncEventIds)
+    const linkedInWindow = await prisma.task.findMany({
       where: {
         userId,
         calendarEventId: { not: null },
@@ -85,14 +138,14 @@ export async function GET(req: NextRequest) {
       },
       select: { id: true, calendarEventId: true },
     })
-    const orphanIds = linkedTasks
+    const orphanIds = linkedInWindow
       .filter((t) => t.calendarEventId && !fetchedEventIds.has(t.calendarEventId))
       .map((t) => t.id)
     if (orphanIds.length > 0) {
       await prisma.task.deleteMany({ where: { id: { in: orphanIds } } })
     }
   } catch (err) {
-    console.error('[calendar/events] orphan task cleanup failed:', err)
+    console.error('[calendar/events] task sync failed:', err)
   }
 
   return NextResponse.json(allEvents)
