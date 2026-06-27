@@ -41,7 +41,7 @@ export default function MatrixPage() {
   const loadTasks = useCallback(async () => {
     setLoading(true)
     const res = await fetch('/api/tasks')
-    setTasks(await res.json())
+    if (res.ok) setTasks(await res.json())
     setLoading(false)
   }, [setTasks])
 
@@ -147,7 +147,9 @@ export default function MatrixPage() {
     if (!task) return
     const newStatus = task.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED'
     updateTask(id, { status: newStatus })
-    await fetch(`/api/tasks/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: newStatus }) })
+    const res = await fetch(`/api/tasks/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: newStatus }) })
+    if (res.ok) { const data = await res.json(); updateTask(id, data) }
+    else updateTask(id, task)
   }
 
   const handleTaskClick = (task: Task) => {

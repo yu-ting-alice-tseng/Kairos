@@ -210,7 +210,7 @@ export default function CalendarPage() {
   const loadTasks = useCallback(async () => {
     setLoading(true)
     const res = await fetch('/api/tasks')
-    setTasks(await res.json())
+    if (res.ok) setTasks(await res.json())
     setLoading(false)
   }, [setTasks])
 
@@ -467,11 +467,13 @@ export default function CalendarPage() {
     const isCompleted = task.status === 'COMPLETED'
     const newStatus = isCompleted ? 'PENDING' : 'COMPLETED'
     updateTask(task.id, { status: newStatus, completedAt: isCompleted ? null : new Date().toISOString() })
-    await fetch(`/api/tasks/${task.id}`, {
+    const res = await fetch(`/api/tasks/${task.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus, completedAt: isCompleted ? null : new Date().toISOString() }),
+      body: JSON.stringify({ status: newStatus }),
     })
+    if (res.ok) { const data = await res.json(); updateTask(task.id, data) }
+    else updateTask(task.id, task)
   }, [updateTask])
 
   const handleCompleteHabit = useCallback(async (habit: Habit) => {
@@ -741,7 +743,8 @@ export default function CalendarPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scheduledStart: newStart.toISOString(), scheduledEnd: newEnd.toISOString() }),
     })
-    if (!res.ok) {
+    if (res.ok) { const data = await res.json(); updateTask(drag.task.id, data) }
+    else {
       updateTask(drag.task.id, { scheduledStart: drag.task.scheduledStart, scheduledEnd: drag.task.scheduledEnd })
       toast({ title: language === 'zh' ? '更新失敗' : language === 'fr' ? 'Erreur de mise à jour' : 'Failed to update', variant: 'error' })
     }
@@ -1527,6 +1530,24 @@ function EventDetailPanel({
   const [title, setTitle] = React.useState(event.title)
   const [start, setStart] = React.useState(toLocal(event.start))
   const [end, setEnd] = React.useState(toLocal(event.end))
+  const [renamingTaskId, setRenamingTaskId] = React.useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = React.useState('')
+  const renameInputRef = React.useRef<HTMLInputElement>(null)
+  const { updateTask, addTask } = useAppStore()
+
+  const commitTaskRename = React.useCallback(async (taskId: string, originalTitle: string) => {
+    const trimmed = renameDraft.trim()
+    setRenamingTaskId(null)
+    if (!trimmed || trimmed === originalTitle) return
+    updateTask(taskId, { title: trimmed })
+    const res = await fetch(`/api/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: trimmed }),
+    })
+    if (res.ok) { const data = await res.json(); updateTask(taskId, data) }
+    else updateTask(taskId, { title: originalTitle })
+  }, [renameDraft, updateTask])
 
   React.useEffect(() => {
     setEditing(false)
@@ -1573,9 +1594,12 @@ function EventDetailPanel({
   }, [event.title, tasks, chainParent])
 
   const [linkingChain, setLinkingChain] = React.useState(false)
+  // selectedLinkIds now stores calendarEvent IDs (not task IDs)
   const [selectedLinkIds, setSelectedLinkIds] = React.useState<Set<string>>(new Set())
   const [linkSaving, setLinkSaving] = React.useState(false)
   const [linkSearch, setLinkSearch] = React.useState('')
+  const [linkCalEvents, setLinkCalEvents] = React.useState<CalendarEvent[]>([])
+  const [linkEventsLoading, setLinkEventsLoading] = React.useState(false)
 
   // Relevance: count event-title chars found in task title (higher = more relevant)
   const relevanceScore = React.useCallback((taskTitle: string): number => {
@@ -1605,16 +1629,25 @@ function EventDetailPanel({
 
   const openLinkDialog = async () => {
     setLinkSearch('')
-    // Always fetch fresh tasks so renamed/deleted tasks are reflected
-    await onTasksRefresh()
+    setLinkEventsLoading(true)
+    // Fetch tasks + calendar events (broad range: 2 yrs back to 2 yrs forward)
+    const start = new Date(); start.setFullYear(start.getFullYear() - 2)
+    const end = new Date(); end.setFullYear(end.getFullYear() + 2)
+    const [, evRes] = await Promise.all([
+      onTasksRefresh(),
+      fetch(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}`),
+    ])
+    if (evRes.ok) setLinkCalEvents(await evRes.json())
+    setLinkEventsLoading(false)
     setLinkingChain(true)
-    // Auto-select tasks whose titles match event keywords (excluding completed)
-    const autoSelect = new Set(
-      tasks
-        .filter((t) => t.status !== 'COMPLETED' && eventKeywords.some((kw) => t.title.toLowerCase().includes(kw)))
-        .map((t) => t.id)
-    )
-    setSelectedLinkIds(autoSelect)
+    // Pre-select events whose tasks are already in this chain
+    const chainEventIds = new Set<string>([
+      ...(chainParent?.calendarEventId ? [chainParent.calendarEventId] : []),
+      ...chainSiblings.map((s) => s.calendarEventId).filter((id): id is string => !!id),
+      // Always include the current event itself
+      event.id,
+    ])
+    setSelectedLinkIds(chainEventIds)
   }
 
   const handleUnlinkFromChain = async (taskId: string) => {
@@ -1634,46 +1667,68 @@ function EventDetailPanel({
     if (selectedLinkIds.size === 0) return
     setLinkSaving(true)
     try {
+      // selectedLinkIds = calendarEvent IDs. Resolve to task IDs, creating tasks where needed.
+      const eventIdToTaskId = new Map<string, string>()
+      await Promise.all([...selectedLinkIds].map(async (eventId) => {
+        const existing = tasks.find((t) => t.calendarEventId === eventId)
+        if (existing) { eventIdToTaskId.set(eventId, existing.id); return }
+        // Auto-create a task for this calendar event
+        const calEv = linkCalEvents.find((e) => e.id === eventId)
+        if (!calEv) return
+        const deadline = calEv.allDay ? calEv.start : calEv.end
+        const res = await fetch('/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: calEv.title,
+            calendarEventId: eventId,
+            calendarAccountId: calEv.calendarAccountId,
+            deadline: deadline ? new Date(deadline).toISOString() : undefined,
+          }),
+        })
+        if (res.ok) { const t = await res.json(); addTask(t); eventIdToTaskId.set(eventId, t.id) }
+      }))
+
+      const taskIds = [...selectedLinkIds].map((eid) => eventIdToTaskId.get(eid)).filter((id): id is string => !!id)
+
       if (chainParent) {
-        // Chain root already exists — just set parentTaskId, preserve each task's own calendarEventId
-        await Promise.all([...selectedLinkIds].map((id) =>
-          fetch(`/api/tasks/${id}`, {
+        await Promise.all(taskIds
+          .filter((id) => id !== chainParent.id)
+          .map((id) => fetch(`/api/tasks/${id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ parentTaskId: chainParent.id }),
-          })
-        ))
+          }))
+        )
       } else {
-        // No chain root yet — task with latest deadline becomes root (retroplanning works backwards from final goal)
-        const selectedArr = [...selectedLinkIds]
+        // Task with latest deadline becomes the chain root
+        const resolvedTasks = taskIds
           .map((id) => tasks.find((t) => t.id === id))
           .filter((t): t is Task => !!t)
-        selectedArr.sort((a, b) => {
+        resolvedTasks.sort((a, b) => {
           const da = a.deadline ? new Date(String(a.deadline)).getTime() : 0
           const db = b.deadline ? new Date(String(b.deadline)).getTime() : 0
           return db - da
         })
-        const rootId = selectedArr[0]?.id ?? [...selectedLinkIds][0]
-        const childIds = selectedArr.slice(1).map((t) => t.id)
+        const rootId = resolvedTasks[0]?.id ?? taskIds[0]
+        const childIds = taskIds.filter((id) => id !== rootId)
         await fetch(`/api/tasks/${rootId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ calendarEventId: event.id }),
         })
         if (childIds.length > 0) {
-          await Promise.all(childIds.map((id) =>
-            fetch(`/api/tasks/${id}`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ parentTaskId: rootId }),
-            })
-          ))
+          await Promise.all(childIds.map((id) => fetch(`/api/tasks/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ parentTaskId: rootId }),
+          })))
         }
       }
       onTasksRefresh()
       setLinkingChain(false)
       setSelectedLinkIds(new Set())
-    } catch { /* ignore */ } finally { setLinkSaving(false) }
+    } catch (e) { console.error('Link failed', e) } finally { setLinkSaving(false) }
   }
 
   const links = React.useMemo(() => {
@@ -1816,9 +1871,29 @@ function EventDetailPanel({
                         onClick={() => navigateTo && onNavigateToDate?.(navigateTo, p.id)}
                       >
                         <GitBranch className={cn('h-3 w-3 shrink-0', done ? 'text-emerald-500' : overdue ? 'text-red-500' : 'text-red-600')} />
-                        <span className={cn('truncate flex-1 font-medium', done ? 'line-through text-[#a99873]' : overdue ? 'text-red-700' : isToday ? 'text-amber-800' : 'text-[#3a3326]')}>
-                          {p.title}
-                        </span>
+                        {renamingTaskId === p.id ? (
+                          <input
+                            ref={renameInputRef}
+                            value={renameDraft}
+                            onChange={(e) => setRenameDraft(e.target.value)}
+                            onBlur={() => commitTaskRename(p.id, p.title)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') { e.preventDefault(); renameInputRef.current?.blur() }
+                              if (e.key === 'Escape') { setRenamingTaskId(null) }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex-1 min-w-0 font-medium text-xs bg-white border border-red-300 rounded px-1 focus:outline-none focus:ring-1 focus:ring-red-400"
+                            autoFocus
+                          />
+                        ) : (
+                          <span
+                            className={cn('truncate flex-1 font-medium cursor-text', done ? 'line-through text-[#a99873]' : overdue ? 'text-red-700' : isToday ? 'text-amber-800' : 'text-[#3a3326]')}
+                            onDoubleClick={(e) => { e.stopPropagation(); setRenameDraft(p.title); setRenamingTaskId(p.id) }}
+                            title={lang === 'fr' ? 'Double-cliquer pour renommer' : lang === 'zh' ? '雙擊可重新命名' : 'Double-click to rename'}
+                          >
+                            {p.title}
+                          </span>
+                        )}
                         {displayDate && (
                           <span className={cn('shrink-0 text-[10px] flex items-center gap-0.5', done ? 'text-emerald-600' : overdue ? 'text-red-500' : isToday ? 'text-amber-700' : dl ? 'text-red-500' : 'text-[#a99873]')}>
                             {overdue && !done && <AlertTriangle className="h-2.5 w-2.5" />}
@@ -1847,16 +1922,33 @@ function EventDetailPanel({
                         )}
                       >
                         <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', done ? 'bg-emerald-400' : overdue ? 'bg-red-400' : isToday ? 'bg-amber-400' : 'bg-[#a99873]')} />
-                        <span
-                          className={cn(
-                            'truncate flex-1',
-                            done ? 'line-through text-[#a99873]' : overdue ? 'text-red-700' : isToday ? 'text-amber-800' : t.calendarEventId === event.id ? 'text-[#ab3326] font-medium' : 'text-[#3a3326]',
-                            navigateTo && onNavigateToDate ? 'cursor-pointer' : ''
-                          )}
-                          onClick={() => navigateTo && onNavigateToDate?.(navigateTo, t.id)}
-                        >
-                          {t.title}
-                        </span>
+                        {renamingTaskId === t.id ? (
+                          <input
+                            ref={renameInputRef}
+                            value={renameDraft}
+                            onChange={(e) => setRenameDraft(e.target.value)}
+                            onBlur={() => commitTaskRename(t.id, t.title)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') { e.preventDefault(); renameInputRef.current?.blur() }
+                              if (e.key === 'Escape') { setRenamingTaskId(null) }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex-1 min-w-0 text-xs bg-white border border-red-300 rounded px-1 focus:outline-none focus:ring-1 focus:ring-red-400"
+                            autoFocus
+                          />
+                        ) : (
+                          <span
+                            className={cn(
+                              'truncate flex-1 cursor-text',
+                              done ? 'line-through text-[#a99873]' : overdue ? 'text-red-700' : isToday ? 'text-amber-800' : t.calendarEventId === event.id ? 'text-[#ab3326] font-medium' : 'text-[#3a3326]',
+                            )}
+                            onDoubleClick={(e) => { e.stopPropagation(); setRenameDraft(t.title); setRenamingTaskId(t.id) }}
+                            onClick={() => navigateTo && onNavigateToDate?.(navigateTo, t.id)}
+                            title={lang === 'fr' ? 'Double-cliquer pour renommer' : lang === 'zh' ? '雙擊可重新命名' : 'Double-click to rename'}
+                          >
+                            {t.title}
+                          </span>
+                        )}
                         {displayDate && (
                           <span
                             className={cn('shrink-0 text-[10px] flex items-center gap-0.5 cursor-pointer', done ? 'text-emerald-600' : overdue ? 'text-red-500' : isToday ? 'text-amber-600' : dl ? 'text-[#a99873]' : 'text-[#c4b48a]')}
@@ -1938,46 +2030,58 @@ function EventDetailPanel({
                 <input
                   autoFocus
                   className="w-full border border-[#e2d6bc] rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-red-300 bg-white"
-                  placeholder={lang === 'zh' ? '搜尋任務...' : lang === 'fr' ? 'Rechercher une tâche...' : 'Search tasks...'}
+                  placeholder={lang === 'zh' ? '搜尋行事曆事件...' : lang === 'fr' ? 'Rechercher un événement...' : 'Search calendar events...'}
                   value={linkSearch}
                   onChange={(e) => setLinkSearch(e.target.value)}
                 />
               </div>
               <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1">
-                {tasks
-                  .filter((t) => !linkSearch || t.title.toLowerCase().includes(linkSearch.toLowerCase()))
-                  .sort((a, b) => relevanceScore(b.title) - relevanceScore(a.title))
-                  .map((t) => {
-                    const selected = selectedLinkIds.has(t.id)
-                    const isCurrentChainMember = t.id === chainParent?.id || chainSiblings.some((s) => s.id === t.id)
-                    const inOtherChain = chainedTaskIds.has(t.id) && !isCurrentChainMember
-                    const keywordMatch = !selected && !inOtherChain && eventKeywords.some((kw) => t.title.toLowerCase().includes(kw))
+                {linkEventsLoading ? (
+                  <div className="flex items-center justify-center py-6 text-[#a99873] text-xs gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    {lang === 'zh' ? '載入行事曆…' : lang === 'fr' ? 'Chargement…' : 'Loading…'}
+                  </div>
+                ) : linkCalEvents
+                  .filter((ev) => !linkSearch || ev.title.toLowerCase().includes(linkSearch.toLowerCase()))
+                  .sort((a, b) => {
+                    // Current event first, then by relevance, then by date
+                    if (a.id === event.id) return -1
+                    if (b.id === event.id) return 1
+                    return new Date(a.start).getTime() - new Date(b.start).getTime()
+                  })
+                  .map((calEv) => {
+                    const linkedTask = tasks.find((t) => t.calendarEventId === calEv.id)
+                    const selected = selectedLinkIds.has(calEv.id)
+                    const isCurrentChainMember = calEv.id === event.id
+                      || calEv.id === chainParent?.calendarEventId
+                      || chainSiblings.some((s) => s.calendarEventId === calEv.id)
+                    const linkedTaskInOtherChain = linkedTask && chainedTaskIds.has(linkedTask.id) && !isCurrentChainMember
+                    const disabled = !!linkedTaskInOtherChain
                     return (
                       <button
-                        key={t.id}
-                        disabled={inOtherChain}
-                        onClick={() => !inOtherChain && setSelectedLinkIds((prev) => {
+                        key={calEv.id}
+                        disabled={disabled}
+                        onClick={() => !disabled && setSelectedLinkIds((prev) => {
                           const next = new Set(prev)
-                          selected ? next.delete(t.id) : next.add(t.id)
+                          selected ? next.delete(calEv.id) : next.add(calEv.id)
                           return next
                         })}
                         className={cn(
                           'flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 text-left transition-colors border',
-                          inOtherChain ? 'opacity-40 cursor-not-allowed border-transparent' : selected ? 'bg-red-50 border-red-200' : 'hover:bg-[#f3ecdd] border-transparent',
-                          keywordMatch && !selected ? 'border-amber-200 bg-amber-50/50' : ''
+                          disabled ? 'opacity-40 cursor-not-allowed border-transparent'
+                            : selected ? 'bg-red-50 border-red-200'
+                            : 'hover:bg-[#f3ecdd] border-transparent',
                         )}
                       >
                         <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-red-600 border-red-600' : 'border-[#c4b48a]'}`}>
                           {selected && <Check className="h-2.5 w-2.5 text-white" />}
                         </span>
-                        <span className="truncate flex-1 text-[#3a3326]">{t.title}</span>
-                        {inOtherChain && <span className="shrink-0 text-[9px] text-[#c4b48a] bg-[#f3ecdd] rounded px-1">{lang === 'zh' ? '已在其他任務練' : lang === 'fr' ? 'autre chaîne' : 'other chain'}</span>}
-                        {t.scheduledStart && <span className="shrink-0 text-[9px] text-blue-400 bg-blue-50 rounded px-1">{lang === 'zh' ? '已排程' : lang === 'fr' ? 'planifié' : 'scheduled'}</span>}
-                        {t.deadline && (
-                          <span className="text-[#a99873] shrink-0 text-[10px]">
-                            {fmtDate(new Date(String(t.deadline)), lang)}
-                          </span>
-                        )}
+                        <span className="truncate flex-1 text-[#3a3326]">{calEv.title}</span>
+                        {disabled && <span className="shrink-0 text-[9px] text-[#c4b48a] bg-[#f3ecdd] rounded px-1">{lang === 'zh' ? '已在其他任務鏈' : lang === 'fr' ? 'autre chaîne' : 'other chain'}</span>}
+                        {!linkedTask && <span className="shrink-0 text-[9px] text-emerald-600 bg-emerald-50 rounded px-1">{lang === 'zh' ? '將建立任務' : lang === 'fr' ? 'créer tâche' : 'new task'}</span>}
+                        <span className="text-[#a99873] shrink-0 text-[10px]">
+                          {fmtDate(new Date(calEv.start), lang)}
+                        </span>
                       </button>
                     )
                   })}

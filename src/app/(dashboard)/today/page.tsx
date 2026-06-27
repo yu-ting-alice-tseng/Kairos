@@ -164,7 +164,8 @@ export default function TodayPage() {
   const habitsHidden = hideHabitsViews.includes('today')
   const { toast } = useGlobalToast()
 
-  const [loading, setLoading] = useState(true)
+  const initialHasData = React.useRef(tasks.length > 0)
+  const [loading, setLoading] = useState(!initialHasData.current)
   const [showTaskForm, setShowTaskForm] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [filterPanelOpen, setFilterPanelOpen] = useState(false)
@@ -189,14 +190,14 @@ export default function TodayPage() {
   const goToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); setSelectedDate(d) }
 
   const loadData = useCallback(async () => {
-    setLoading(true)
+    if (!initialHasData.current) setLoading(true)
     try {
       const [tasksRes, habitsRes] = await Promise.all([
         fetch('/api/tasks'),
         fetch('/api/habits'),
       ])
-      setTasks(await tasksRes.json())
-      setHabits(await habitsRes.json())
+      if (tasksRes.ok) setTasks(await tasksRes.json())
+      if (habitsRes.ok) setHabits(await habitsRes.json())
     } finally {
       setLoading(false)
     }
@@ -241,7 +242,9 @@ export default function TodayPage() {
 
   const isDueOnDate = (deadline: string | Date | null | undefined, date: Date) => {
     if (!deadline) return true
-    return isSameDay(new Date(String(deadline)), date)
+    const dl = new Date(String(deadline))
+    const endOfDate = new Date(date); endOfDate.setHours(23, 59, 59, 999)
+    return dl <= endOfDate // include overdue tasks (deadline in the past)
   }
 
   const applyKeywordRules = (task: Task): Task => {
@@ -298,12 +301,12 @@ export default function TodayPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: newStatus }),
     })
-    if (!res.ok) {
-      // Revert on error
+    if (res.ok) {
+      const data = await res.json(); updateTask(id, data)
+      if (!isCompleted) toast({ title: language === 'fr' ? 'Tâche terminée !' : language === 'zh' ? '任務已完成！' : 'Task completed!', variant: 'success' })
+    } else {
       updateTask(id, task)
       toast({ title: language === 'fr' ? 'Erreur de mise à jour' : language === 'zh' ? '更新失敗' : 'Update failed', variant: 'error' })
-    } else if (!isCompleted) {
-      toast({ title: language === 'fr' ? 'Tâche terminée !' : language === 'zh' ? '任務已完成！' : 'Task completed!', variant: 'success' })
     }
   }
 

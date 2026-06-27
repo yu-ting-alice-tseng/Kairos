@@ -121,8 +121,28 @@ function ChainCard({
   lang: 'fr' | 'en' | 'zh'
 }) {
   const { task, isParent } = node
+  const { updateTask } = useAppStore()
   const [completing, setCompleting] = React.useState(false)
+  const [editingTitle, setEditingTitle] = React.useState(false)
+  const [titleDraft, setTitleDraft] = React.useState(task.title)
+  const titleInputRef = React.useRef<HTMLInputElement>(null)
   const done = task.status === 'COMPLETED'
+
+  React.useEffect(() => { setTitleDraft(task.title) }, [task.title])
+
+  const commitTitle = async () => {
+    const trimmed = titleDraft.trim()
+    setEditingTitle(false)
+    if (!trimmed || trimmed === task.title) return
+    updateTask(task.id, { title: trimmed })
+    const res = await fetch(`/api/tasks/${task.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: trimmed }),
+    })
+    if (res.ok) { const data = await res.json(); updateTask(task.id, data) }
+    else updateTask(task.id, { title: task.title })
+  }
   const deadline = task.deadline ? new Date(task.deadline) : null
   const overdue = deadline && !done && isOverdue(deadline)
   const todayTask = deadline && !done && isToday(deadline)
@@ -181,13 +201,36 @@ function ChainCard({
           }
         </button>
         <div className="flex-1 min-w-0">
-          <p className={cn(
-            'font-medium text-[#2a2420] truncate',
-            isParent ? 'text-sm' : 'text-xs',
-            done && 'line-through text-[#a99873]'
-          )}>
-            {task.title}
-          </p>
+          {editingTitle ? (
+            <input
+              ref={titleInputRef}
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); titleInputRef.current?.blur() }
+                if (e.key === 'Escape') { setTitleDraft(task.title); setEditingTitle(false) }
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className={cn(
+                'w-full font-medium text-[#2a2420] bg-white border border-red-300 rounded px-1 focus:outline-none focus:ring-1 focus:ring-red-400',
+                isParent ? 'text-sm' : 'text-xs'
+              )}
+              autoFocus
+            />
+          ) : (
+            <p
+              onDoubleClick={(e) => { e.stopPropagation(); setEditingTitle(true); setTitleDraft(task.title) }}
+              className={cn(
+                'font-medium text-[#2a2420] truncate cursor-text',
+                isParent ? 'text-sm' : 'text-xs',
+                done && 'line-through text-[#a99873]'
+              )}
+              title={lang === 'fr' ? 'Double-cliquer pour renommer' : lang === 'zh' ? '雙擊可重新命名' : 'Double-click to rename'}
+            >
+              {task.title}
+            </p>
+          )}
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             {deadline && (
               <span className={cn(
