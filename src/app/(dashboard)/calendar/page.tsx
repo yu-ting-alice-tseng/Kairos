@@ -671,6 +671,19 @@ export default function CalendarPage() {
     }
   }, [])
 
+  // Shared document-level mousemove tracker — calculates grid cell from raw mouse position
+  const makeDragMouseMove = useCallback(() => (me: MouseEvent) => {
+    if (!gridRef.current) return
+    const rect = gridRef.current.getBoundingClientRect()
+    const HOUR_COL = 60
+    const relX = me.clientX - rect.left - HOUR_COL
+    const dayColWidth = (rect.width - HOUR_COL) / 7
+    const dayIdx = Math.max(0, Math.min(6, Math.floor(relX / dayColWidth)))
+    const relY = me.clientY - rect.top
+    const hour = Math.max(GRID_START_HOUR, Math.min(GRID_START_HOUR + HOURS.length - 1, GRID_START_HOUR + Math.floor(relY / 60)))
+    setDragPreview({ dayIdx, hour })
+  }, [])
+
   const startDrag = useCallback((e: React.MouseEvent, ev: CalendarEvent) => {
     if (!ev.editable) return
     e.preventDefault(); e.stopPropagation()
@@ -679,26 +692,40 @@ export default function CalendarPage() {
       : 60 * 60 * 1000
     dragRef.current = { event: ev, startMouseY: e.clientY, startMouseX: e.clientX, eventDurationMs: durationMs }
     setDraggingEventId(ev.id)
+    const onMouseMove = makeDragMouseMove()
     const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('mouseup', onMouseUp)
       const drag = dragRef.current; const preview = dragPreviewRef.current
       dragRef.current = null; setDraggingEventId(null); setDragPreview(null)
       if (drag) finalizeDrop(drag, preview)
     }
+    document.addEventListener('mousemove', onMouseMove)
     document.addEventListener('mouseup', onMouseUp)
-  }, [finalizeDrop])
+  }, [finalizeDrop, makeDragMouseMove])
 
   const startAllDayDrag = useCallback((e: React.MouseEvent, ev: CalendarEvent) => {
     if (!ev.editable) return
     e.preventDefault(); e.stopPropagation()
     dragRef.current = { event: ev, startMouseY: e.clientY, startMouseX: e.clientX, eventDurationMs: 60 * 60 * 1000 }
     setDraggingEventId(ev.id)
+    const onMouseMove = (me: MouseEvent) => {
+      if (!gridRef.current) return
+      const rect = gridRef.current.getBoundingClientRect()
+      const HOUR_COL = 60
+      const dayColWidth = (rect.width - HOUR_COL) / 7
+      const relX = me.clientX - rect.left - HOUR_COL
+      const dayIdx = Math.max(0, Math.min(6, Math.floor(relX / dayColWidth)))
+      setDragPreview({ dayIdx, hour: 0 })
+    }
     const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('mouseup', onMouseUp)
       const drag = dragRef.current; const preview = dragPreviewRef.current
       dragRef.current = null; setDraggingEventId(null); setDragPreview(null)
       if (drag && preview && preview.hour >= 7) finalizeDrop(drag, preview)
     }
+    document.addEventListener('mousemove', onMouseMove)
     document.addEventListener('mouseup', onMouseUp)
   }, [finalizeDrop])
 
@@ -727,14 +754,17 @@ export default function CalendarPage() {
     const end = task.scheduledEnd ? new Date(String(task.scheduledEnd)).getTime() : start + 60 * 60 * 1000
     taskDragRef.current = { task, startMouseY: e.clientY, startMouseX: e.clientX, taskDurationMs: Math.max(end - start, 30 * 60 * 1000) }
     setDraggingTaskId(task.id)
+    const onMouseMove = makeDragMouseMove()
     const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('mouseup', onMouseUp)
       const drag = taskDragRef.current; const preview = dragPreviewRef.current
       taskDragRef.current = null; setDraggingTaskId(null); setDragPreview(null)
       if (drag) finalizeTaskDrop(drag, preview)
     }
+    document.addEventListener('mousemove', onMouseMove)
     document.addEventListener('mouseup', onMouseUp)
-  }, [finalizeTaskDrop])
+  }, [finalizeTaskDrop, makeDragMouseMove])
 
   const handleCellMouseMove = useCallback((dayIdx: number, hour: number) => {
     if (dragRef.current || taskDragRef.current) setDragPreview({ dayIdx, hour })

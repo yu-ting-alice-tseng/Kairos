@@ -631,6 +631,12 @@ export default function RetroplanningPage() {
     }
   }
 
+  // Refresh tasks from API on mount so renamed/added/deleted tasks are always up to date
+  useEffect(() => {
+    fetch('/api/tasks').then((r) => r.ok ? r.json() : null).then((data) => { if (data) setTasks(data) }).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     runScan()
     const id = setInterval(runScan, 60_000)
@@ -1201,7 +1207,7 @@ export default function RetroplanningPage() {
                                   ? Math.round((parentDeadline.getTime() - childDeadline.getTime()) / 86400000)
                                   : undefined
                                 return (
-                                  <div key={child.id} className="relative">
+                                  <div key={child.id} className="relative group/child">
                                     <div className={cn(
                                       'absolute -left-4 top-3 h-3 w-3 rounded-full border-2 border-white',
                                       child.status === 'COMPLETED' ? 'bg-emerald-500' : 'bg-red-300'
@@ -1214,6 +1220,24 @@ export default function RetroplanningPage() {
                                       onComplete={handleCompleteTask}
                                       lang={lang}
                                     />
+                                    <button
+                                      onClick={async (e) => {
+                                        e.stopPropagation()
+                                        const res = await fetch(`/api/tasks/${child.id}`, {
+                                          method: 'PATCH',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ parentTaskId: null }),
+                                        })
+                                        if (res.ok) {
+                                          const fresh = await fetch('/api/tasks')
+                                          if (fresh.ok) setTasks(await fresh.json())
+                                        }
+                                      }}
+                                      className="absolute top-1 right-1 opacity-0 group-hover/child:opacity-100 p-0.5 rounded hover:bg-red-100 hover:text-red-500 text-[#c4b48a] transition-all"
+                                      title={lang === 'zh' ? '從任務練移除' : lang === 'fr' ? 'Retirer de la chaîne' : 'Remove from chain'}
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
                                   </div>
                                 )
                               })}
@@ -1433,24 +1457,25 @@ export default function RetroplanningPage() {
                   const bKw = b.title.toLowerCase().includes(linkDialog.parentTitle.split(/[\s|]+/)[0]?.toLowerCase() ?? '') ? -1 : 0
                   return aKw - bKw || a.title.localeCompare(b.title)
                 })
-                .slice(0, 40)
                 .map((t) => {
                   const selected = linkSelectedIds.has(t.id)
-                  const alreadyChild = !!t.parentTaskId
+                  // Already a child of a DIFFERENT chain — disable
+                  const inOtherChain = !!t.parentTaskId && t.parentTaskId !== linkDialog.parentId
                   return (
                     <button
                       key={t.id}
-                      onClick={() => setLinkSelectedIds((prev) => { const next = new Set(prev); selected ? next.delete(t.id) : next.add(t.id); return next })}
+                      disabled={inOtherChain}
+                      onClick={() => !inOtherChain && setLinkSelectedIds((prev) => { const next = new Set(prev); selected ? next.delete(t.id) : next.add(t.id); return next })}
                       className={cn(
                         'flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 text-left transition-colors border',
-                        selected ? 'bg-red-50 border-red-200' : 'hover:bg-[#f3ecdd] border-transparent'
+                        inOtherChain ? 'opacity-40 cursor-not-allowed border-transparent' : selected ? 'bg-red-50 border-red-200' : 'hover:bg-[#f3ecdd] border-transparent'
                       )}
                     >
                       <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-red-600 border-red-600' : 'border-[#c4b48a]'}`}>
                         {selected && <Check className="h-2.5 w-2.5 text-white" />}
                       </span>
                       <span className="truncate flex-1 text-[#3a3326]">{t.title}</span>
-                      {alreadyChild && <span className="shrink-0 text-[9px] text-[#c4b48a] bg-[#f3ecdd] rounded px-1">{lang === 'zh' ? '已連結' : lang === 'fr' ? 'chaîne' : 'chain'}</span>}
+                      {inOtherChain && <span className="shrink-0 text-[9px] text-[#c4b48a] bg-[#f3ecdd] rounded px-1">{lang === 'zh' ? '已在其他任務練' : lang === 'fr' ? 'autre chaîne' : 'other chain'}</span>}
                       {t.deadline && <span className="text-[#a99873] shrink-0 text-[10px]">{formatDateShort(new Date(t.deadline), lang)}</span>}
                     </button>
                   )
