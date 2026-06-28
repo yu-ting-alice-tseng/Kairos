@@ -196,6 +196,7 @@ export default function CalendarPage() {
 
   // Touch swipe refs
   const touchStartXRef = useRef<number | null>(null)
+  const wheelAccRef = useRef(0)
 
   const weekDaysRef = useRef<Date[]>([])
   const dragPreviewRef = useRef<{ dayIdx: number; hour: number } | null>(null)
@@ -799,13 +800,13 @@ export default function CalendarPage() {
             <h1 className="text-2xl font-serif text-[#2a2420]">{t('calendar', language)}</h1>
           </div>
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon-sm" onClick={() => setStartDate((d) => addDays(d, -1))}>
+            <Button variant="ghost" size="icon-sm" onClick={() => setStartDate((d) => addDays(d, -7))}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <span className="text-sm font-medium text-[#5c5347] px-2 min-w-[160px] text-center">
               {format(weekStart, 'dd MMM', { locale })} – {format(weekEnd, 'dd MMM yyyy', { locale })}
             </span>
-            <Button variant="ghost" size="icon-sm" onClick={() => setStartDate((d) => addDays(d, 1))}>
+            <Button variant="ghost" size="icon-sm" onClick={() => setStartDate((d) => addDays(d, 7))}>
               <ChevronRight className="h-4 w-4" />
             </Button>
             <Button variant="outline" size="sm" onClick={() => { const d = new Date(); d.setHours(0,0,0,0); const dow = d.getDay(); d.setDate(d.getDate() + (dow === 0 ? 1 : 1 - dow)); setStartDate(d) }}>
@@ -985,6 +986,16 @@ export default function CalendarPage() {
           touchStartXRef.current = null
           if (Math.abs(delta) < 80) return
           setStartDate((d) => addDays(d, delta > 0 ? -7 : 7))
+        }}
+        onWheel={(e) => {
+          // Horizontal scroll (trackpad swipe) → shift date by days
+          if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return
+          wheelAccRef.current += e.deltaX
+          const days = Math.trunc(wheelAccRef.current / 40)
+          if (days !== 0) {
+            wheelAccRef.current -= days * 40
+            setStartDate((d) => addDays(d, days))
+          }
         }}
       >
         <div className="min-w-[700px]">
@@ -2061,7 +2072,17 @@ function EventDetailPanel({
               <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1">
                 {/* Tasks from DB — always shown immediately */}
                 {tasks
-                  .filter((t) => !linkSearch || t.title.toLowerCase().includes(linkSearch.toLowerCase()))
+                  .filter((t) => {
+                    if (!linkSearch) return true
+                    const q = linkSearch.toLowerCase()
+                    if (t.title.toLowerCase().includes(q)) return true
+                    // Also match by linked calendar event title (task may have a stale title)
+                    if (t.calendarEventId) {
+                      const ev = linkCalEvents.find((e) => e.id === t.calendarEventId)
+                      if (ev?.title.toLowerCase().includes(q)) return true
+                    }
+                    return false
+                  })
                   .sort((a, b) => {
                     const aChain = a.id === chainParent?.id || chainSiblings.some((s) => s.id === a.id)
                     const bChain = b.id === chainParent?.id || chainSiblings.some((s) => s.id === b.id)
