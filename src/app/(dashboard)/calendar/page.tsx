@@ -209,10 +209,9 @@ export default function CalendarPage() {
   weekDaysRef.current = weekDays
 
   const loadTasks = useCallback(async () => {
-    setLoading(true)
     const res = await fetch('/api/tasks')
     if (res.ok) setTasks(await res.json())
-    setLoading(false)
+    setLoading(false) // only ever sets to false — initial true cleared after first load
   }, [setTasks])
 
   const loadExternalEvents = useCallback(async () => {
@@ -1614,6 +1613,16 @@ function EventDetailPanel({
         return a.title.localeCompare(b.title)
       })
   }, [chainParent, tasks, directlyLinkedTasks])
+  // All chain tasks sorted by deadline descending (latest first) — for display only
+  const allChainTasksSorted = React.useMemo(() => {
+    if (!chainParent) return []
+    return [chainParent, ...chainSiblings].sort((a, b) => {
+      const da = a.deadline ? new Date(String(a.deadline)).getTime() : 0
+      const db = b.deadline ? new Date(String(b.deadline)).getTime() : 0
+      return db - da
+    })
+  }, [chainParent, chainSiblings])
+
   // Fallback: fuzzy title match for old tasks not linked via calendarEventId
   const relatedChains = React.useMemo(() => {
     if (chainParent) return []
@@ -1882,7 +1891,7 @@ function EventDetailPanel({
               {chainParent ? (
                 <>
                   {(() => {
-                    const p = chainParent
+                    const p = allChainTasksSorted[0] ?? chainParent
                     const dl = p.deadline ? new Date(String(p.deadline)) : null
                     const displayDate = dl ?? (p.createdAt ? new Date(String(p.createdAt)) : null)
                     const done = p.status === 'COMPLETED'
@@ -1941,7 +1950,7 @@ function EventDetailPanel({
                       </div>
                     )
                   })()}
-                  {chainSiblings.map((t) => {
+                  {allChainTasksSorted.slice(1).map((t) => {
                     const dl = t.deadline ? new Date(String(t.deadline)) : null
                     const displayDate = dl ?? (t.createdAt ? new Date(String(t.createdAt)) : null)
                     const done = t.status === 'COMPLETED'
@@ -2057,7 +2066,7 @@ function EventDetailPanel({
               </div>
               {chainParent && (
                 <p className="px-4 pt-2 text-[11px] text-[#8a7a5e]">
-                  {lang === 'fr' ? `Sera ajouté à la chaîne « ${chainParent.title} »` : lang === 'zh' ? `將加入任務練「${chainParent.title}」` : `Will be added to chain "${chainParent.title}"`}
+                  {lang === 'fr' ? `Sera ajouté à la chaîne « ${(allChainTasksSorted[0] ?? chainParent).title} »` : lang === 'zh' ? `將加入任務練「${(allChainTasksSorted[0] ?? chainParent).title}」` : `Will be added to chain "${(allChainTasksSorted[0] ?? chainParent).title}"`}
                 </p>
               )}
               <div className="px-4 py-2 border-b border-[#ece2cb]">

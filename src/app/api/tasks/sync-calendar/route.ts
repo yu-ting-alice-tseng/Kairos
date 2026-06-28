@@ -90,6 +90,24 @@ export async function POST() {
       await prisma.task.deleteMany({ where: { id: { in: dupeIds }, userId } })
     }
 
+    // Remove duplicate siblings: same parentTaskId + same title + same deadline day
+    const allSiblings = await prisma.task.findMany({
+      where: { userId, parentTaskId: { not: null } },
+      select: { id: true, parentTaskId: true, title: true, deadline: true },
+      orderBy: { createdAt: 'asc' },
+    })
+    const siblingKeyMap = new Map<string, string>()
+    const siblingDupeIds: string[] = []
+    for (const s of allSiblings) {
+      const key = `${s.parentTaskId}|${s.title}|${s.deadline ? new Date(String(s.deadline)).toDateString() : 'none'}`
+      if (siblingKeyMap.has(key)) { siblingDupeIds.push(s.id) }
+      else { siblingKeyMap.set(key, s.id) }
+    }
+    if (siblingDupeIds.length > 0) {
+      await prisma.task.updateMany({ where: { parentTaskId: { in: siblingDupeIds }, userId }, data: { parentTaskId: null } })
+      await prisma.task.deleteMany({ where: { id: { in: siblingDupeIds }, userId } })
+    }
+
     // Sync title / deadline from calendar event → task
     let synced = 0
     for (const [eventId, task] of byEventId) {

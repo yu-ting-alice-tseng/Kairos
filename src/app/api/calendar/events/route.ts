@@ -155,6 +155,27 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Remove duplicate siblings: same parentTaskId + same title + same deadline day
+    const allSiblings = await prisma.task.findMany({
+      where: { userId, parentTaskId: { not: null } },
+      select: { id: true, parentTaskId: true, title: true, deadline: true },
+      orderBy: { createdAt: 'asc' }, // keep oldest
+    })
+    const siblingKeyMap = new Map<string, string>()
+    const siblingDupeIds: string[] = []
+    for (const s of allSiblings) {
+      const key = `${s.parentTaskId}|${s.title}|${s.deadline ? new Date(String(s.deadline)).toDateString() : 'none'}`
+      if (siblingKeyMap.has(key)) {
+        siblingDupeIds.push(s.id)
+      } else {
+        siblingKeyMap.set(key, s.id)
+      }
+    }
+    if (siblingDupeIds.length > 0) {
+      await prisma.task.updateMany({ where: { parentTaskId: { in: siblingDupeIds }, userId }, data: { parentTaskId: null } })
+      await prisma.task.deleteMany({ where: { id: { in: siblingDupeIds }, userId } })
+    }
+
     // Delete tasks whose linked event no longer exists in this window
     // Include both scheduled tasks and all-day tasks (deadline-based) to catch renamed/deleted events
     const fetchedEventIds = new Set(syncEventIds)
