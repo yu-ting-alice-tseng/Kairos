@@ -2119,6 +2119,59 @@ function EventDetailPanel({
                   onChange={(e) => setLinkSearch(e.target.value)}
                 />
               </div>
+              {/* Prefix suggestion: tasks/events sharing the same prefix as this event */}
+              {(() => {
+                const sep = event.title.includes('｜') ? '｜' : event.title.includes('|') ? '|' : null
+                const eventPrefix = sep ? event.title.split(sep)[0].trim() : null
+                if (!eventPrefix || eventPrefix.length < 2) return null
+                const prefixLower = eventPrefix.toLowerCase()
+                const matchingTaskIds = tasks
+                  .filter((t) => {
+                    if (t.id === chainParent?.id || chainSiblings.some((s) => s.id === t.id)) return false
+                    return t.title.toLowerCase().startsWith(prefixLower)
+                  })
+                  .map((t) => t.id)
+                const matchingCalEventIds = linkCalEvents
+                  .filter((ev) => {
+                    if (ev.id === event.id) return false
+                    if (tasks.some((t) => t.calendarEventId === ev.id)) return false
+                    return ev.title.toLowerCase().startsWith(prefixLower)
+                  })
+                  .map((ev) => ev.id)
+                const total = matchingTaskIds.length + matchingCalEventIds.length
+                if (total === 0) return null
+                const allSelected = [...matchingTaskIds, ...matchingCalEventIds].every((id) => selectedLinkIds.has(id))
+                return (
+                  <div className="mx-2 mt-1 mb-0.5 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2">
+                    <GitBranch className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                    <span className="flex-1 text-[11px] text-amber-800">
+                      {lang === 'zh'
+                        ? `找到 ${total} 個「${eventPrefix}」前綴的事件`
+                        : lang === 'fr'
+                        ? `${total} événement(s) avec le préfixe « ${eventPrefix} »`
+                        : `${total} event(s) share prefix "${eventPrefix}"`}
+                    </span>
+                    <button
+                      onClick={() => setSelectedLinkIds((prev) => {
+                        const next = new Set(prev)
+                        if (allSelected) {
+                          matchingTaskIds.forEach((id) => next.delete(id))
+                          matchingCalEventIds.forEach((id) => next.delete(id))
+                        } else {
+                          matchingTaskIds.forEach((id) => next.add(id))
+                          matchingCalEventIds.forEach((id) => next.add(id))
+                        }
+                        return next
+                      })}
+                      className="shrink-0 text-[11px] font-medium text-amber-700 hover:text-amber-900 transition-colors"
+                    >
+                      {allSelected
+                        ? (lang === 'zh' ? '取消全選' : lang === 'fr' ? 'Désélectionner' : 'Deselect all')
+                        : (lang === 'zh' ? '全選' : lang === 'fr' ? 'Tout sélectionner' : 'Select all')}
+                    </button>
+                  </div>
+                )
+              })()}
               <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1">
                 {/* Tasks from DB — always shown immediately */}
                 {tasks

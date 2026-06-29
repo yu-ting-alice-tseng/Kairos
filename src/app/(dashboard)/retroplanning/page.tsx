@@ -497,12 +497,6 @@ export default function RetroplanningPage() {
   const [linkSelectedIds, setLinkSelectedIds] = useState<Set<string>>(new Set())
   const [linkSaving, setLinkSaving] = useState(false)
   const [freshTasks, setFreshTasks] = useState<Task[]>([])
-  const [prefixConfirmDialog, setPrefixConfirmDialog] = useState<{ prefix: string; tasks: Task[] } | null>(null)
-  const [prefixLinkSaving, setPrefixLinkSaving] = useState(false)
-  const [dismissedPrefixes, setDismissedPrefixes] = useState<Set<string>>(() => {
-    try { return new Set(JSON.parse(localStorage.getItem('retro-dismissed-prefixes') ?? '[]')) }
-    catch { return new Set() }
-  })
 
   // Prefer the first Google calendar account for event creation
   const googleCalendarAccount = calendarAccounts.find((a) => (a as { provider?: string }).provider === 'GOOGLE') ?? calendarAccounts[0] ?? null
@@ -759,69 +753,6 @@ export default function RetroplanningPage() {
         && matchesAnyTemplate(t.title, userTemplates)
     )
   }, [tasks, userTemplates, dismissedSuggestions])
-
-  // Auto-detect tasks sharing the same prefix (first segment before ｜ or |, min 2 chars)
-  // Only considers standalone tasks (not already in any chain) with a future deadline
-  const autoLinkSuggestions = React.useMemo(() => {
-    const chainedIds = new Set(tasks.filter((t) => t.parentTaskId).map((t) => t.parentTaskId!))
-    const standalone = tasks.filter(
-      (t) => !t.parentTaskId && !chainedIds.has(t.id) && t.status !== 'COMPLETED'
-    )
-    const getPrefix = (title: string) => {
-      const sep = title.includes('｜') ? '｜' : title.includes('|') ? '|' : null
-      if (!sep) return null
-      const prefix = title.split(sep)[0].trim()
-      return prefix.length >= 2 ? prefix : null
-    }
-    const byPrefix = new Map<string, Task[]>()
-    for (const t of standalone) {
-      const prefix = getPrefix(t.title)
-      if (!prefix) continue
-      const arr = byPrefix.get(prefix) ?? []
-      arr.push(t)
-      byPrefix.set(prefix, arr)
-    }
-    return [...byPrefix.entries()]
-      .filter(([prefix, group]) => group.length >= 2 && !dismissedPrefixes.has(prefix))
-      .map(([prefix, group]) => ({ prefix, tasks: group }))
-  }, [tasks, dismissedPrefixes])
-
-  const handleConfirmAutoLink = async () => {
-    if (!prefixConfirmDialog) return
-    setPrefixLinkSaving(true)
-    try {
-      const sorted = [...prefixConfirmDialog.tasks].sort((a, b) => {
-        const da = a.deadline ? new Date(String(a.deadline)).getTime() : Infinity
-        const db = b.deadline ? new Date(String(b.deadline)).getTime() : Infinity
-        return db - da // latest deadline = head (chainParent)
-      })
-      const [head, ...rest] = sorted
-      // Patch siblings to point to head
-      await Promise.all(rest.map((t) =>
-        fetch(`/api/tasks/${t.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ parentTaskId: head.id }),
-        })
-      ))
-      const res = await fetch('/api/tasks')
-      if (res.ok) { const latest = await res.json(); setTasks(latest); setFreshTasks(latest) }
-      setPrefixConfirmDialog(null)
-    } catch {
-      toast({ title: lang === 'zh' ? '連結失敗' : lang === 'fr' ? 'Erreur de liaison' : 'Link failed', variant: 'error' })
-    } finally {
-      setPrefixLinkSaving(false)
-    }
-  }
-
-  const dismissPrefix = (prefix: string) => {
-    setDismissedPrefixes((prev) => {
-      const next = new Set(prev)
-      next.add(prefix)
-      try { localStorage.setItem('retro-dismissed-prefixes', JSON.stringify([...next])) } catch { /* ignore */ }
-      return next
-    })
-  }
 
   const dismissSuggestion = useCallback((taskId: string) => {
     setDismissedSuggestions((prev) => {
@@ -1192,42 +1123,6 @@ export default function RetroplanningPage() {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* Auto-link prefix suggestions */}
-          {autoLinkSuggestions.length > 0 && (
-            <div className="flex flex-col gap-2 mb-4">
-              {autoLinkSuggestions.map(({ prefix, tasks: group }) => (
-                <div key={prefix} className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3">
-                  <GitBranch className="h-4 w-4 text-amber-600 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[#2a2420]">
-                      {lang === 'zh'
-                        ? `偵測到 ${group.length} 個「${prefix}」前綴任務`
-                        : lang === 'fr'
-                        ? `${group.length} tâches avec le préfixe « ${prefix} » détectées`
-                        : `${group.length} tasks share prefix "${prefix}"`}
-                    </p>
-                    <p className="text-xs text-[#8a7a5e] mt-0.5 truncate">
-                      {group.map((t) => t.title).join('  ·  ')}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setPrefixConfirmDialog({ prefix, tasks: group })}
-                    className="shrink-0 text-xs font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 rounded-lg px-3 py-1.5 transition-colors"
-                  >
-                    {lang === 'zh' ? '串成任務鏈' : lang === 'fr' ? 'Lier en chaîne' : 'Link as chain'}
-                  </button>
-                  <button
-                    onClick={() => dismissPrefix(prefix)}
-                    className="shrink-0 p-1 rounded-full text-[#c4b48a] hover:text-[#5c5347] hover:bg-[#ece2cb] transition-colors"
-                    title={lang === 'zh' ? '忽略' : lang === 'fr' ? 'Ignorer' : 'Dismiss'}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
             </div>
           )}
 
@@ -1760,59 +1655,6 @@ export default function RetroplanningPage() {
         </Dialog>
       )}
 
-      {/* Prefix auto-link confirmation dialog */}
-      {prefixConfirmDialog && (
-        <Dialog open onOpenChange={() => setPrefixConfirmDialog(null)}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-base">
-                <GitBranch className="h-4 w-4 text-amber-600" />
-                {lang === 'zh' ? '確認串成任務鏈' : lang === 'fr' ? 'Confirmer la liaison' : 'Confirm chain link'}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col gap-3 py-1">
-              <p className="text-sm text-[#5c5347]">
-                {lang === 'zh'
-                  ? `以下 ${prefixConfirmDialog.tasks.length} 個任務前綴相同（「${prefixConfirmDialog.prefix}」），將依截止日期由晚到早串成一條任務鏈，最晚的任務為主任務。`
-                  : lang === 'fr'
-                  ? `Ces ${prefixConfirmDialog.tasks.length} tâches partagent le préfixe « ${prefixConfirmDialog.prefix} ». Elles seront liées en chaîne, la tâche avec l'échéance la plus lointaine sera la tâche principale.`
-                  : `These ${prefixConfirmDialog.tasks.length} tasks share the prefix "${prefixConfirmDialog.prefix}" and will be linked into a chain. The task with the latest deadline becomes the head.`}
-              </p>
-              <div className="flex flex-col gap-1.5 rounded-xl border border-[#ece2cb] bg-[#fbf7ee] p-3">
-                {[...prefixConfirmDialog.tasks]
-                  .sort((a, b) => {
-                    const da = a.deadline ? new Date(String(a.deadline)).getTime() : Infinity
-                    const db = b.deadline ? new Date(String(b.deadline)).getTime() : Infinity
-                    return db - da
-                  })
-                  .map((t, i) => (
-                    <div key={t.id} className="flex items-center gap-2 text-xs text-[#3a3326]">
-                      {i === 0
-                        ? <span className="shrink-0 text-[9px] font-medium text-amber-700 bg-amber-100 rounded px-1.5 py-0.5">{lang === 'zh' ? '主任務' : lang === 'fr' ? 'principal' : 'head'}</span>
-                        : <span className="shrink-0 text-[9px] text-[#a99873] bg-[#f3ecdd] rounded px-1.5 py-0.5">{lang === 'zh' ? '子任務' : lang === 'fr' ? 'étape' : 'step'}</span>
-                      }
-                      <span className="truncate flex-1">{t.title}</span>
-                      {t.deadline && <span className="shrink-0 text-[#a99873]">{formatDateShort(new Date(String(t.deadline)), lang)}</span>}
-                    </div>
-                  ))}
-              </div>
-            </div>
-            <DialogFooter className="flex-col gap-2 sm:flex-row">
-              <Button variant="outline" onClick={() => setPrefixConfirmDialog(null)} disabled={prefixLinkSaving}>
-                {lang === 'zh' ? '取消' : lang === 'fr' ? 'Annuler' : 'Cancel'}
-              </Button>
-              <Button
-                onClick={handleConfirmAutoLink}
-                disabled={prefixLinkSaving}
-                className="bg-amber-600 hover:bg-amber-700 text-white"
-              >
-                {prefixLinkSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <GitBranch className="h-4 w-4" />}
-                {lang === 'zh' ? '確認串鏈' : lang === 'fr' ? 'Lier' : 'Link'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
     </div>
   )
 }
