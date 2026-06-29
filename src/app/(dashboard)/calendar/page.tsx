@@ -2201,7 +2201,6 @@ function EventDetailPanel({
                       </button>
                     )
                   })}
-              </div>
                 {linkSearch && !linkEventsLoading && (() => {
                   const taskMatches = tasks.filter((t) => {
                     const q = linkSearch.toLowerCase()
