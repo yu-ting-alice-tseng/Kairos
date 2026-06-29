@@ -195,9 +195,7 @@ function ChainCard({
             ? <Loader2 className={cn('animate-spin text-red-400', isParent ? 'h-4 w-4' : 'h-3 w-3')} />
             : done
             ? <CheckCircle2 className={cn('text-emerald-500', isParent ? 'h-4 w-4' : 'h-3 w-3')} />
-            : isParent
-            ? <GitBranch className="h-3.5 w-3.5 text-red-800" />
-            : <Circle className={cn('text-[#a99873]', 'h-3 w-3')} />
+            : <Circle className={cn(isParent ? 'h-4 w-4 text-red-800' : 'h-3 w-3 text-[#a99873]')} />
           }
         </button>
         <div className="flex-1 min-w-0">
@@ -1623,10 +1621,10 @@ export default function RetroplanningPage() {
               </p>
               <p className="text-xs text-[#8a7a5e]">
                 {lang === 'zh'
-                  ? '要刪除所有任務，還是只解除它們的連結關係（保留任務本身）？'
+                  ? '解散後，所有任務將保留在系統中，僅移除彼此的連結關係。'
                   : lang === 'fr'
-                  ? 'Voulez-vous supprimer toutes les tâches ou seulement dissocier la chaîne (conserver les tâches) ?'
-                  : 'Delete all tasks, or just unlink them (keep tasks but remove chain connection)?'}
+                  ? 'Les tâches seront conservées, seul le lien de la chaîne sera supprimé.'
+                  : 'All tasks will be kept. Only the chain connection between them will be removed.'}
               </p>
             </div>
             <DialogFooter className="flex-col gap-2 sm:flex-row">
@@ -1634,21 +1632,12 @@ export default function RetroplanningPage() {
                 {lang === 'zh' ? '取消' : lang === 'fr' ? 'Annuler' : 'Cancel'}
               </Button>
               <Button
-                variant="outline"
                 onClick={() => handleDeleteChain('unlink')}
                 disabled={deleteChainLoading}
-                className="border-amber-300 text-amber-800 hover:bg-amber-50"
+                className="bg-[#ab3326] hover:bg-[#861f17] text-white"
               >
-                {deleteChainLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {lang === 'zh' ? '只解除連結' : lang === 'fr' ? 'Dissocier seulement' : 'Unlink only'}
-              </Button>
-              <Button
-                onClick={() => handleDeleteChain('delete')}
-                disabled={deleteChainLoading}
-                className="bg-red-600 hover:bg-red-700 text-white"
-              >
-                {deleteChainLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {lang === 'zh' ? '刪除全部任務' : lang === 'fr' ? 'Tout supprimer' : 'Delete all'}
+                {deleteChainLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <GitBranch className="h-4 w-4" />}
+                {lang === 'zh' ? '解散任務鏈' : lang === 'fr' ? 'Dissocier la chaîne' : 'Dissolve chain'}
               </Button>
             </DialogFooter>
           </DialogContent>
