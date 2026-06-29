@@ -1698,24 +1698,26 @@ function EventDetailPanel({
       currentWeekEvents.forEach((e) => { if (!existingIds.has(e.id)) merged.push(e) })
       return merged
     })
-    // Background: refresh tasks + fetch calendar events for full 4-year range
+    // Background: fetch calendar events for full 4-year range (triggers server-side title/deadline sync),
+    // THEN refresh tasks so the store reflects the freshly-synced titles and deadlines
     setLinkEventsLoading(true)
     const start = new Date(); start.setFullYear(start.getFullYear() - 2)
     const end = new Date(); end.setFullYear(end.getFullYear() + 2)
-    Promise.all([
-      onTasksRefresh(),
-      fetch(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}`),
-    ]).then(async ([, evRes]) => {
-      if (evRes.ok) {
-        const fresh: CalendarEvent[] = await evRes.json()
-        // Merge: use fresh as base, keep any locally-seeded events not covered by the fetch
-        setLinkCalEvents((prev) => {
-          const freshIds = new Set(fresh.map((e) => e.id))
-          const extras = prev.filter((e) => !freshIds.has(e.id))
-          return [...fresh, ...extras]
-        })
-      }
-    }).catch(() => { /* calendar events section stays with previous data */ })
+    fetch(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}`)
+      .then(async (evRes) => {
+        if (evRes.ok) {
+          const fresh: CalendarEvent[] = await evRes.json()
+          // Merge: use fresh as base, keep any locally-seeded events not covered by the fetch
+          setLinkCalEvents((prev) => {
+            const freshIds = new Set(fresh.map((e) => e.id))
+            const extras = prev.filter((e) => !freshIds.has(e.id))
+            return [...fresh, ...extras]
+          })
+        }
+        // Refresh tasks AFTER calendar sync so updated titles/deadlines are reflected
+        await onTasksRefresh()
+      })
+      .catch(() => { /* calendar events section stays with previous data */ })
       .finally(() => { setLinkEventsLoading(false) })
   }
 
@@ -2160,7 +2162,7 @@ function EventDetailPanel({
                         </span>
                         <span className="truncate flex-1 text-[#3a3326]" title={t.title}>{t.title}</span>
                         {inOtherChain && <span className="shrink-0 text-[9px] text-[#c4b48a] bg-[#f3ecdd] rounded px-1">{lang === 'zh' ? '已在其他任務鏈' : lang === 'fr' ? 'autre chaîne' : 'other chain'}</span>}
-                        {t.deadline && <span className="text-[#a99873] shrink-0 text-[10px]">{fmtDate(new Date(String(t.deadline)), lang)}</span>}
+                        {(t.deadline ?? t.scheduledStart) && <span className="text-[#a99873] shrink-0 text-[10px]">{fmtDate(new Date(String(t.deadline ?? t.scheduledStart)), lang)}</span>}
                       </button>
                     )
                   })}
