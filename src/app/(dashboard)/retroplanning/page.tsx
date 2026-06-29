@@ -484,6 +484,7 @@ export default function RetroplanningPage() {
   const [userTemplates, setUserTemplates] = useState<RetroTemplate[]>([])
   const [loadingTemplates, setLoadingTemplates] = useState(true)
   const [editingTemplate, setEditingTemplate] = useState<RetroTemplate | null | 'new'>()
+  const [confirmDeleteTemplateId, setConfirmDeleteTemplateId] = useState<string | null>(null)
   const [forkDraft, setForkDraft] = useState<{ name: string; keywords: string[]; stages: RetroStage[] } | null>(null)
   const [selectedChainId, setSelectedChainId] = useState<string | null>(null)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
@@ -520,7 +521,10 @@ export default function RetroplanningPage() {
         const data = await res.json()
         return data.eventId ?? null
       }
-    } catch { /* best-effort */ }
+      toast({ title: lang === 'fr' ? 'Erreur lors de la création de l\'événement calendrier' : lang === 'zh' ? '建立日曆事件失敗' : 'Failed to create calendar event', variant: 'error' })
+    } catch {
+      toast({ title: lang === 'fr' ? 'Erreur lors de la création de l\'événement calendrier' : lang === 'zh' ? '建立日曆事件失敗' : 'Failed to create calendar event', variant: 'error' })
+    }
     return null
   }
 
@@ -829,7 +833,6 @@ export default function RetroplanningPage() {
   }
 
   const handlePermanentDeleteTemplate = async (id: string) => {
-    if (!confirm(lang === 'fr' ? 'Supprimer définitivement ?' : lang === 'zh' ? '永久刪除？此操作無法復原。' : 'Delete permanently? This cannot be undone.')) return
     await fetch('/api/retro-templates', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
@@ -1004,11 +1007,18 @@ export default function RetroplanningPage() {
                               title={lang === 'zh' ? '還原' : lang === 'fr' ? 'Restaurer' : 'Restore'}
                               className="p-1 rounded-lg hover:bg-green-50 text-[#a99873] hover:text-green-700 text-[10px]"
                             >↩</button>
-                            <button
-                              onClick={() => handlePermanentDeleteTemplate(tmpl.id)}
-                              title={lang === 'zh' ? '永久刪除' : lang === 'fr' ? 'Supprimer définitivement' : 'Delete permanently'}
-                              className="p-1 rounded-lg hover:bg-red-50 text-[#a99873] hover:text-red-500"
-                            ><Trash2 className="h-3 w-3" /></button>
+                            {confirmDeleteTemplateId === tmpl.id ? (
+                              <span className="flex items-center gap-1 text-[10px]">
+                                <button onClick={() => setConfirmDeleteTemplateId(null)} className="text-[#8a7a5e] hover:text-[#3a3326]">{lang === 'fr' ? 'Annuler' : lang === 'zh' ? '取消' : 'Cancel'}</button>
+                                <button onClick={() => { setConfirmDeleteTemplateId(null); handlePermanentDeleteTemplate(tmpl.id) }} className="font-medium text-red-600 hover:text-red-800">{lang === 'fr' ? 'Suppr.' : lang === 'zh' ? '確認刪除' : 'Delete'}</button>
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => setConfirmDeleteTemplateId(tmpl.id)}
+                                title={lang === 'zh' ? '永久刪除' : lang === 'fr' ? 'Supprimer définitivement' : 'Delete permanently'}
+                                className="p-1 rounded-lg hover:bg-red-50 text-[#a99873] hover:text-red-500"
+                              ><Trash2 className="h-3 w-3" /></button>
+                            )}
                           </>
                         ) : (
                           <>
@@ -1117,14 +1127,22 @@ export default function RetroplanningPage() {
           )}
 
           {/* Suggestions */}
-          {suggestedTasks.length > 0 && (
+          {(suggestedTasks.length > 0 || dismissedSuggestions.size > 0) && (
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <Sparkles className="h-4 w-4 text-red-500" />
                 <h2 className="text-sm font-semibold text-[#5c5347]">
                   {lang === 'fr' ? 'Tâches suggérées pour rétroplanification' : lang === 'zh' ? '建議進行回溯排程的任務' : 'Tasks suggested for retroplanning'}
                 </h2>
-                <Badge variant="default" className="text-xs">{suggestedTasks.length}</Badge>
+                {suggestedTasks.length > 0 && <Badge variant="default" className="text-xs">{suggestedTasks.length}</Badge>}
+                {dismissedSuggestions.size > 0 && (
+                  <button
+                    onClick={() => { setDismissedSuggestions(new Set()); try { localStorage.removeItem('retro-dismissed-suggestions') } catch { /* ignore */ } }}
+                    className="ml-auto text-[11px] text-[#a99873] hover:text-[#5c5347] transition-colors"
+                  >
+                    {lang === 'fr' ? `Afficher les masqués (${dismissedSuggestions.size})` : lang === 'zh' ? `顯示已隱藏 (${dismissedSuggestions.size})` : `Show dismissed (${dismissedSuggestions.size})`}
+                  </button>
+                )}
               </div>
               <div className="flex flex-col gap-2">
                 {suggestedTasks.map((task) => {

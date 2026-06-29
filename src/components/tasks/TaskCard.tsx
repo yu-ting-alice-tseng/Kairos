@@ -40,6 +40,7 @@ export function TaskCard({
   const [showActions, setShowActions] = useState(false)
   const [showSubtasks, setShowSubtasks] = useState(false)
   const [completing, setCompleting] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const isCompleted = task.status === 'COMPLETED'
   const isMissed = task.status === 'MISSED'
   const overdue = isOverdue(task.scheduledEnd)
@@ -83,7 +84,7 @@ export function TaskCard({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <p className={`font-medium text-sm ${isCompleted ? 'line-through text-[#a99873]' : 'text-[#2a2420]'} line-clamp-2`}>
+            <p className={`font-medium text-sm ${isCompleted ? 'line-through text-[#6e6147]' : 'text-[#2a2420]'} line-clamp-2`}>
               {task.title}
             </p>
             <button
@@ -179,10 +180,24 @@ export function TaskCard({
               )}
             </>
           )}
-          <Button size="sm" variant="ghost" onClick={() => onDelete(task.id)} className="text-red-600 hover:bg-red-50">
-            <Trash2 className="h-3.5 w-3.5" />
-            {t('delete', lang)}
-          </Button>
+          {confirmingDelete ? (
+            <div className="flex items-center gap-2 px-2 py-1 rounded-lg bg-red-50 border border-red-200">
+              <span className="text-xs text-red-700 truncate max-w-[140px]" title={task.title}>
+                {lang === 'fr' ? `Supprimer « ${task.title} » ?` : lang === 'zh' ? `確定刪除「${task.title}」？` : `Delete "${task.title}"?`}
+              </span>
+              <button onClick={() => setConfirmingDelete(false)} className="text-[11px] text-[#8a7a5e] hover:text-[#3a3326] shrink-0">
+                {lang === 'fr' ? 'Annuler' : lang === 'zh' ? '取消' : 'Cancel'}
+              </button>
+              <button onClick={() => { setConfirmingDelete(false); onDelete(task.id) }} className="text-[11px] font-medium text-red-600 hover:text-red-800 shrink-0">
+                {lang === 'fr' ? 'Suppr.' : lang === 'zh' ? '刪除' : 'Delete'}
+              </button>
+            </div>
+          ) : (
+            <Button size="sm" variant="ghost" onClick={() => setConfirmingDelete(true)} className="text-red-600 hover:bg-red-50">
+              <Trash2 className="h-3.5 w-3.5" />
+              {t('delete', lang)}
+            </Button>
+          )}
         </div>
       )}
     </div>

@@ -458,7 +458,6 @@ export default function CalendarPage() {
   handleSaveEventRef.current = handleSaveEvent
 
   const handleDeleteEvent = async (ev: CalendarEvent) => {
-    if (!confirm(language === 'fr' ? 'Supprimer cet événement ?' : language === 'zh' ? '確定刪除此活動？' : 'Delete this event?')) return
     const res = await fetch('/api/calendar/events', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
@@ -805,13 +804,13 @@ export default function CalendarPage() {
             <h1 className="text-2xl font-serif text-[#2a2420]">{t('calendar', language)}</h1>
           </div>
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon-sm" onClick={() => setStartDate((d) => addDays(d, -7))}>
+            <Button variant="ghost" size="icon-sm" aria-label={language === 'fr' ? 'Semaine précédente' : language === 'zh' ? '上一週' : 'Previous week'} onClick={() => setStartDate((d) => addDays(d, -7))}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <span className="text-sm font-medium text-[#5c5347] px-2 min-w-[160px] text-center">
               {format(weekStart, 'dd MMM', { locale })} – {format(weekEnd, 'dd MMM yyyy', { locale })}
             </span>
-            <Button variant="ghost" size="icon-sm" onClick={() => setStartDate((d) => addDays(d, 7))}>
+            <Button variant="ghost" size="icon-sm" aria-label={language === 'fr' ? 'Semaine suivante' : language === 'zh' ? '下一週' : 'Next week'} onClick={() => setStartDate((d) => addDays(d, 7))}>
               <ChevronRight className="h-4 w-4" />
             </Button>
             <Button variant="outline" size="sm" onClick={() => { const d = new Date(); d.setHours(0,0,0,0); const dow = d.getDay(); d.setDate(d.getDate() + (dow === 0 ? 1 : 1 - dow)); setStartDate(d) }}>
@@ -1060,7 +1059,7 @@ export default function CalendarPage() {
                         onMouseDown={(e) => { if (ev.editable) startAllDayDrag(e, ev) }}
                         onClick={(e) => { e.stopPropagation(); if (!isDragging) setEditingEvent(ev) }}
                       >
-                        <span className={cn('text-[#2a2420] truncate flex-1', isLinkedDone && 'line-through text-[#a99873]')}>{ev.title}</span>
+                        <span className={cn('text-[#2a2420] truncate flex-1', isLinkedDone && 'line-through text-[#6e6147]')} title={ev.title}>{ev.title}</span>
                         {linkedTask && (
                           <span className="shrink-0 text-[9px] opacity-60 font-mono whitespace-nowrap">
                             I:{linkedTask.importance} U:{linkedTask.urgency}
@@ -1559,6 +1558,7 @@ function EventDetailPanel({
     return new Date(dt.getTime() - offset).toISOString().slice(0, 16)
   }
   const [editing, setEditing] = React.useState(false)
+  const [confirmingDelete, setConfirmingDelete] = React.useState(false)
   const [title, setTitle] = React.useState(event.title)
   const [start, setStart] = React.useState(toLocal(event.start))
   const [end, setEnd] = React.useState(toLocal(event.end))
@@ -2158,7 +2158,7 @@ function EventDetailPanel({
                         <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-red-600 border-red-600' : 'border-[#c4b48a]'}`}>
                           {selected && <Check className="h-2.5 w-2.5 text-white" />}
                         </span>
-                        <span className="truncate flex-1 text-[#3a3326]">{t.title}</span>
+                        <span className="truncate flex-1 text-[#3a3326]" title={t.title}>{t.title}</span>
                         {inOtherChain && <span className="shrink-0 text-[9px] text-[#c4b48a] bg-[#f3ecdd] rounded px-1">{lang === 'zh' ? '已在其他任務鏈' : lang === 'fr' ? 'autre chaîne' : 'other chain'}</span>}
                         {t.deadline && <span className="text-[#a99873] shrink-0 text-[10px]">{fmtDate(new Date(String(t.deadline)), lang)}</span>}
                       </button>
@@ -2200,6 +2200,29 @@ function EventDetailPanel({
                     )
                   })}
               </div>
+                {linkSearch && !linkEventsLoading && (() => {
+                  const taskMatches = tasks.filter((t) => {
+                    const q = linkSearch.toLowerCase()
+                    if (t.title.toLowerCase().includes(q)) return true
+                    if (t.calendarEventId) {
+                      const ev = linkCalEvents.find((e) => e.id === t.calendarEventId)
+                      if (ev?.title.toLowerCase().includes(q)) return true
+                    }
+                    return false
+                  })
+                  const evMatches = linkCalEvents
+                    .filter((ev) => !tasks.some((t) => t.calendarEventId === ev.id))
+                    .filter((ev) => ev.title.toLowerCase().includes(linkSearch.toLowerCase()))
+                  if (taskMatches.length === 0 && evMatches.length === 0) {
+                    return (
+                      <p className="text-center text-xs text-[#a99873] py-4">
+                        {lang === 'zh' ? '找不到符合的事件' : lang === 'fr' ? 'Aucun résultat' : 'No results found'}
+                      </p>
+                    )
+                  }
+                  return null
+                })()}
+              </div>
               <div className="px-4 py-3 border-t border-[#ece2cb] flex gap-2">
                 <button onClick={() => { setLinkingChain(false); setSelectedLinkIds(new Set()) }} className="flex-1 rounded-xl border border-[#e2d6bc] text-[#5c5347] text-xs py-2 hover:bg-[#ece2cb] transition-colors">
                   {lang === 'zh' ? '取消' : lang === 'fr' ? 'Annuler' : 'Cancel'}
@@ -2240,14 +2263,30 @@ function EventDetailPanel({
             </>
           ) : (
             <>
-              <button onClick={() => onDelete(event)} className="flex items-center gap-1 rounded-xl border border-red-200 text-red-600 text-xs px-3 py-2 hover:bg-red-50 transition-colors">
-                <Trash2 className="h-3 w-3" />
-                {lang === 'fr' ? 'Suppr.' : lang === 'zh' ? '刪除' : 'Delete'}
-              </button>
-              <button onClick={() => setEditing(true)} className="flex-1 flex items-center justify-center gap-1 rounded-xl bg-[#ab3326] text-white text-xs py-2 hover:bg-[#861f17] transition-colors">
-                <Pencil className="h-3 w-3" />
-                {lang === 'fr' ? 'Modifier' : lang === 'zh' ? '編輯' : 'Edit'}
-              </button>
+              {confirmingDelete ? (
+                <div className="flex-1 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2">
+                  <span className="flex-1 text-xs text-red-700 truncate">
+                    {lang === 'fr' ? `Supprimer « ${event.title} » ?` : lang === 'zh' ? `確定刪除「${event.title}」？` : `Delete "${event.title}"?`}
+                  </span>
+                  <button onClick={() => setConfirmingDelete(false)} className="text-[11px] text-[#8a7a5e] hover:text-[#3a3326] shrink-0">
+                    {lang === 'fr' ? 'Annuler' : lang === 'zh' ? '取消' : 'Cancel'}
+                  </button>
+                  <button onClick={() => { setConfirmingDelete(false); onDelete(event) }} className="text-[11px] font-medium text-red-600 hover:text-red-800 shrink-0">
+                    {lang === 'fr' ? 'Supprimer' : lang === 'zh' ? '刪除' : 'Delete'}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button onClick={() => setConfirmingDelete(true)} className="flex items-center gap-1 rounded-xl border border-red-200 text-red-600 text-xs px-3 py-2 hover:bg-red-50 transition-colors">
+                    <Trash2 className="h-3 w-3" />
+                    {lang === 'fr' ? 'Suppr.' : lang === 'zh' ? '刪除' : 'Delete'}
+                  </button>
+                  <button onClick={() => setEditing(true)} className="flex-1 flex items-center justify-center gap-1 rounded-xl bg-[#ab3326] text-white text-xs py-2 hover:bg-[#861f17] transition-colors">
+                    <Pencil className="h-3 w-3" />
+                    {lang === 'fr' ? 'Modifier' : lang === 'zh' ? '編輯' : 'Edit'}
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>

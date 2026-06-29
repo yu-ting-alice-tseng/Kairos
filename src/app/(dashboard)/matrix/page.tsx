@@ -96,7 +96,9 @@ export default function MatrixPage() {
         ))
         const tasksRes = await fetch('/api/tasks')
         if (tasksRes.ok) setTasks(await tasksRes.json())
-      } catch { /* best-effort */ }
+      } catch {
+        toast({ title: language === 'fr' ? 'Erreur de synchronisation du calendrier' : language === 'zh' ? '日曆同步失敗' : 'Calendar sync failed', variant: 'error' })
+      }
     }
     run()
   }, [loading, calendarAccounts.length, tasks, setTasks])

@@ -229,7 +229,10 @@ export default function TodayPage() {
         ])
         if (todayRes.ok) setTodayEvents(await todayRes.json())
         if (tmrRes.ok) setTomorrowEvents(await tmrRes.json())
-      } catch { /* best-effort */ }
+        if (!todayRes.ok || !tmrRes.ok) toast({ title: language === 'fr' ? 'Erreur de synchronisation du calendrier' : language === 'zh' ? '日曆同步失敗' : 'Calendar sync failed', variant: 'error' })
+      } catch {
+        toast({ title: language === 'fr' ? 'Erreur de synchronisation du calendrier' : language === 'zh' ? '日曆同步失敗' : 'Calendar sync failed', variant: 'error' })
+      }
     }
     fetchEvents()
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -305,17 +308,22 @@ export default function TodayPage() {
     // Optimistic update — UI responds immediately
     updateTask(id, { status: newStatus, completedAt: isCompleted ? null : nowStr })
 
-    const res = await fetch(`/api/tasks/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus }),
-    })
-    if (res.ok) {
-      const data = await res.json(); updateTask(id, data)
-      if (!isCompleted) toast({ title: language === 'fr' ? 'Tâche terminée !' : language === 'zh' ? '任務已完成！' : 'Task completed!', variant: 'success' })
-    } else {
-      updateTask(id, task)
-      toast({ title: language === 'fr' ? 'Erreur de mise à jour' : language === 'zh' ? '更新失敗' : 'Update failed', variant: 'error' })
+    try {
+      const res = await fetch(`/api/tasks/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      if (res.ok) {
+        const data = await res.json(); updateTask(id, data)
+        if (!isCompleted) toast({ title: language === 'fr' ? 'Tâche terminée !' : language === 'zh' ? '任務已完成！' : 'Task completed!', variant: 'success' })
+      } else {
+        updateTask(id, task) // roll back
+        toast({ title: language === 'fr' ? 'Erreur de mise à jour' : language === 'zh' ? '更新失敗' : 'Update failed', variant: 'error' })
+      }
+    } catch {
+      updateTask(id, task) // roll back on network error
+      toast({ title: language === 'fr' ? 'Erreur réseau' : language === 'zh' ? '網路錯誤' : 'Network error', variant: 'error' })
     }
   }
 

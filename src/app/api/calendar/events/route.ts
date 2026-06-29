@@ -21,6 +21,9 @@ export async function GET(req: NextRequest) {
 
   const timeMin = new Date(startParam)
   const timeMax = new Date(endParam)
+  if (isNaN(timeMin.getTime()) || isNaN(timeMax.getTime())) {
+    return NextResponse.json({ error: 'Invalid date range' }, { status: 400 })
+  }
 
   const accounts = await prisma.calendarAccount.findMany({
     where: { userId, isActive: true },
@@ -251,6 +254,13 @@ export async function PATCH(req: NextRequest) {
   })
   if (!account?.accessToken) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
 
+  // Verify the calendarId belongs to this account (prevents modifying events on foreign calendars)
+  const resolvedCalendarId = calendarId ?? 'primary'
+  if (resolvedCalendarId !== 'primary') {
+    const ownedCal = await prisma.subCalendar.findFirst({ where: { calendarAccountId: account.id, externalId: resolvedCalendarId } })
+    if (!ownedCal) return NextResponse.json({ error: 'Calendar not found' }, { status: 404 })
+  }
+
   if (account.provider === 'GOOGLE') {
     await updateGoogleEvent(
       account.id,
@@ -284,6 +294,13 @@ export async function DELETE(req: NextRequest) {
     where: { id: calendarAccountId, userId },
   })
   if (!account?.accessToken) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+
+  // Verify the calendarId belongs to this account
+  const resolvedCalendarIdDel = calendarId ?? 'primary'
+  if (resolvedCalendarIdDel !== 'primary') {
+    const ownedCal = await prisma.subCalendar.findFirst({ where: { calendarAccountId: account.id, externalId: resolvedCalendarIdDel } })
+    if (!ownedCal) return NextResponse.json({ error: 'Calendar not found' }, { status: 404 })
+  }
 
   if (account.provider === 'GOOGLE') {
     await deleteGoogleEvent(
