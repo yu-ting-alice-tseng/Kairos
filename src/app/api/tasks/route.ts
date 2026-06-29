@@ -69,6 +69,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ id: `demo-t-${Date.now()}`, userId: session.user.id, ...data, priority, status: 'PENDING', aiSuggested: false, deadline: data.deadline ? new Date(data.deadline) : null, scheduledStart: null, scheduledEnd: null, completedAt: null, actualMinutes: null, isRecurring: false, parentTaskId: null, calendarEventId: null, calendarAccountId: null, createdAt: new Date(), updatedAt: new Date(), subTasks: [], calendarAccount: null }, { status: 201 })
   }
 
+  // Guard: if a task already exists for this calendarEventId, return it instead of creating a duplicate
+  if (data.calendarEventId) {
+    const existing = await prisma.task.findFirst({
+      where: { userId: session.user.id, calendarEventId: data.calendarEventId },
+      include: { subTasks: true, calendarAccount: true },
+    })
+    if (existing) return NextResponse.json(existing, { status: 200 })
+  }
+
   const task = await prisma.task.create({
     data: {
       userId: session.user.id,

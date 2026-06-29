@@ -120,6 +120,9 @@ export async function GET(req: NextRequest) {
     // Auto-create tasks for events that don't have one yet
     const toCreate = syncableEvents.filter((e) => !byEventId.has(e.id))
     for (const e of toCreate) {
+      // Re-check just before creating to guard against concurrent requests
+      const alreadyExists = await prisma.task.findFirst({ where: { userId, calendarEventId: e.id }, select: { id: true } })
+      if (alreadyExists) continue
       const deadline = e.allDay ? new Date(e.start) : new Date(e.end)
       await prisma.task.create({
         data: {

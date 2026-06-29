@@ -1329,6 +1329,7 @@ export default function CalendarPage() {
           lang={language}
           saving={eventSaving}
           tasks={tasks}
+          currentWeekEvents={externalEvents}
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
           onClose={() => setEditingEvent(null)}
@@ -1538,12 +1539,13 @@ function HabitDetailPanel({ habit, lang, onComplete, onClose }: {
 }
 
 function EventDetailPanel({
-  event, lang, saving, tasks, onSave, onDelete, onClose, onTasksRefresh, onNavigateToDate,
+  event, lang, saving, tasks, currentWeekEvents, onSave, onDelete, onClose, onTasksRefresh, onNavigateToDate,
 }: {
   event: CalendarEvent
   lang: 'fr' | 'en' | 'zh'
   saving: boolean
   tasks: Task[]
+  currentWeekEvents: CalendarEvent[]
   onSave: (ev: CalendarEvent, title: string, start: string, end: string) => void
   onDelete: (ev: CalendarEvent) => void
   onClose: () => void
@@ -1688,8 +1690,15 @@ function EventDetailPanel({
       ...chainSiblings.map((s) => s.id),
     ]))
     setLinkingChain(true)
-    // Background: refresh tasks + fetch calendar events for events-without-tasks section
-    // Do NOT clear linkCalEvents — keep previous results visible while new fetch loads
+    // Immediately seed linkCalEvents with the current week's already-fetched events
+    // so the user can search them without waiting for the background fetch
+    setLinkCalEvents((prev) => {
+      const existingIds = new Set(prev.map((e) => e.id))
+      const merged = [...prev]
+      currentWeekEvents.forEach((e) => { if (!existingIds.has(e.id)) merged.push(e) })
+      return merged
+    })
+    // Background: refresh tasks + fetch calendar events for full 4-year range
     setLinkEventsLoading(true)
     const start = new Date(); start.setFullYear(start.getFullYear() - 2)
     const end = new Date(); end.setFullYear(end.getFullYear() + 2)
@@ -1697,7 +1706,15 @@ function EventDetailPanel({
       onTasksRefresh(),
       fetch(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}`),
     ]).then(async ([, evRes]) => {
-      if (evRes.ok) setLinkCalEvents(await evRes.json())
+      if (evRes.ok) {
+        const fresh: CalendarEvent[] = await evRes.json()
+        // Merge: use fresh as base, keep any locally-seeded events not covered by the fetch
+        setLinkCalEvents((prev) => {
+          const freshIds = new Set(fresh.map((e) => e.id))
+          const extras = prev.filter((e) => !freshIds.has(e.id))
+          return [...fresh, ...extras]
+        })
+      }
     }).catch(() => { /* calendar events section stays with previous data */ })
       .finally(() => { setLinkEventsLoading(false) })
   }
@@ -1742,7 +1759,10 @@ function EventDetailPanel({
           }),
         })
         if (!res.ok) return null
-        const t = await res.json(); addTask(t); return t.id as string
+        const t = await res.json()
+        // Server may return an existing task (200) if calendarEventId already linked — update store either way
+        addTask(t)
+        return t.id as string
       }))
       const resolvedTaskIds = resolved.filter((id): id is string => !!id)
 
