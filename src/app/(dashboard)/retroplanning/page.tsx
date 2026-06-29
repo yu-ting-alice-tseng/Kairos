@@ -727,7 +727,7 @@ export default function RetroplanningPage() {
     const active: typeof chains = []
     const past: typeof chains = []
     for (const c of chains) {
-      const allCompleted = c.parent.status === 'COMPLETED' && c.children.every((ch) => ch.status === 'COMPLETED')
+      const allCompleted = c.parent.status === 'COMPLETED'
       if (allCompleted) past.push(c)
       else active.push(c)
     }
