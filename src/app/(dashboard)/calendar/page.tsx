@@ -312,17 +312,23 @@ export default function CalendarPage() {
       const children = tasks
         .filter((t) => t.parentTaskId === parent.id)
         .sort((a, b) => (a.deadline ? new Date(String(a.deadline)).getTime() : Infinity) - (b.deadline ? new Date(String(b.deadline)).getTime() : Infinity))
-      return { parent, children }
+      // The display head = task with the latest deadline in the chain
+      const allMembers = [parent, ...children]
+      const displayHead = allMembers.reduce((latest, t) => {
+        const dl = t.deadline ? new Date(String(t.deadline)).getTime() : 0
+        const ldl = latest.deadline ? new Date(String(latest.deadline)).getTime() : 0
+        return dl > ldl ? t : latest
+      }, parent)
+      // Latest deadline of the whole chain (for sorting)
+      const latestDeadline = Math.max(...allMembers.map((t) => t.deadline ? new Date(String(t.deadline)).getTime() : 0))
+      return { parent, children, displayHead, latestDeadline }
     }).sort((a, b) => {
       const allDoneA = a.parent.status === 'COMPLETED' && a.children.every((c) => c.status === 'COMPLETED')
       const allDoneB = b.parent.status === 'COMPLETED' && b.children.every((c) => c.status === 'COMPLETED')
-      // Done chains go to bottom
       if (allDoneA !== allDoneB) return allDoneA ? 1 : -1
-      // Sort by deadline ascending, then alphabetically
-      const da = a.parent.deadline ? new Date(String(a.parent.deadline)).getTime() : Infinity
-      const db = b.parent.deadline ? new Date(String(b.parent.deadline)).getTime() : Infinity
-      if (da !== db) return da - db
-      return a.parent.title.localeCompare(b.parent.title)
+      // Sort by latest deadline in chain ascending (earliest-ending chains first)
+      if (a.latestDeadline !== b.latestDeadline) return a.latestDeadline - b.latestDeadline
+      return a.displayHead.title.localeCompare(b.displayHead.title)
     })
   }, [tasks])
 
@@ -913,12 +919,12 @@ export default function CalendarPage() {
                 {language === 'zh' ? '沒有任務鏈' : language === 'fr' ? 'Aucune chaîne' : 'No chains'}
               </p>
             )}
-            {allChains.map(({ parent, children }) => {
+            {allChains.map(({ parent, children, displayHead }) => {
               const allDone = parent.status === 'COMPLETED' && children.every((c) => c.status === 'COMPLETED')
-              const parentDeadlinePast = parent.deadline && new Date(String(parent.deadline)) < new Date()
-              const isOverdue = !allDone && parentDeadlinePast
+              const headDeadline = displayHead.deadline ? new Date(String(displayHead.deadline)) : null
+              const isOverdue = !allDone && !!headDeadline && headDeadline < new Date()
               const donePct = Math.round(([parent, ...children].filter((t) => t.status === 'COMPLETED').length / (1 + children.length)) * 100)
-              const linkedEventId = parent.calendarEventId
+              const linkedEventId = displayHead.calendarEventId
               const isLinked = !!linkedEventId
               return (
                 <button
@@ -926,7 +932,17 @@ export default function CalendarPage() {
                   onClick={() => {
                     if (isLinked) {
                       const ev = externalEvents.find((e) => e.id === linkedEventId)
-                      if (ev) setEditingEvent(ev)
+                      if (ev) {
+                        // Navigate calendar to the week containing this event then open panel
+                        if (headDeadline) {
+                          const dow = headDeadline.getDay()
+                          const mon = new Date(headDeadline)
+                          mon.setDate(headDeadline.getDate() + (dow === 0 ? 1 : 1 - dow))
+                          mon.setHours(0, 0, 0, 0)
+                          setStartDate(mon)
+                        }
+                        setEditingEvent(ev)
+                      }
                     }
                   }}
                   className={cn(
@@ -940,12 +956,12 @@ export default function CalendarPage() {
                     {allDone && <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500 shrink-0 mt-0.5" />}
                     {!isOverdue && !allDone && <GitBranch className="h-2.5 w-2.5 text-[#c4b48a] shrink-0 mt-0.5" />}
                     <span className={cn('text-[11px] font-medium leading-snug truncate flex-1', allDone ? 'line-through text-[#a99873]' : isOverdue ? 'text-red-700' : 'text-[#3a3326]')}>
-                      {parent.title}
+                      {displayHead.title}
                     </span>
                   </div>
-                  {parent.deadline && (
+                  {headDeadline && (
                     <span className={cn('text-[10px] pl-4', isOverdue ? 'text-red-400' : 'text-[#a99873]')}>
-                      {fmtDate(new Date(String(parent.deadline)), language)}
+                      {fmtDate(headDeadline, language)}
                     </span>
                   )}
                   <div className="pl-4 flex items-center gap-1.5 w-full">
