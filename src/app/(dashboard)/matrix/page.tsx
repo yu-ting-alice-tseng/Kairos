@@ -7,6 +7,7 @@ import { t } from '@/lib/i18n'
 import { EisenhowerMatrix } from '@/components/matrix/EisenhowerMatrix'
 import { GoalsSection } from '@/components/matrix/GoalsSection'
 import { TaskForm } from '@/components/tasks/TaskForm'
+import { InkLoader } from '@/components/ui/InkLoader'
 import { BreakdownDialog } from '@/components/ai/BreakdownDialog'
 import { Button } from '@/components/ui/button'
 import { Plus, LayoutGrid, Loader2, Settings, Wand2, Trash2, SlidersHorizontal, ChevronLeft, ChevronRight } from 'lucide-react'
@@ -228,7 +229,7 @@ export default function MatrixPage() {
   const nextDay = () => setSelectedDate((d) => { const n = new Date(d); n.setDate(n.getDate() + 1); return n })
   const goToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); setSelectedDate(d) }
 
-  if (loading) return <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#a87f3e]" /></div>
+  if (loading) return <InkLoader size="page" />
 
   return (
     <div className="flex flex-col h-full">

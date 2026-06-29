@@ -26,12 +26,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid date range' }, { status: 400 })
   }
 
+  // Load ALL sub-calendars (active + inactive) so we can detect accounts with inactive calendars
   const accounts = await prisma.calendarAccount.findMany({
     where: { userId, isActive: true },
-    include: { subCalendars: { where: { isActive: true } } },
+    include: { subCalendars: true },
   })
 
   const allEvents: CalendarEvent[] = []
+
+  // Track which (accountId:calendarId) pairs fetched successfully
+  // Used later to determine which accounts are safe for orphan deletion
+  const successfulFetches = new Set<string>()
 
   await Promise.all(
     accounts.map(async (account) => {
@@ -42,8 +47,9 @@ export async function GET(req: NextRequest) {
       const expiresAt = account.expiresAt
       if (!accessToken) return
 
-      const calendarIds = account.subCalendars.length > 0
-        ? account.subCalendars.map((sc) => ({ id: sc.externalId, color: sc.color }))
+      const activeSubCals = account.subCalendars.filter((sc) => sc.isActive)
+      const calendarIds = activeSubCals.length > 0
+        ? activeSubCals.map((sc) => ({ id: sc.externalId, color: sc.color }))
         : [{ id: account.provider === 'GOOGLE' ? 'primary' : null, color: account.color }]
 
       await Promise.all(
@@ -70,12 +76,30 @@ export async function GET(req: NextRequest) {
                   color,
                 })
               )
+              successfulFetches.add(`${account.id}:${id}`)
             } catch (err) {
               console.error(`Failed to fetch events for account ${account.id}, calendar ${id}:`, err)
             }
           })
       )
     })
+  )
+
+  // Determine which accounts are safe for orphan deletion:
+  // - All active sub-calendars must have fetched successfully (handles case 4: API/token errors)
+  // - Account must have NO inactive sub-calendars (handles case 3: event may be on a disabled calendar)
+  const safeToOrphanDeleteAccountIds = new Set(
+    accounts
+      .filter((account) => {
+        const hasInactiveSubCals = account.subCalendars.some((sc) => !sc.isActive)
+        if (hasInactiveSubCals) return false
+        const activeSubCals = account.subCalendars.filter((sc) => sc.isActive)
+        const expectedIds = activeSubCals.length > 0
+          ? activeSubCals.map((sc) => sc.externalId)
+          : [account.provider === 'GOOGLE' ? 'primary' : null].filter(Boolean) as string[]
+        return expectedIds.every((calId) => successfulFetches.has(`${account.id}:${calId}`))
+      })
+      .map((a) => a.id)
   )
 
   // Sync tasks with fetched calendar events (non-habit events only)
@@ -185,27 +209,31 @@ export async function GET(req: NextRequest) {
       await prisma.task.deleteMany({ where: { id: { in: siblingDupeIds }, userId } })
     }
 
-    // Delete tasks whose linked event no longer exists in this window
-    // Include both scheduled tasks and all-day tasks (deadline-based) to catch renamed/deleted events
-    const fetchedEventIds = new Set(syncEventIds)
-    const linkedInWindow = await prisma.task.findMany({
-      where: {
-        userId,
-        calendarEventId: { not: null },
-        OR: [
-          { scheduledStart: { gte: timeMin, lte: timeMax } },
-          { scheduledStart: null, deadline: { gte: timeMin, lte: timeMax } },
-        ],
-      },
-      select: { id: true, calendarEventId: true },
-    })
-    const orphanIds = linkedInWindow
-      .filter((t) => t.calendarEventId && !fetchedEventIds.has(t.calendarEventId))
-      .map((t) => t.id)
-    if (orphanIds.length > 0) {
-      // Unlink children before deleting to avoid broken parentTaskId references
-      await prisma.task.updateMany({ where: { parentTaskId: { in: orphanIds }, userId }, data: { parentTaskId: null } })
-      await prisma.task.deleteMany({ where: { id: { in: orphanIds }, userId } })
+    // Delete tasks whose linked event no longer exists in this window.
+    // Only runs for accounts where we are certain we fetched ALL events:
+    //   - All active sub-calendars returned successfully (no API/token errors)
+    //   - Account has no inactive sub-calendars (event could be on a disabled calendar)
+    if (safeToOrphanDeleteAccountIds.size > 0) {
+      const fetchedEventIds = new Set(syncEventIds)
+      const linkedInWindow = await prisma.task.findMany({
+        where: {
+          userId,
+          calendarAccountId: { in: [...safeToOrphanDeleteAccountIds] },
+          calendarEventId: { not: null },
+          OR: [
+            { scheduledStart: { gte: timeMin, lte: timeMax } },
+            { scheduledStart: null, deadline: { gte: timeMin, lte: timeMax } },
+          ],
+        },
+        select: { id: true, calendarEventId: true },
+      })
+      const orphanIds = linkedInWindow
+        .filter((t) => t.calendarEventId && !fetchedEventIds.has(t.calendarEventId))
+        .map((t) => t.id)
+      if (orphanIds.length > 0) {
+        await prisma.task.updateMany({ where: { parentTaskId: { in: orphanIds }, userId }, data: { parentTaskId: null } })
+        await prisma.task.deleteMany({ where: { id: { in: orphanIds }, userId } })
+      }
     }
   } catch (err) {
     console.error('[calendar/events] task sync failed:', err)

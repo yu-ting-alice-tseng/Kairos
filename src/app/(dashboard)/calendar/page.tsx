@@ -6,6 +6,7 @@ import { useAppStore } from '@/stores/useAppStore'
 import { Task, CalendarEvent, Habit, RetroTemplate } from '@/types'
 import { t } from '@/lib/i18n'
 import { TaskForm } from '@/components/tasks/TaskForm'
+import { InkLoader } from '@/components/ui/InkLoader'
 import { Button } from '@/components/ui/button'
 import { cn, formatTime, getQuadrant, EISENHOWER_QUADRANTS } from '@/lib/utils'
 import {
@@ -789,7 +790,7 @@ export default function CalendarPage() {
   const isDragging = draggingEventId !== null || draggingTaskId !== null
 
   if (loading) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#a87f3e]" /></div>
+    return <InkLoader size="page" />
   }
 
   // ─── Render ──────────────────────────────────────────────────────────────────
