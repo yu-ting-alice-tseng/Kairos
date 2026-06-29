@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const startParam = searchParams.get('start')
   const endParam = searchParams.get('end')
+  const noSync = searchParams.get('noSync') === 'true'
   if (!startParam || !endParam) {
     return NextResponse.json({ error: 'start and end query params required' }, { status: 400 })
   }
@@ -78,6 +79,8 @@ export async function GET(req: NextRequest) {
   )
 
   // Sync tasks with fetched calendar events (non-habit events only)
+  // Skip when noSync=true (e.g. link dialog — read-only display, must not delete tasks)
+  if (noSync) return NextResponse.json(allEvents)
   try {
     const syncableEvents = allEvents.filter((e) => !e.habitId)
     const syncEventIds = syncableEvents.map((e) => e.id)

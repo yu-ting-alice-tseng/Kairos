@@ -1708,7 +1708,7 @@ function EventDetailPanel({
     setLinkEventsLoading(true)
     const start = new Date(); start.setFullYear(start.getFullYear() - 2)
     const end = new Date(); end.setFullYear(end.getFullYear() + 2)
-    fetch(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}`)
+    fetch(`/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}&noSync=true`)
       .then(async (evRes) => {
         if (evRes.ok) {
           const fresh: CalendarEvent[] = await evRes.json()
@@ -1717,8 +1717,6 @@ function EventDetailPanel({
             const extras = prev.filter((e) => !freshIds.has(e.id))
             return [...fresh, ...extras]
           })
-          // Second task refresh after calendar sync to pick up any title/deadline updates
-          await onTasksRefresh()
         }
       })
       .catch(() => { /* calendar events section stays with previous data */ })
