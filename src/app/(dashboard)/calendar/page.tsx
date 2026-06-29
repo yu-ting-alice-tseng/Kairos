@@ -1655,6 +1655,7 @@ function EventDetailPanel({
   const [linkSearch, setLinkSearch] = React.useState('')
   const [linkCalEvents, setLinkCalEvents] = React.useState<CalendarEvent[]>([])
   const [linkEventsLoading, setLinkEventsLoading] = React.useState(false)
+  const linkCalEventsFetchedRef = React.useRef(false)
 
   // Relevance: count event-title chars found in task title (higher = more relevant)
   const relevanceScore = React.useCallback((taskTitle: string): number => {
@@ -1698,8 +1699,12 @@ function EventDetailPanel({
       currentWeekEvents.forEach((e) => { if (!existingIds.has(e.id)) merged.push(e) })
       return merged
     })
-    // Background: fetch calendar events for full 4-year range (triggers server-side title/deadline sync),
-    // THEN refresh tasks so the store reflects the freshly-synced titles and deadlines
+    // Always refresh tasks immediately so the task list is populated right away
+    onTasksRefresh()
+
+    // Only do the expensive 4-year calendar fetch once per page session
+    if (linkCalEventsFetchedRef.current) return
+    linkCalEventsFetchedRef.current = true
     setLinkEventsLoading(true)
     const start = new Date(); start.setFullYear(start.getFullYear() - 2)
     const end = new Date(); end.setFullYear(end.getFullYear() + 2)
@@ -1707,15 +1712,14 @@ function EventDetailPanel({
       .then(async (evRes) => {
         if (evRes.ok) {
           const fresh: CalendarEvent[] = await evRes.json()
-          // Merge: use fresh as base, keep any locally-seeded events not covered by the fetch
           setLinkCalEvents((prev) => {
             const freshIds = new Set(fresh.map((e) => e.id))
             const extras = prev.filter((e) => !freshIds.has(e.id))
             return [...fresh, ...extras]
           })
+          // Second task refresh after calendar sync to pick up any title/deadline updates
+          await onTasksRefresh()
         }
-        // Refresh tasks AFTER calendar sync so updated titles/deadlines are reflected
-        await onTasksRefresh()
       })
       .catch(() => { /* calendar events section stays with previous data */ })
       .finally(() => { setLinkEventsLoading(false) })
