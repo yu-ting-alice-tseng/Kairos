@@ -218,6 +218,7 @@ export default function MatrixPage() {
     .filter((t) =>
       t.status !== 'CANCELLED' &&
       !t.scheduledStart &&
+      !t.calendarEventId &&
       isDueOnDate(t, selectedDate) &&
       !isExcludedFromMatrix(t.title)
     )
