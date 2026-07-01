@@ -199,9 +199,13 @@ export default function MatrixPage() {
     matrixExcludePatterns.some((p) => p && title.toLowerCase().includes(p.toLowerCase()))
 
   const isDueOnDate = (task: Task, date: Date) => {
-    if (task.deadline) return isSameDay(new Date(String(task.deadline)), date)
-    // Auto-imported tasks (have calendarEventId) without deadline: pin to creation date
-    if (task.calendarEventId) return isSameDay(new Date(String(task.createdAt)), date)
+    const endOfDate = new Date(date); endOfDate.setHours(23, 59, 59, 999)
+    const today = new Date(); today.setHours(23, 59, 59, 999)
+    if (task.deadline) {
+      const dl = new Date(String(task.deadline))
+      // On today's view: include overdue tasks (deadline in the past); on other days: exact match only
+      return isSameDay(date, new Date()) ? dl <= today : isSameDay(dl, date)
+    }
     // Manually created tasks without deadline: show only when viewing today
     return isSameDay(date, new Date())
   }
@@ -216,6 +220,7 @@ export default function MatrixPage() {
   // Only unscheduled tasks (no scheduledStart) — same distinction as Calendar vs Matrix
   const filteredTasks = tasks
     .filter((t) =>
+      t.status !== 'COMPLETED' &&
       t.status !== 'CANCELLED' &&
       !t.scheduledStart &&
       !t.calendarEventId &&
