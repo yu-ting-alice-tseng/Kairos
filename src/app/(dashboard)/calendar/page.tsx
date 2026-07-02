@@ -309,7 +309,15 @@ export default function CalendarPage() {
   const allChains = React.useMemo(() => {
     const parentIds = new Set(tasks.filter((t) => t.parentTaskId).map((t) => t.parentTaskId!))
     const parents = tasks.filter((t) => parentIds.has(t.id))
-    return parents.map((parent) => {
+    const twoWeeksAgo = new Date(); twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14)
+    return parents
+      .filter((parent) => {
+        if (parent.status === 'COMPLETED') return false
+        const deadline = parent.deadline ? new Date(String(parent.deadline)) : null
+        if (deadline && deadline < twoWeeksAgo) return false
+        return true
+      })
+      .map((parent) => {
       const children = tasks
         .filter((t) => t.parentTaskId === parent.id)
         .sort((a, b) => (a.deadline ? new Date(String(a.deadline)).getTime() : Infinity) - (b.deadline ? new Date(String(b.deadline)).getTime() : Infinity))
