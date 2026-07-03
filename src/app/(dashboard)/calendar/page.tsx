@@ -154,6 +154,7 @@ export default function CalendarPage() {
   })
   const [showTaskForm, setShowTaskForm] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [viewingScheduledTask, setViewingScheduledTask] = useState<Task | null>(null)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [loading, setLoading] = useState(true)
   const [externalEvents, setExternalEvents] = useState<CalendarEvent[]>([])
@@ -598,8 +599,14 @@ export default function CalendarPage() {
   }
 
   const handleTaskClick = (task: Task) => {
-    setEditingTask(task)
-    setShowTaskForm(true)
+    if (task.scheduledStart) {
+      setEditingEvent(null)
+      setViewingHabit(null)
+      setViewingScheduledTask(task)
+    } else {
+      setEditingTask(task)
+      setShowTaskForm(true)
+    }
   }
 
   // Retro suggestion actions
@@ -957,6 +964,7 @@ export default function CalendarPage() {
                           mon.setHours(0, 0, 0, 0)
                           setStartDate(mon)
                         }
+                        setViewingScheduledTask(null)
                         setEditingEvent(ev)
                       }
                     }
@@ -1074,7 +1082,7 @@ export default function CalendarPage() {
                         style={{ backgroundColor: isHighlighted ? color + '55' : color + '22', borderColor: color, boxShadow: isHighlighted ? `0 0 0 2px ${color}` : undefined }}
                         title={ev.title}
                         onMouseDown={(e) => { if (ev.editable) startAllDayDrag(e, ev) }}
-                        onClick={(e) => { e.stopPropagation(); if (!isDragging) setEditingEvent(ev) }}
+                        onClick={(e) => { e.stopPropagation(); if (!isDragging) { setViewingScheduledTask(null); setEditingEvent(ev) } }}
                       >
                         <span className={cn('text-[#2a2420] truncate flex-1', isLinkedDone && 'line-through text-[#6e6147]')} title={ev.title}>{ev.title}</span>
                         {linkedTask && (
@@ -1202,7 +1210,7 @@ export default function CalendarPage() {
                         return (
                           <div
                             key={block.id}
-                            onClick={(e) => { e.stopPropagation(); if (!isDragging) setEditingEvent(ev) }}
+                            onClick={(e) => { e.stopPropagation(); if (!isDragging) { setViewingScheduledTask(null); setEditingEvent(ev) } }}
                             onMouseDown={(e) => { if (ev.editable) startDrag(e, ev) }}
                             className={cn(
                               'rounded-lg px-2 py-1 text-xs border border-dashed overflow-hidden group',
@@ -1352,6 +1360,30 @@ export default function CalendarPage() {
           onTasksRefresh={async () => {
             const res = await fetch('/api/tasks')
             if (res.ok) setTasks(await res.json())
+          }}
+          onNavigateToDate={(date: Date, taskId?: string) => {
+            const d = new Date(date); d.setHours(0, 0, 0, 0)
+            const dow = d.getDay()
+            const toMon = dow === 0 ? -6 : 1 - dow
+            d.setDate(d.getDate() + toMon)
+            setStartDate(d)
+            if (taskId) { setHighlightedTaskId(taskId); setTimeout(() => setHighlightedTaskId(null), 3000) }
+          }}
+        />
+      ) : viewingScheduledTask ? (
+        <ScheduledTaskPanel
+          task={viewingScheduledTask}
+          lang={language}
+          tasks={tasks}
+          onClose={() => setViewingScheduledTask(null)}
+          onEdit={(task) => { setEditingTask(task); setShowTaskForm(true) }}
+          onTasksRefresh={async () => {
+            const res = await fetch('/api/tasks')
+            if (res.ok) setTasks(await res.json())
+          }}
+          onTaskUpdate={(id, data) => {
+            updateTask(id, data)
+            setViewingScheduledTask((prev) => prev?.id === id ? { ...prev, ...data } : prev)
           }}
           onNavigateToDate={(date: Date, taskId?: string) => {
             const d = new Date(date); d.setHours(0, 0, 0, 0)
@@ -1554,6 +1586,378 @@ function HabitDetailPanel({ habit, lang, onComplete, onClose }: {
   )
 }
 
+// ─── Scheduled Task Detail Panel ─────────────────────────────────────────────
+
+function ScheduledTaskPanel({
+  task, lang, tasks, onClose, onEdit, onTasksRefresh, onTaskUpdate, onNavigateToDate,
+}: {
+  task: Task
+  lang: 'fr' | 'en' | 'zh'
+  tasks: Task[]
+  onClose: () => void
+  onEdit: (task: Task) => void
+  onTasksRefresh: () => void | Promise<void>
+  onTaskUpdate: (id: string, data: Partial<Task>) => void
+  onNavigateToDate?: (date: Date, taskId?: string) => void
+}) {
+  const { updateTask } = useAppStore()
+
+  // Chain root: task itself if it has children, or its parent if it has one
+  const chainRoot = React.useMemo(() => {
+    if (task.parentTaskId) {
+      const parent = tasks.find((t) => t.id === task.parentTaskId)
+      return parent ?? task
+    }
+    return task
+  }, [task, tasks])
+
+  const chainSiblings = React.useMemo(() => {
+    return tasks.filter((t) => t.parentTaskId === chainRoot.id && t.id !== chainRoot.id)
+      .sort((a, b) => {
+        const da = a.deadline ? new Date(String(a.deadline)).getTime() : Infinity
+        const db = b.deadline ? new Date(String(b.deadline)).getTime() : Infinity
+        return da - db
+      })
+  }, [chainRoot, tasks])
+
+  const allChainTasks = React.useMemo(() => {
+    return [chainRoot, ...chainSiblings].sort((a, b) => {
+      const da = a.deadline ? new Date(String(a.deadline)).getTime() : 0
+      const db = b.deadline ? new Date(String(b.deadline)).getTime() : 0
+      return db - da
+    })
+  }, [chainRoot, chainSiblings])
+
+  const hasChain = chainSiblings.length > 0 || task.parentTaskId != null
+
+  // Link dialog state
+  const [linkingChain, setLinkingChain] = React.useState(false)
+  const [selectedLinkIds, setSelectedLinkIds] = React.useState<Set<string>>(new Set())
+  const [linkSearch, setLinkSearch] = React.useState('')
+  const [linkSaving, setLinkSaving] = React.useState(false)
+  const [completing, setCompleting] = React.useState(false)
+  const [chainConflictPending, setChainConflictPending] = React.useState<Task | null>(null)
+  const [joinOtherChainIds, setJoinOtherChainIds] = React.useState<Set<string>>(new Set())
+
+  const chainedTaskIds = React.useMemo(() => {
+    const taskIdSet = new Set(tasks.map((t) => t.id))
+    const childIds = new Set(tasks.filter((t) => t.parentTaskId && taskIdSet.has(t.parentTaskId)).map((t) => t.id))
+    const validParentIds = new Set(tasks.filter((t) => t.parentTaskId && taskIdSet.has(t.parentTaskId)).map((t) => t.parentTaskId!))
+    return new Set([...childIds, ...validParentIds])
+  }, [tasks])
+
+  const taskChainRootMap = React.useMemo(() => {
+    const taskIdSet = new Set(tasks.map((t) => t.id))
+    const map = new Map<string, string>()
+    for (const t of tasks) {
+      if (t.parentTaskId && taskIdSet.has(t.parentTaskId)) {
+        map.set(t.id, t.parentTaskId)
+      } else if (tasks.some((c) => c.parentTaskId === t.id && taskIdSet.has(c.id))) {
+        map.set(t.id, t.id)
+      }
+    }
+    return map
+  }, [tasks])
+
+  const openLinkDialog = () => {
+    setLinkSearch('')
+    setSelectedLinkIds(new Set([chainRoot.id, ...chainSiblings.map((s) => s.id)]))
+    setLinkingChain(true)
+  }
+
+  const handleLinkTask = async () => {
+    if (selectedLinkIds.size === 0 && joinOtherChainIds.size === 0) return
+    setLinkSaving(true)
+    try {
+      if (joinOtherChainIds.size > 0) {
+        const otherTaskId = [...joinOtherChainIds][0]
+        const otherChainRootId = taskChainRootMap.get(otherTaskId) ?? otherTaskId
+        if (chainRoot.id !== otherChainRootId) {
+          await fetch(`/api/tasks/${chainRoot.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ parentTaskId: otherChainRootId }),
+          })
+        }
+      } else {
+        const toLink = [...selectedLinkIds].filter((id) => id !== chainRoot.id)
+        await Promise.all(toLink.map((id) => fetch(`/api/tasks/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ parentTaskId: chainRoot.id }),
+        })))
+      }
+      await onTasksRefresh()
+      setLinkingChain(false)
+      setSelectedLinkIds(new Set())
+      setJoinOtherChainIds(new Set())
+      setChainConflictPending(null)
+    } catch (e) { console.error('Link failed', e) } finally { setLinkSaving(false) }
+  }
+
+  const handleComplete = async () => {
+    setCompleting(true)
+    const newStatus = task.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED'
+    onTaskUpdate(task.id, { status: newStatus })
+    const res = await fetch(`/api/tasks/${task.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    })
+    if (res.ok) { const d = await res.json(); onTaskUpdate(task.id, d) }
+    else onTaskUpdate(task.id, { status: task.status })
+    setCompleting(false)
+  }
+
+  const handleCompleteChainTask = async (t: Task) => {
+    const newStatus = t.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED'
+    updateTask(t.id, { status: newStatus })
+    const res = await fetch(`/api/tasks/${t.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    })
+    if (res.ok) { const d = await res.json(); updateTask(t.id, d) } else updateTask(t.id, t)
+  }
+
+  const timeLabel = React.useMemo(() => {
+    if (!task.scheduledStart) return null
+    const locale = lang === 'fr' ? 'fr-FR' : lang === 'zh' ? 'zh-TW' : 'en-GB'
+    const s = new Date(String(task.scheduledStart))
+    const opts: Intl.DateTimeFormatOptions = { weekday: 'short', day: 'numeric', month: 'short' }
+    const dayStr = s.toLocaleDateString(locale, opts)
+    const startT = s.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+    if (!task.scheduledEnd) return `${dayStr}  ${startT}`
+    const e = new Date(String(task.scheduledEnd))
+    const endT = e.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+    return `${dayStr}  ${startT} – ${endT}`
+  }, [task.scheduledStart, task.scheduledEnd, lang])
+
+  const done = task.status === 'COMPLETED'
+
+  return (
+    <div className="w-72 shrink-0 border-l border-[#e2d6bc] bg-[#fbf7ee] flex flex-col overflow-hidden">
+      <div className="h-1 w-full shrink-0 bg-[#ab3326]" />
+      <div className="flex items-center justify-between px-4 pt-4 pb-2 gap-2">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#a99873]">
+          {lang === 'zh' ? '任務' : lang === 'fr' ? 'Tâche' : 'Task'}
+        </p>
+        <button onClick={onClose} className="p-1 rounded-lg hover:bg-[#ece2cb] text-[#a99873] transition-colors">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 pb-4 flex flex-col gap-4">
+        {/* Title */}
+        <h2 className={cn('text-sm font-semibold leading-snug', done ? 'line-through text-[#a99873]' : 'text-[#2a2420]')}>{task.title}</h2>
+
+        {/* Time */}
+        {timeLabel && (
+          <div className="flex items-center gap-2 text-[#5c5347]">
+            <Clock className="h-3.5 w-3.5 text-[#a99873] shrink-0" />
+            <span className="text-xs">{timeLabel}</span>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex gap-2">
+          <button
+            onClick={handleComplete}
+            disabled={completing}
+            className={cn(
+              'flex items-center gap-1.5 rounded-xl border text-xs px-3 py-1.5 transition-colors',
+              done ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'border-[#e2d6bc] text-[#5c5347] hover:bg-[#ece2cb]'
+            )}
+          >
+            {completing ? <Loader2 className="h-3 w-3 animate-spin" /> : done ? <CheckCircle2 className="h-3 w-3" /> : <Circle className="h-3 w-3" />}
+            {done ? (lang === 'zh' ? '取消完成' : lang === 'fr' ? 'Non fait' : 'Undo') : (lang === 'zh' ? '完成' : lang === 'fr' ? 'Terminer' : 'Complete')}
+          </button>
+          <button
+            onClick={() => onEdit(task)}
+            className="flex items-center gap-1.5 rounded-xl border border-[#e2d6bc] text-xs px-3 py-1.5 text-[#5c5347] hover:bg-[#ece2cb] transition-colors"
+          >
+            <Pencil className="h-3 w-3" />
+            {lang === 'zh' ? '編輯' : lang === 'fr' ? 'Modifier' : 'Edit'}
+          </button>
+        </div>
+
+        {/* Chain section */}
+        <div className="flex flex-col gap-2">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#a99873] flex items-center gap-1.5">
+            <GitBranch className="h-3 w-3" />
+            {lang === 'zh' ? '任務鏈' : lang === 'fr' ? 'Chaîne de tâches' : 'Task chain'}
+          </p>
+
+          {hasChain && (
+            <div className="flex flex-col gap-1">
+              {allChainTasks.map((t, i) => {
+                const dl = t.deadline ? new Date(String(t.deadline)) : null
+                const isDone = t.status === 'COMPLETED'
+                const overdue = dl && !isDone && dl < new Date()
+                const isRoot = t.id === chainRoot.id
+                const isCurrent = t.id === task.id
+                return (
+                  <div
+                    key={t.id}
+                    className={cn(
+                      'flex items-center gap-2 text-xs rounded-lg px-2.5 py-1.5 border transition-colors',
+                      i > 0 ? 'ml-3' : '',
+                      isCurrent ? 'border-red-300 bg-red-50' : isDone ? 'bg-emerald-50/60 border-emerald-100 opacity-70' : overdue ? 'bg-red-50/40 border-red-100' : 'bg-[#f3ecdd] border-[#ece2cb]',
+                      dl && onNavigateToDate ? 'cursor-pointer hover:brightness-95' : ''
+                    )}
+                    onClick={() => dl && onNavigateToDate?.(dl, t.id)}
+                  >
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleCompleteChainTask(t) }}
+                      className={cn('shrink-0 h-4 w-4 rounded-full border flex items-center justify-center transition-colors', isDone ? 'bg-emerald-500 border-emerald-500 hover:bg-emerald-400' : 'border-[#c4b48a] hover:border-emerald-400')}
+                    >
+                      {isDone && <Check className="h-2.5 w-2.5 text-white" />}
+                    </button>
+                    {isRoot && <GitBranch className={cn('h-3 w-3 shrink-0', isDone ? 'text-emerald-500' : overdue ? 'text-red-500' : 'text-red-600')} />}
+                    <span className={cn('truncate flex-1 font-medium', isDone ? 'line-through text-[#a99873]' : overdue ? 'text-red-700' : 'text-[#3a3326]')} title={t.title}>{t.title}</span>
+                    {dl && <span className={cn('shrink-0 text-[10px]', overdue && !isDone ? 'text-red-500' : 'text-[#a99873]')}>{fmtDate(dl, lang)}</span>}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          <button
+            onClick={openLinkDialog}
+            className="flex items-center gap-1.5 rounded-xl border border-dashed border-[#c4b48a] text-xs px-3 py-2 text-[#8a7a5e] hover:bg-[#f3ecdd] transition-colors w-full justify-center"
+          >
+            <GitBranch className="h-3.5 w-3.5" />
+            {lang === 'zh' ? '連結任務' : lang === 'fr' ? 'Lier une tâche' : 'Link a task'}
+          </button>
+        </div>
+      </div>
+
+      {/* Link dialog */}
+      {linkingChain && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => { setLinkingChain(false); setSelectedLinkIds(new Set()); setJoinOtherChainIds(new Set()); setChainConflictPending(null) }}>
+          <div className="bg-[#fbf7ee] rounded-2xl border border-[#e2d6bc] shadow-xl w-80 max-h-[70vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-4 py-3 border-b border-[#ece2cb] flex items-center justify-between">
+              <p className="text-xs font-semibold text-[#3a3326]">
+                {lang === 'zh' ? '連結任務' : lang === 'fr' ? 'Lier une tâche' : 'Link a task'}
+              </p>
+              <button onClick={() => { setLinkingChain(false); setSelectedLinkIds(new Set()); setJoinOtherChainIds(new Set()); setChainConflictPending(null) }} className="p-1 rounded-lg hover:bg-[#ece2cb] text-[#a99873]">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <p className="px-4 pt-2 pb-0 text-[10px] text-[#a99873]">
+              {lang === 'zh' ? `將加入以「${chainRoot.title}」為根的任務鏈` : lang === 'fr' ? `Sera ajouté à la chaîne « ${chainRoot.title} »` : `Will be added to chain "${chainRoot.title}"`}
+            </p>
+            <div className="px-3 py-2">
+              <input
+                autoFocus
+                value={linkSearch}
+                onChange={(e) => setLinkSearch(e.target.value)}
+                placeholder={lang === 'zh' ? '搜尋任務…' : lang === 'fr' ? 'Rechercher une tâche…' : 'Search tasks…'}
+                className="w-full border border-[#e2d6bc] rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-red-300 bg-white text-[#2a2420]"
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto px-3 pb-3 flex flex-col gap-0.5" style={{ minHeight: 0 }}>
+              {tasks
+                .filter((t) => t.id !== task.id)
+                .filter((t) => !linkSearch || t.title.toLowerCase().includes(linkSearch.toLowerCase()))
+                .sort((a, b) => {
+                  const aChain = a.id === chainRoot.id || chainSiblings.some((s) => s.id === a.id)
+                  const bChain = b.id === chainRoot.id || chainSiblings.some((s) => s.id === b.id)
+                  if (aChain !== bChain) return aChain ? -1 : 1
+                  const da = a.deadline ? new Date(String(a.deadline)).getTime() : Infinity
+                  const db = b.deadline ? new Date(String(b.deadline)).getTime() : Infinity
+                  return db - da
+                })
+                .map((t) => {
+                  const selected = selectedLinkIds.has(t.id)
+                  const joinOther = joinOtherChainIds.has(t.id)
+                  const isCurrentChainMember = t.id === chainRoot.id || chainSiblings.some((s) => s.id === t.id)
+                  const inOtherChain = chainedTaskIds.has(t.id) && !isCurrentChainMember
+                  const isConflictPending = chainConflictPending?.id === t.id
+                  return (
+                    <div key={t.id} className="flex flex-col gap-0.5">
+                      <button
+                        onClick={() => {
+                          if (inOtherChain) {
+                            setChainConflictPending(t)
+                          } else {
+                            setSelectedLinkIds((prev) => {
+                              const next = new Set(prev)
+                              selected ? next.delete(t.id) : next.add(t.id)
+                              return next
+                            })
+                          }
+                        }}
+                        className={cn(
+                          'flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 text-left transition-colors border w-full',
+                          inOtherChain
+                            ? joinOther ? 'bg-blue-50 border-blue-200' : isConflictPending ? 'bg-amber-50 border-amber-200' : 'hover:bg-[#f3ecdd] border-transparent'
+                            : selected ? 'bg-red-50 border-red-200' : 'hover:bg-[#f3ecdd] border-transparent'
+                        )}
+                      >
+                        <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-red-600 border-red-600' : joinOther ? 'bg-blue-500 border-blue-500' : 'border-[#c4b48a]'}`}>
+                          {(selected || joinOther) && <Check className="h-2.5 w-2.5 text-white" />}
+                        </span>
+                        <span className="truncate flex-1 text-[#3a3326]" title={t.title}>{t.title}</span>
+                        {inOtherChain && !joinOther && <span className="shrink-0 text-[9px] text-[#c4b48a] bg-[#f3ecdd] rounded px-1">{lang === 'zh' ? '已在其他任務鏈' : lang === 'fr' ? 'autre chaîne' : 'other chain'}</span>}
+                        {joinOther && <span className="shrink-0 text-[9px] text-blue-600 bg-blue-50 rounded px-1">{lang === 'zh' ? '加入其任務鏈' : lang === 'fr' ? 'rejoindre sa chaîne' : 'join their chain'}</span>}
+                        {t.deadline && <span className="text-[#a99873] shrink-0 text-[10px]">{fmtDate(new Date(String(t.deadline)), lang)}</span>}
+                      </button>
+                      {isConflictPending && (
+                        <div className="mx-1 mb-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 flex flex-col gap-2">
+                          <p className="text-[10px] text-amber-800 leading-snug">
+                            {lang === 'zh' ? `「${t.title}」已在另一個任務鏈中，請選擇：` : lang === 'fr' ? `« ${t.title} » est déjà dans une autre chaîne. Comment procéder ?` : `"${t.title}" is already in another chain. How to proceed?`}
+                          </p>
+                          <div className="flex gap-1.5">
+                            <button
+                              onClick={() => { setSelectedLinkIds((prev) => { const next = new Set(prev); next.add(t.id); return next }); setChainConflictPending(null) }}
+                              className="flex-1 text-[10px] rounded-md bg-[#ab3326] text-white px-2 py-1.5 hover:bg-[#861f17] transition-colors leading-tight"
+                            >
+                              {lang === 'zh' ? `加入「${chainRoot.title}」` : lang === 'fr' ? `Ajouter à « ${chainRoot.title} »` : `Add to "${chainRoot.title}"`}
+                            </button>
+                            <button
+                              onClick={() => { setJoinOtherChainIds(new Set([t.id])); setSelectedLinkIds(new Set()); setChainConflictPending(null) }}
+                              className="flex-1 text-[10px] rounded-md border border-blue-300 text-blue-700 px-2 py-1.5 hover:bg-blue-50 transition-colors leading-tight"
+                            >
+                              {(() => {
+                                const rootId = taskChainRootMap.get(t.id) ?? t.id
+                                const rootTask = tasks.find((tk) => tk.id === rootId)
+                                const chainName = rootTask?.title ?? t.title
+                                return lang === 'zh' ? `加入「${chainName}」的鏈` : lang === 'fr' ? `Rejoindre « ${chainName} »` : `Join "${chainName}"`
+                              })()}
+                            </button>
+                            <button onClick={() => setChainConflictPending(null)} className="text-[10px] rounded-md border border-[#e2d6bc] text-[#a99873] px-2 py-1.5 hover:bg-[#f3ecdd] transition-colors">
+                              {lang === 'zh' ? '取消' : lang === 'fr' ? 'Annuler' : 'Cancel'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+            </div>
+            <div className="px-4 py-3 border-t border-[#ece2cb] flex gap-2">
+              <button onClick={() => { setLinkingChain(false); setSelectedLinkIds(new Set()); setJoinOtherChainIds(new Set()); setChainConflictPending(null) }} className="flex-1 rounded-xl border border-[#e2d6bc] text-[#5c5347] text-xs py-2 hover:bg-[#ece2cb] transition-colors">
+                {lang === 'zh' ? '取消' : lang === 'fr' ? 'Annuler' : 'Cancel'}
+              </button>
+              <button
+                onClick={handleLinkTask}
+                disabled={(selectedLinkIds.size === 0 && joinOtherChainIds.size === 0) || linkSaving}
+                className="flex-1 rounded-xl bg-[#ab3326] text-white text-xs py-2 hover:bg-[#861f17] transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+              >
+                {linkSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitBranch className="h-3.5 w-3.5" />}
+                {lang === 'zh' ? `連結 (${selectedLinkIds.size + joinOtherChainIds.size})` : lang === 'fr' ? `Lier (${selectedLinkIds.size + joinOtherChainIds.size})` : `Link (${selectedLinkIds.size + joinOtherChainIds.size})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Event Detail Panel ───────────────────────────────────────────────────────
+
 function EventDetailPanel({
   event, lang, saving, tasks, currentWeekEvents, onSave, onDelete, onClose, onTasksRefresh, onNavigateToDate,
 }: {
@@ -1675,6 +2079,10 @@ function EventDetailPanel({
   const linkCalEventsFetchedRef = React.useRef(false)
   // Bounds of the completed 4-year fetch — used to filter stale tasks
   const linkFetchBoundsRef = React.useRef<{ start: Date; end: Date } | null>(null)
+  // Chain conflict: task in another chain that the user just clicked
+  const [chainConflictPending, setChainConflictPending] = React.useState<Task | null>(null)
+  // Tasks where user chose "join their chain" (current event joins that chain instead)
+  const [joinOtherChainIds, setJoinOtherChainIds] = React.useState<Set<string>>(new Set())
 
   // Relevance: count event-title chars found in task title (higher = more relevant)
   const relevanceScore = React.useCallback((taskTitle: string): number => {
@@ -1700,6 +2108,20 @@ function EventDetailPanel({
     // Parents = tasks that are pointed to by at least one valid child
     const validParentIds = new Set(tasks.filter((t) => t.parentTaskId && taskIdSet.has(t.parentTaskId)).map((t) => t.parentTaskId!))
     return new Set([...childIds, ...validParentIds])
+  }, [tasks])
+
+  // Map from taskId → chain root task ID (for resolving which chain a task belongs to)
+  const taskChainRootMap = React.useMemo(() => {
+    const taskIdSet = new Set(tasks.map((t) => t.id))
+    const map = new Map<string, string>()
+    for (const t of tasks) {
+      if (t.parentTaskId && taskIdSet.has(t.parentTaskId)) {
+        map.set(t.id, t.parentTaskId)
+      } else if (tasks.some((c) => c.parentTaskId === t.id && taskIdSet.has(c.id))) {
+        map.set(t.id, t.id)
+      }
+    }
+    return map
   }, [tasks])
 
   const openLinkDialog = () => {
@@ -1757,9 +2179,43 @@ function EventDetailPanel({
   }
 
   const handleLinkTask = async () => {
-    if (selectedLinkIds.size === 0) return
+    if (selectedLinkIds.size === 0 && joinOtherChainIds.size === 0) return
     setLinkSaving(true)
     try {
+      // Handle "join other chain" tasks: add current event's task into the other chain
+      if (joinOtherChainIds.size > 0) {
+        // Take the first one (UI only allows selecting one at a time)
+        const otherTaskId = [...joinOtherChainIds][0]
+        const otherChainRootId = taskChainRootMap.get(otherTaskId) ?? otherTaskId
+        // Ensure current event has a task; if not, create one
+        let currentTaskId = chainParent?.id ?? directlyLinkedTasks[0]?.id
+        if (!currentTaskId) {
+          const res = await fetch('/api/tasks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: event.title,
+              calendarEventId: event.id,
+              calendarAccountId: event.calendarAccountId,
+              deadline: event.allDay ? new Date(event.start).toISOString() : new Date(event.end).toISOString(),
+            }),
+          })
+          if (res.ok) { const t = await res.json(); addTask(t); currentTaskId = t.id }
+        }
+        if (currentTaskId && currentTaskId !== otherChainRootId) {
+          await fetch(`/api/tasks/${currentTaskId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ parentTaskId: otherChainRootId }),
+          })
+        }
+        onTasksRefresh()
+        setLinkingChain(false)
+        setSelectedLinkIds(new Set())
+        setJoinOtherChainIds(new Set())
+        return
+      }
+
       // selectedLinkIds may contain task IDs OR calendar event IDs (for events without tasks).
       // Resolve everything to task IDs, auto-creating tasks for event-only selections.
       const resolved = await Promise.all([...selectedLinkIds].map(async (id): Promise<string | null> => {
@@ -1827,6 +2283,7 @@ function EventDetailPanel({
       onTasksRefresh()
       setLinkingChain(false)
       setSelectedLinkIds(new Set())
+      setJoinOtherChainIds(new Set())
     } catch (e) { console.error('Link failed', e) } finally { setLinkSaving(false) }
   }
 
@@ -2114,13 +2571,13 @@ function EventDetailPanel({
 
         {/* Link task dialog */}
         {linkingChain && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => { setLinkingChain(false); setSelectedLinkIds(new Set()) }}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => { setLinkingChain(false); setSelectedLinkIds(new Set()); setJoinOtherChainIds(new Set()); setChainConflictPending(null) }}>
             <div className="bg-[#fbf7ee] rounded-2xl border border-[#e2d6bc] shadow-xl w-80 max-h-[70vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
               <div className="px-4 py-3 border-b border-[#ece2cb] flex items-center justify-between">
                 <p className="text-sm font-semibold text-[#2a2420]">
                   {lang === 'zh' ? '連結任務' : lang === 'fr' ? 'Lier une tâche' : 'Link a task'}
                 </p>
-                <button onClick={() => { setLinkingChain(false); setSelectedLinkIds(new Set()) }} className="p-1 rounded-lg hover:bg-[#ece2cb] text-[#a99873]">
+                <button onClick={() => { setLinkingChain(false); setSelectedLinkIds(new Set()); setJoinOtherChainIds(new Set()); setChainConflictPending(null) }} className="p-1 rounded-lg hover:bg-[#ece2cb] text-[#a99873]">
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -2227,29 +2684,103 @@ function EventDetailPanel({
                   })
                   .map((t) => {
                     const selected = selectedLinkIds.has(t.id)
+                    const joinOther = joinOtherChainIds.has(t.id)
                     const isCurrentChainMember = t.id === chainParent?.id || chainSiblings.some((s) => s.id === t.id)
                     const inOtherChain = chainedTaskIds.has(t.id) && !isCurrentChainMember
+                    const isConflictPending = chainConflictPending?.id === t.id
                     return (
-                      <button
-                        key={t.id}
-                        disabled={inOtherChain}
-                        onClick={() => !inOtherChain && setSelectedLinkIds((prev) => {
-                          const next = new Set(prev)
-                          selected ? next.delete(t.id) : next.add(t.id)
-                          return next
-                        })}
-                        className={cn(
-                          'flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 text-left transition-colors border',
-                          inOtherChain ? 'opacity-40 cursor-not-allowed border-transparent' : selected ? 'bg-red-50 border-red-200' : 'hover:bg-[#f3ecdd] border-transparent',
+                      <div key={t.id} className="flex flex-col gap-0.5">
+                        <button
+                          onClick={() => {
+                            if (inOtherChain) {
+                              setChainConflictPending(t)
+                            } else {
+                              setSelectedLinkIds((prev) => {
+                                const next = new Set(prev)
+                                selected ? next.delete(t.id) : next.add(t.id)
+                                return next
+                              })
+                            }
+                          }}
+                          className={cn(
+                            'flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 text-left transition-colors border w-full',
+                            inOtherChain
+                              ? joinOther
+                                ? 'bg-blue-50 border-blue-200'
+                                : isConflictPending
+                                  ? 'bg-amber-50 border-amber-200'
+                                  : 'hover:bg-[#f3ecdd] border-transparent'
+                              : selected
+                                ? 'bg-red-50 border-red-200'
+                                : 'hover:bg-[#f3ecdd] border-transparent',
+                          )}
+                        >
+                          <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-red-600 border-red-600' : joinOther ? 'bg-blue-500 border-blue-500' : 'border-[#c4b48a]'}`}>
+                            {selected && <Check className="h-2.5 w-2.5 text-white" />}
+                            {joinOther && <Check className="h-2.5 w-2.5 text-white" />}
+                          </span>
+                          <span className="truncate flex-1 text-[#3a3326]" title={t.title}>{t.title}</span>
+                          {inOtherChain && !joinOther && <span className="shrink-0 text-[9px] text-[#c4b48a] bg-[#f3ecdd] rounded px-1">{lang === 'zh' ? '已在其他任務鏈' : lang === 'fr' ? 'autre chaîne' : 'other chain'}</span>}
+                          {joinOther && <span className="shrink-0 text-[9px] text-blue-600 bg-blue-50 rounded px-1">{lang === 'zh' ? '加入其任務鏈' : lang === 'fr' ? 'rejoindre sa chaîne' : 'join their chain'}</span>}
+                          {(t.deadline ?? t.scheduledStart) && <span className="text-[#a99873] shrink-0 text-[10px]">{fmtDate(new Date(String(t.deadline ?? t.scheduledStart)), lang)}</span>}
+                        </button>
+                        {/* Conflict resolution prompt */}
+                        {isConflictPending && (
+                          <div className="mx-1 mb-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 flex flex-col gap-2">
+                            <p className="text-[10px] text-amber-800 leading-snug">
+                              {lang === 'zh'
+                                ? `「${t.title}」已在另一個任務鏈中，請選擇：`
+                                : lang === 'fr'
+                                  ? `« ${t.title} » est déjà dans une autre chaîne. Comment procéder ?`
+                                  : `"${t.title}" is already in another chain. How to proceed?`}
+                            </p>
+                            <div className="flex gap-1.5">
+                              <button
+                                onClick={() => {
+                                  setSelectedLinkIds((prev) => { const next = new Set(prev); next.add(t.id); return next })
+                                  setChainConflictPending(null)
+                                }}
+                                className="flex-1 text-[10px] rounded-md bg-[#ab3326] text-white px-2 py-1.5 hover:bg-[#861f17] transition-colors leading-tight"
+                              >
+                                {lang === 'zh'
+                                  ? `加入「${chainParent?.title ?? event.title}」`
+                                  : lang === 'fr'
+                                    ? `Ajouter à « ${chainParent?.title ?? event.title} »`
+                                    : `Add to "${chainParent?.title ?? event.title}"`}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const rootId = taskChainRootMap.get(t.id) ?? t.id
+                                  const rootTask = tasks.find((tk) => tk.id === rootId)
+                                  setJoinOtherChainIds(new Set([t.id]))
+                                  setSelectedLinkIds(new Set())
+                                  setChainConflictPending(null)
+                                  // Show which chain we'll be joining
+                                  void rootTask
+                                }}
+                                className="flex-1 text-[10px] rounded-md border border-blue-300 text-blue-700 px-2 py-1.5 hover:bg-blue-50 transition-colors leading-tight"
+                              >
+                                {(() => {
+                                  const rootId = taskChainRootMap.get(t.id) ?? t.id
+                                  const rootTask = tasks.find((tk) => tk.id === rootId)
+                                  const chainName = rootTask?.title ?? t.title
+                                  return lang === 'zh'
+                                    ? `加入「${chainName}」的鏈`
+                                    : lang === 'fr'
+                                      ? `Rejoindre la chaîne « ${chainName} »`
+                                      : `Join "${chainName}"'s chain`
+                                })()}
+                              </button>
+                              <button
+                                onClick={() => setChainConflictPending(null)}
+                                className="text-[10px] rounded-md border border-[#e2d6bc] text-[#a99873] px-2 py-1.5 hover:bg-[#f3ecdd] transition-colors"
+                              >
+                                {lang === 'zh' ? '取消' : lang === 'fr' ? 'Annuler' : 'Cancel'}
+                              </button>
+                            </div>
+                          </div>
                         )}
-                      >
-                        <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-red-600 border-red-600' : 'border-[#c4b48a]'}`}>
-                          {selected && <Check className="h-2.5 w-2.5 text-white" />}
-                        </span>
-                        <span className="truncate flex-1 text-[#3a3326]" title={t.title}>{t.title}</span>
-                        {inOtherChain && <span className="shrink-0 text-[9px] text-[#c4b48a] bg-[#f3ecdd] rounded px-1">{lang === 'zh' ? '已在其他任務鏈' : lang === 'fr' ? 'autre chaîne' : 'other chain'}</span>}
-                        {(t.deadline ?? t.scheduledStart) && <span className="text-[#a99873] shrink-0 text-[10px]">{fmtDate(new Date(String(t.deadline ?? t.scheduledStart)), lang)}</span>}
-                      </button>
+                      </div>
                     )
                   })}
                 {/* Calendar events without tasks — shown after background fetch */}
@@ -2311,12 +2842,12 @@ function EventDetailPanel({
                 })()}
               </div>
               <div className="px-4 py-3 border-t border-[#ece2cb] flex gap-2">
-                <button onClick={() => { setLinkingChain(false); setSelectedLinkIds(new Set()) }} className="flex-1 rounded-xl border border-[#e2d6bc] text-[#5c5347] text-xs py-2 hover:bg-[#ece2cb] transition-colors">
+                <button onClick={() => { setLinkingChain(false); setSelectedLinkIds(new Set()); setJoinOtherChainIds(new Set()); setChainConflictPending(null) }} className="flex-1 rounded-xl border border-[#e2d6bc] text-[#5c5347] text-xs py-2 hover:bg-[#ece2cb] transition-colors">
                   {lang === 'zh' ? '取消' : lang === 'fr' ? 'Annuler' : 'Cancel'}
                 </button>
                 <button
                   onClick={handleLinkTask}
-                  disabled={selectedLinkIds.size === 0 || linkSaving}
+                  disabled={(selectedLinkIds.size === 0 && joinOtherChainIds.size === 0) || linkSaving}
                   className="flex-1 rounded-xl bg-[#ab3326] text-white text-xs py-2 hover:bg-[#861f17] transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
                 >
                   {linkSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitBranch className="h-3.5 w-3.5" />}
