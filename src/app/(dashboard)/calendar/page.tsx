@@ -1673,6 +1673,8 @@ function EventDetailPanel({
   const [linkCalEvents, setLinkCalEvents] = React.useState<CalendarEvent[]>([])
   const [linkEventsLoading, setLinkEventsLoading] = React.useState(false)
   const linkCalEventsFetchedRef = React.useRef(false)
+  // Bounds of the completed 4-year fetch — used to filter stale tasks
+  const linkFetchBoundsRef = React.useRef<{ start: Date; end: Date } | null>(null)
 
   // Relevance: count event-title chars found in task title (higher = more relevant)
   const relevanceScore = React.useCallback((taskTitle: string): number => {
@@ -1729,6 +1731,7 @@ function EventDetailPanel({
       .then(async (evRes) => {
         if (evRes.ok) {
           const fresh: CalendarEvent[] = await evRes.json()
+          linkFetchBoundsRef.current = { start, end }
           setLinkCalEvents((prev) => {
             const freshIds = new Set(fresh.map((e) => e.id))
             const extras = prev.filter((e) => !freshIds.has(e.id))
@@ -2192,6 +2195,17 @@ function EventDetailPanel({
                 {/* Tasks from DB — always shown immediately */}
                 {tasks
                   .filter((t) => {
+                    // After the 4-year fetch completes, hide tasks whose calendar event
+                    // was deleted (calendarEventId not present in fetched events and
+                    // the task deadline falls within the fetched window)
+                    if (!linkEventsLoading && linkFetchBoundsRef.current && t.calendarEventId) {
+                      const inFetch = linkCalEvents.some((e) => e.id === t.calendarEventId)
+                      if (!inFetch) {
+                        const dl = t.deadline ? new Date(String(t.deadline)) : null
+                        const { start: fs, end: fe } = linkFetchBoundsRef.current
+                        if (dl && dl >= fs && dl <= fe) return false
+                      }
+                    }
                     if (!linkSearch) return true
                     const q = linkSearch.toLowerCase()
                     if (t.title.toLowerCase().includes(q)) return true

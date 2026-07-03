@@ -1,4 +1,4 @@
-import { google } from 'googleapis'
+import { google, calendar_v3 } from 'googleapis'
 import { prisma } from '@/lib/prisma'
 import { CalendarEvent } from '@/types'
 
@@ -74,7 +74,7 @@ export async function listGoogleEvents(
   const { client, flush } = getOAuth2Client(accountId, accessToken, refreshToken, expiresAt)
   const calendar = google.calendar({ version: 'v3', auth: client })
 
-  const allItems: typeof import('googleapis').calendar_v3.Schema$Event[] = []
+  const allItems: calendar_v3.Schema$Event[] = []
   let pageToken: string | undefined
 
   do {
