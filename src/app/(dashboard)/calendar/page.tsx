@@ -971,7 +971,7 @@ export default function CalendarPage() {
                     {isOverdue && <AlertTriangle className="h-2.5 w-2.5 text-red-500 shrink-0 mt-0.5" />}
                     {allDone && <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500 shrink-0 mt-0.5" />}
                     {!isOverdue && !allDone && <GitBranch className="h-2.5 w-2.5 text-[#c4b48a] shrink-0 mt-0.5" />}
-                    <span className={cn('text-[11px] font-medium leading-snug truncate flex-1', allDone ? 'line-through text-[#a99873]' : isOverdue ? 'text-red-700' : 'text-[#3a3326]')}>
+                    <span className={cn('text-[11px] font-medium leading-snug truncate flex-1', allDone ? 'line-through text-[#a99873]' : isOverdue ? 'text-red-700' : 'text-[#3a3326]')} title={displayHead.title}>
                       {displayHead.title}
                     </span>
                   </div>
@@ -1212,7 +1212,7 @@ export default function CalendarPage() {
                             )}
                             style={{ ...boxStyle, backgroundColor: evColor + '22', borderColor: evColor }}
                           >
-                            <p className="font-medium truncate text-[#2a2420]">{ev.title}</p>
+                            <p className="font-medium truncate text-[#2a2420]" title={ev.title}>{ev.title}</p>
                             {ev.start && ev.end && (
                               <p className="flex items-center gap-1 text-[#5c5347]">
                                 <Clock className="h-2.5 w-2.5" />
@@ -1249,7 +1249,7 @@ export default function CalendarPage() {
                             style={{ ...boxStyle, ...(!done && !isRetro && acc ? { borderLeftColor: acc.color, borderLeftWidth: 3 } : {}) }}
                           >
                             {isRetro && <GitBranch className="h-2.5 w-2.5 absolute top-1 right-1 opacity-50" />}
-                            <p className={cn('font-medium truncate', done && 'line-through')}>{task.title}</p>
+                            <p className={cn('font-medium truncate', done && 'line-through')} title={task.title}>{task.title}</p>
                             {task.scheduledStart && task.scheduledEnd && (
                               <p className="opacity-70 flex items-center gap-1">
                                 <Clock className="h-2.5 w-2.5" />
@@ -1283,7 +1283,7 @@ export default function CalendarPage() {
                           style={{ ...boxStyle, backgroundColor: habit.color + '18', borderColor: habit.color, color: habit.color }}
                           onClick={(e) => { e.stopPropagation(); setViewingHabit(habit) }}
                         >
-                          <p className={cn('font-medium truncate', doneToday && 'line-through')}>
+                          <p className={cn('font-medium truncate', doneToday && 'line-through')} title={`${habit.icon ?? '🔁'} ${habit.title}`}>
                             {habit.icon ?? '🔁'} {habit.title}
                           </p>
                           {habit.durationMinutes && (
@@ -1992,7 +1992,7 @@ function EventDetailPanel({
                           <span
                             className={cn('truncate flex-1 font-medium cursor-text', done ? 'line-through text-[#a99873]' : overdue ? 'text-red-700' : isToday ? 'text-amber-800' : 'text-[#3a3326]')}
                             onDoubleClick={(e) => { e.stopPropagation(); setRenameDraft(p.title); setRenamingTaskId(p.id) }}
-                            title={lang === 'fr' ? 'Double-cliquer pour renommer' : lang === 'zh' ? '雙擊可重新命名' : 'Double-click to rename'}
+                            title={p.title}
                           >
                             {p.title}
                           </span>
@@ -2053,7 +2053,7 @@ function EventDetailPanel({
                             )}
                             onDoubleClick={(e) => { e.stopPropagation(); setRenameDraft(t.title); setRenamingTaskId(t.id) }}
                             onClick={() => navigateTo && onNavigateToDate?.(navigateTo, t.id)}
-                            title={lang === 'fr' ? 'Double-cliquer pour renommer' : lang === 'zh' ? '雙擊可重新命名' : 'Double-click to rename'}
+                            title={t.title}
                           >
                             {t.title}
                           </span>
@@ -2086,7 +2086,7 @@ function EventDetailPanel({
                     className={cn('flex items-center justify-between text-xs rounded-lg px-2.5 py-1.5 bg-[#f3ecdd] border border-[#ece2cb]', t.deadline && onNavigateToDate ? 'cursor-pointer hover:bg-[#ece2cb] transition-colors' : '')}
                     onClick={() => t.deadline && onNavigateToDate?.(new Date(String(t.deadline)))}
                   >
-                    <span className="text-[#3a3326] truncate flex-1">{t.title}</span>
+                    <span className="text-[#3a3326] truncate flex-1" title={t.title}>{t.title}</span>
                     {t.deadline && (
                       <span className="text-[#a99873] ml-2 shrink-0 text-[10px] flex items-center gap-0.5">
                         {fmtDate(new Date(t.deadline), lang)}
@@ -2267,7 +2267,7 @@ function EventDetailPanel({
                         <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-red-600 border-red-600' : 'border-[#c4b48a]'}`}>
                           {selected && <Check className="h-2.5 w-2.5 text-white" />}
                         </span>
-                        <span className="truncate flex-1 text-[#3a3326]">{calEv.title}</span>
+                        <span className="truncate flex-1 text-[#3a3326]" title={calEv.title}>{calEv.title}</span>
                         <span className="shrink-0 text-[9px] text-emerald-600 bg-emerald-50 rounded px-1">{lang === 'zh' ? '將建立任務' : lang === 'fr' ? 'créer tâche' : 'new task'}</span>
                         <span className="text-[#a99873] shrink-0 text-[10px]">{fmtDate(new Date(calEv.start), lang)}</span>
                       </button>

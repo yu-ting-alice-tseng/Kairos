@@ -224,7 +224,7 @@ function ChainCard({
                 isParent ? 'text-sm' : 'text-xs',
                 done && 'line-through text-[#a99873]'
               )}
-              title={lang === 'fr' ? 'Double-cliquer pour renommer' : lang === 'zh' ? '雙擊可重新命名' : 'Double-click to rename'}
+              title={task.title}
             >
               {task.title}
             </p>
@@ -996,7 +996,7 @@ export default function RetroplanningPage() {
                 return (
                   <div className={`group rounded-xl px-3 py-2.5 hover:bg-[#f3ecdd] transition-colors ${isArchived ? 'opacity-40' : ''}`}>
                     <div className="flex items-center justify-between">
-                      <p className={`text-sm font-medium flex-1 truncate ${isArchived ? 'text-[#a99873] line-through' : 'text-[#3a3326]'}`}>{tmpl.name}</p>
+                      <p className={`text-sm font-medium flex-1 truncate ${isArchived ? 'text-[#a99873] line-through' : 'text-[#3a3326]'}`} title={tmpl.name}>{tmpl.name}</p>
                       <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                         {isArchived ? (
                           <>
@@ -1098,7 +1098,7 @@ export default function RetroplanningPage() {
                     className="flex items-center gap-2 bg-white/60 rounded-xl border border-amber-200 px-3 py-2 cursor-pointer hover:bg-amber-50 transition-colors"
                   >
                     <GitBranch className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                    <span className="text-xs font-medium text-amber-900 truncate flex-1">{m.title}</span>
+                    <span className="text-xs font-medium text-amber-900 truncate flex-1" title={m.title}>{m.title}</span>
                     <span className="text-[11px] text-amber-500 shrink-0">{m.date}</span>
                     <span className="text-[11px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 shrink-0">{m.templateName}</span>
                     <button
@@ -1155,7 +1155,7 @@ export default function RetroplanningPage() {
                     <div key={task.id} className="flex items-center gap-3 rounded-2xl border border-red-100 bg-red-50/50 px-4 py-3 hover:bg-red-50 transition-colors">
                       <GitBranch className="h-4 w-4 text-red-500 shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-[#2a2420] truncate">{task.title}</p>
+                        <p className="text-sm font-medium text-[#2a2420] truncate" title={task.title}>{task.title}</p>
                         {task.deadline && (
                           <p className="text-xs text-[#8a7a5e] mt-0.5">
                             <Clock className="h-3 w-3 inline mr-1" />
@@ -1395,7 +1395,7 @@ export default function RetroplanningPage() {
                                 onClick={() => setSelectedChainId(isActive ? null : parent.id)}
                               >
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium text-[#8a7a5e] truncate line-through">{parent.title}</p>
+                                  <p className="text-sm font-medium text-[#8a7a5e] truncate line-through" title={parent.title}>{parent.title}</p>
                                   <p className="text-[11px] text-[#a99873] mt-0.5">
                                     {children.length} {lang === 'zh' ? '個階段' : lang === 'fr' ? 'étapes' : 'stages'}
                                     {parent.deadline && ` · ${formatDateShort(new Date(parent.deadline), lang)}`}
@@ -1423,7 +1423,7 @@ export default function RetroplanningPage() {
                                   {children.map((child) => (
                                     <div key={child.id} className="flex items-center gap-2 rounded-lg bg-[#f3ecdd] px-3 py-1.5">
                                       <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                                      <span className="text-xs flex-1 truncate line-through text-[#a99873]">{child.title}</span>
+                                      <span className="text-xs flex-1 truncate line-through text-[#a99873]" title={child.title}>{child.title}</span>
                                       {child.deadline && (
                                         <span className="text-[10px] text-[#a99873] shrink-0">{formatDateShort(new Date(child.deadline), lang)}</span>
                                       )}
@@ -1565,7 +1565,7 @@ export default function RetroplanningPage() {
                       <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-red-600 border-red-600' : 'border-[#c4b48a]'}`}>
                         {selected && <Check className="h-2.5 w-2.5 text-white" />}
                       </span>
-                      <span className="truncate flex-1 text-[#3a3326]">{t.title}</span>
+                      <span className="truncate flex-1 text-[#3a3326]" title={t.title}>{t.title}</span>
                       {inOtherChain && <span className="shrink-0 text-[9px] text-[#c4b48a] bg-[#f3ecdd] rounded px-1">{lang === 'zh' ? '已在其他任務練' : lang === 'fr' ? 'autre chaîne' : 'other chain'}</span>}
                       {t.deadline && <span className="text-[#a99873] shrink-0 text-[10px]">{formatDateShort(new Date(t.deadline), lang)}</span>}
                     </button>

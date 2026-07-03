@@ -74,16 +74,26 @@ export async function listGoogleEvents(
   const { client, flush } = getOAuth2Client(accountId, accessToken, refreshToken, expiresAt)
   const calendar = google.calendar({ version: 'v3', auth: client })
 
-  const res = await calendar.events.list({
-    calendarId,
-    timeMin: timeMin.toISOString(),
-    timeMax: timeMax.toISOString(),
-    singleEvents: true,
-    orderBy: 'startTime',
-  })
+  const allItems: typeof import('googleapis').calendar_v3.Schema$Event[] = []
+  let pageToken: string | undefined
+
+  do {
+    const res = await calendar.events.list({
+      calendarId,
+      timeMin: timeMin.toISOString(),
+      timeMax: timeMax.toISOString(),
+      singleEvents: true,
+      orderBy: 'startTime',
+      maxResults: 2500,
+      pageToken,
+    })
+    allItems.push(...(res.data.items ?? []))
+    pageToken = res.data.nextPageToken ?? undefined
+  } while (pageToken)
+
   await flush()
 
-  return (res.data.items ?? []).map((event) => ({
+  return allItems.map((event) => ({
     id: event.id ?? '',
     title: event.summary ?? '',
     start: event.start?.dateTime ?? event.start?.date ?? '',
