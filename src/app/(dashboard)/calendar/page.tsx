@@ -751,6 +751,7 @@ export default function CalendarPage() {
       const dayColWidth = (rect.width - HOUR_COL) / 7
       const relX = me.clientX - rect.left - HOUR_COL
       const dayIdx = Math.max(0, Math.min(6, Math.floor(relX / dayColWidth)))
+      // Keep hour: 0 so finalizeDrop treats it as an all-day drop
       setDragPreview({ dayIdx, hour: 0 })
     }
     const onMouseUp = () => {
@@ -758,7 +759,8 @@ export default function CalendarPage() {
       document.removeEventListener('mouseup', onMouseUp)
       const drag = dragRef.current; const preview = dragPreviewRef.current
       dragRef.current = null; setDraggingEventId(null); setDragPreview(null)
-      if (drag && preview && preview.hour >= 7) finalizeDrop(drag, preview)
+      // Previously had `preview.hour >= 7` which was never true (hour is always 0) — bug fixed
+      if (drag && preview) finalizeDrop(drag, preview)
     }
     document.addEventListener('mousemove', onMouseMove)
     document.addEventListener('mouseup', onMouseUp)
