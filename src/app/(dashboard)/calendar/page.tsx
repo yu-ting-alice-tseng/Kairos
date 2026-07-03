@@ -425,11 +425,19 @@ export default function CalendarPage() {
     allDay?: boolean,
   ) => {
     setEventSaving(true)
+    // Only send start/end if they actually changed — avoids converting all-day events to timed
+    const origStart = new Date(ev.start).toISOString()
+    const origEnd = new Date(ev.end).toISOString()
+    const startChanged = start !== origStart
+    const endChanged = end !== origEnd
     const body: Record<string, unknown> = {
       eventId: ev.id,
       calendarAccountId: ev.calendarAccountId,
       calendarId: ev.calendarId,
-      title, start, end,
+      title,
+      ...(startChanged ? { start } : {}),
+      ...(endChanged ? { end } : {}),
+      allDay: allDay ?? ev.allDay,
     }
     if (allDay !== undefined) body.allDay = allDay
     const res = await fetch('/api/calendar/events', {

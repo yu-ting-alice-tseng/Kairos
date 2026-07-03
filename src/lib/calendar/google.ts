@@ -142,6 +142,7 @@ export async function updateGoogleEvent(
     description?: string
     start?: Date
     end?: Date
+    allDay?: boolean
   },
   refreshToken?: string | null,
   expiresAt?: Date | null
@@ -149,14 +150,24 @@ export async function updateGoogleEvent(
   const { client, flush } = getOAuth2Client(accountId, accessToken, refreshToken, expiresAt)
   const calendar = google.calendar({ version: 'v3', auth: client })
 
+  const toDateStr = (d: Date) => d.toISOString().slice(0, 10)
+
   await calendar.events.patch({
     calendarId,
     eventId,
     requestBody: {
       summary: event.title,
       description: event.description,
-      start: event.start ? { dateTime: event.start.toISOString() } : undefined,
-      end: event.end ? { dateTime: event.end.toISOString() } : undefined,
+      start: event.start
+        ? event.allDay
+          ? { date: toDateStr(event.start) }
+          : { dateTime: event.start.toISOString() }
+        : undefined,
+      end: event.end
+        ? event.allDay
+          ? { date: toDateStr(event.end) }
+          : { dateTime: event.end.toISOString() }
+        : undefined,
     },
   })
   await flush()

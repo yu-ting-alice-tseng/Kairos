@@ -278,7 +278,7 @@ export async function PATCH(req: NextRequest) {
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { eventId, calendarAccountId, calendarId, title, description, start, end } = await req.json()
+  const { eventId, calendarAccountId, calendarId, title, description, start, end, allDay } = await req.json()
 
   const account = await prisma.calendarAccount.findFirst({
     where: { id: calendarAccountId, userId },
@@ -303,6 +303,7 @@ export async function PATCH(req: NextRequest) {
         description,
         start: start ? new Date(start) : undefined,
         end: end ? new Date(end) : undefined,
+        allDay: !!allDay,
       },
       account.refreshToken,
       account.expiresAt
