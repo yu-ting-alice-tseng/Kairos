@@ -1,0 +1,19 @@
+name: pages build and deployment
+
+on:
+  push:
+    branches: [main]
+
+# Required for GitHub Pages deployment
+permissions:
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+    steps:
+      - name: Skip — deployed via Vercel
+        run: echo "Vercel handles deployment. GitHub Pages skipped."
