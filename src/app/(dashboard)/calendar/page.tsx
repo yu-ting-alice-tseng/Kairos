@@ -441,6 +441,11 @@ export default function CalendarPage() {
       allDay: allDay ?? ev.allDay,
     }
     if (allDay !== undefined) body.allDay = allDay
+
+    // Optimistic update — apply immediately so the UI feels instant
+    const newEventData = { ...ev, title, start, end, ...(allDay !== undefined ? { allDay } : {}) }
+    setExternalEvents((prev) => prev.map((e) => e.id === ev.id ? newEventData : e))
+
     const res = await fetch('/api/calendar/events', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -448,7 +453,7 @@ export default function CalendarPage() {
     })
     if (res.ok) {
       // Push old state to undo stack (only for position changes, not title edits)
-      if (ev.start !== start || ev.end !== end) {
+      if (startChanged || endChanged) {
         undoStackRef.current.push({
           event: ev,
           prevStart: new Date(ev.start).toISOString(),
@@ -456,16 +461,11 @@ export default function CalendarPage() {
           prevAllDay: ev.allDay,
         })
       }
-      setExternalEvents((prev) =>
-        prev.map((e) =>
-          e.id === ev.id
-            ? { ...e, title, start, end, ...(allDay !== undefined ? { allDay } : {}) }
-            : e
-        )
-      )
       toast({ title: language === 'fr' ? 'Événement mis à jour' : language === 'zh' ? '活動已更新' : 'Event updated', variant: 'success' })
       setEditingEvent(null)
     } else {
+      // Revert optimistic update on failure
+      setExternalEvents((prev) => prev.map((e) => e.id === ev.id ? ev : e))
       toast({ title: language === 'fr' ? 'Erreur lors de la mise à jour' : language === 'zh' ? '更新失敗' : 'Failed to update', variant: 'error' })
     }
     setEventSaving(false)
