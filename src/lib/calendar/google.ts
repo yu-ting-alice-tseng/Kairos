@@ -124,7 +124,9 @@ export async function createGoogleEvent(
   const { client, flush } = getOAuth2Client(accountId, accessToken, refreshToken, expiresAt)
   const calendar = google.calendar({ version: 'v3', auth: client })
 
-  const toDateStr = (d: Date) => d.toISOString().split('T')[0]
+  // Use local date components to avoid UTC-offset shifting the date by one day
+  const toDateStr = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
   const res = await calendar.events.insert({
     calendarId,
@@ -160,7 +162,9 @@ export async function updateGoogleEvent(
   const { client, flush } = getOAuth2Client(accountId, accessToken, refreshToken, expiresAt)
   const calendar = google.calendar({ version: 'v3', auth: client })
 
-  const toDateStr = (d: Date) => d.toISOString().slice(0, 10)
+  // Use local date components to avoid UTC-offset shifting the date by one day
+  const toDateStr = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
   await calendar.events.patch({
     calendarId,

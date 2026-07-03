@@ -426,11 +426,21 @@ export default function CalendarPage() {
     allDay?: boolean,
   ) => {
     setEventSaving(true)
-    // Only send start/end if they actually changed — avoids converting all-day events to timed
-    const origStart = new Date(ev.start).toISOString()
-    const origEnd = new Date(ev.end).toISOString()
-    const startChanged = start !== origStart
-    const endChanged = end !== origEnd
+    // Compare dates by local calendar day for all-day events, by ISO string for timed events.
+    // Comparing UTC ISO strings directly breaks for all-day events: Google stores "2026-06-22"
+    // (date-only) but finalizeDrop produces local-midnight UTC strings like "2026-06-21T22:00:00Z"
+    // for UTC+2, making same-day drops appear as changes and wrong-day drops look correct.
+    const isAllDay = allDay ?? ev.allDay
+    const toLocalDay = (s: string | Date) => {
+      const d = new Date(s)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    }
+    const origStart = isAllDay ? toLocalDay(ev.start) : new Date(ev.start).toISOString()
+    const origEnd   = isAllDay ? toLocalDay(ev.end)   : new Date(ev.end).toISOString()
+    const newStart  = isAllDay ? toLocalDay(start)     : start
+    const newEnd    = isAllDay ? toLocalDay(end)       : end
+    const startChanged = newStart !== origStart
+    const endChanged   = newEnd   !== origEnd
     const body: Record<string, unknown> = {
       eventId: ev.id,
       calendarAccountId: ev.calendarAccountId,
@@ -1626,7 +1636,9 @@ function ScheduledTaskPanel({
     return [chainRoot, ...chainSiblings].sort((a, b) => {
       const da = a.deadline ? new Date(String(a.deadline)).getTime() : 0
       const db = b.deadline ? new Date(String(b.deadline)).getTime() : 0
-      return db - da
+      if (db !== da) return db - da
+      // Same day: sort by title descending (Z→A / more strokes first, fewer at bottom)
+      return b.title.localeCompare(a.title)
     })
   }, [chainRoot, chainSiblings])
 
@@ -2060,7 +2072,9 @@ function EventDetailPanel({
     return [chainParent, ...chainSiblings].sort((a, b) => {
       const da = a.deadline ? new Date(String(a.deadline)).getTime() : 0
       const db = b.deadline ? new Date(String(b.deadline)).getTime() : 0
-      return db - da
+      if (db !== da) return db - da
+      // Same day: sort by title descending (Z→A / more strokes first, fewer at bottom)
+      return b.title.localeCompare(a.title)
     })
   }, [chainParent, chainSiblings])
 
