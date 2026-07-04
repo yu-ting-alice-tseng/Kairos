@@ -1997,6 +1997,7 @@ function EventDetailPanel({
   const [title, setTitle] = React.useState(event.title)
   const [start, setStart] = React.useState(toLocal(event.start))
   const [end, setEnd] = React.useState(toLocal(event.end))
+  const [isAllDay, setIsAllDay] = React.useState(!!event.allDay)
   const [renamingTaskId, setRenamingTaskId] = React.useState<string | null>(null)
   const [renameDraft, setRenameDraft] = React.useState('')
   const renameInputRef = React.useRef<HTMLInputElement>(null)
@@ -2034,6 +2035,7 @@ function EventDetailPanel({
     setTitle(event.title)
     setStart(toLocal(event.start))
     setEnd(toLocal(event.end))
+    setIsAllDay(!!event.allDay)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event.id])
 
@@ -2350,28 +2352,53 @@ function EventDetailPanel({
           <h2 className="text-sm font-semibold text-[#2a2420] leading-snug">{event.title}</h2>
         )}
 
-        {/* Date / time */}
-        {editing ? (
-          <div className="flex flex-col gap-2">
-            <div>
-              <label className="text-[10px] font-medium text-[#8a7a5e] mb-1 block uppercase tracking-wide">
-                {lang === 'fr' ? 'Début' : lang === 'zh' ? '開始' : 'Start'}
-              </label>
-              <input type="datetime-local" className="w-full border border-[#e2d6bc] rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-red-300 bg-white" value={start} onChange={(e) => setStart(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-[10px] font-medium text-[#8a7a5e] mb-1 block uppercase tracking-wide">
-                {lang === 'fr' ? 'Fin' : lang === 'zh' ? '結束' : 'End'}
-              </label>
-              <input type="datetime-local" className="w-full border border-[#e2d6bc] rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-red-300 bg-white" value={end} onChange={(e) => setEnd(e.target.value)} />
-            </div>
+        {/* Date / time — Notion-style always-visible inline editor */}
+        <div className="flex flex-col gap-1.5">
+          {/* Date row: start → end */}
+          <div className="flex items-center gap-1.5">
+            <input
+              type="date"
+              value={start.slice(0, 10)}
+              onChange={(e) => setStart(e.target.value + (isAllDay ? 'T00:00' : 'T' + (start.slice(11) || '09:00')))}
+              className="flex-1 min-w-0 text-xs bg-[#f3ecdd]/60 border border-[#e2d6bc] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#ab3326]/30 text-[#3a3326] cursor-pointer"
+            />
+            <ChevronRight className="h-3 w-3 text-[#c4b48a] shrink-0" />
+            <input
+              type="date"
+              value={end.slice(0, 10)}
+              onChange={(e) => setEnd(e.target.value + (isAllDay ? 'T00:00' : 'T' + (end.slice(11) || '10:00')))}
+              className="flex-1 min-w-0 text-xs bg-[#f3ecdd]/60 border border-[#e2d6bc] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#ab3326]/30 text-[#3a3326] cursor-pointer"
+            />
           </div>
-        ) : (
-          <div className="flex items-start gap-2 text-[#5c5347]">
-            <Clock className="h-3.5 w-3.5 text-[#a99873] shrink-0 mt-0.5" />
-            <span className="text-xs leading-relaxed">{event.allDay ? (lang === 'fr' ? 'Toute la journée · ' : lang === 'zh' ? '整天 · ' : 'All day · ') + dateLabel : dateLabel}</span>
-          </div>
-        )}
+          {/* Time row (hidden for all-day) */}
+          {!isAllDay && (
+            <div className="flex items-center gap-1.5">
+              <input
+                type="time"
+                value={start.slice(11) || ''}
+                onChange={(e) => setStart(start.slice(0, 10) + 'T' + e.target.value)}
+                className="flex-1 min-w-0 text-xs bg-[#f3ecdd]/60 border border-[#e2d6bc] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#ab3326]/30 text-[#3a3326]"
+              />
+              <ChevronRight className="h-3 w-3 text-[#c4b48a] shrink-0" />
+              <input
+                type="time"
+                value={end.slice(11) || ''}
+                onChange={(e) => setEnd(end.slice(0, 10) + 'T' + e.target.value)}
+                className="flex-1 min-w-0 text-xs bg-[#f3ecdd]/60 border border-[#e2d6bc] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#ab3326]/30 text-[#3a3326]"
+              />
+            </div>
+          )}
+          {/* All-day toggle */}
+          <button
+            onClick={() => setIsAllDay((v) => !v)}
+            className="flex items-center gap-2 text-xs text-[#8a7a5e] hover:text-[#3a3326] mt-0.5 w-fit transition-colors"
+          >
+            <div className={`w-7 h-3.5 rounded-full relative transition-colors ${isAllDay ? 'bg-[#ab3326]' : 'bg-[#d9c79f]'}`}>
+              <div className={`absolute top-0.5 h-2.5 w-2.5 rounded-full bg-white shadow transition-transform ${isAllDay ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+            </div>
+            {lang === 'fr' ? 'Toute la journée' : lang === 'zh' ? '整天' : 'All day'}
+          </button>
+        </div>
 
         {/* Location */}
         {event.location && (
