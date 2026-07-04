@@ -202,6 +202,7 @@ export default function CalendarPage() {
 
   const weekDaysRef = useRef<Date[]>([])
   const dragPreviewRef = useRef<{ dayIdx: number; hour: number } | null>(null)
+  const edgeNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   dragPreviewRef.current = dragPreview
 
   const locale = language === 'fr' ? fr : language === 'zh' ? zhTW : enUS
@@ -485,6 +486,9 @@ export default function CalendarPage() {
   const handleSaveEventRef = useRef(handleSaveEvent)
   handleSaveEventRef.current = handleSaveEvent
 
+  const setStartDateRef = useRef(setStartDate)
+  setStartDateRef.current = setStartDate
+
   const handleDeleteEvent = async (ev: CalendarEvent) => {
     const res = await fetch('/api/calendar/events', {
       method: 'DELETE',
@@ -717,12 +721,38 @@ export default function CalendarPage() {
   }, [])
 
   // Shared document-level mousemove tracker — calculates grid cell from raw mouse position
+  // Also handles edge-zone auto-navigation: hovering within 40px of left/right edge shifts the week.
   const makeDragMouseMove = useCallback(() => (me: MouseEvent) => {
     if (!gridRef.current) return
     const rect = gridRef.current.getBoundingClientRect()
     const HOUR_COL = 60
+    const EDGE_ZONE = 40 // px from left/right edge that triggers week navigation
+    const NAV_DELAY = 800 // ms between auto-navigations
+
     const relX = me.clientX - rect.left - HOUR_COL
-    const dayColWidth = (rect.width - HOUR_COL) / 7
+    const gridWidth = rect.width - HOUR_COL
+
+    // Edge navigation
+    const rawX = me.clientX - rect.left
+    if (rawX < EDGE_ZONE) {
+      if (!edgeNavTimerRef.current) {
+        edgeNavTimerRef.current = setTimeout(() => {
+          edgeNavTimerRef.current = null
+          setStartDateRef.current((d) => addDays(d, -7))
+        }, NAV_DELAY)
+      }
+    } else if (rawX > rect.width - EDGE_ZONE) {
+      if (!edgeNavTimerRef.current) {
+        edgeNavTimerRef.current = setTimeout(() => {
+          edgeNavTimerRef.current = null
+          setStartDateRef.current((d) => addDays(d, 7))
+        }, NAV_DELAY)
+      }
+    } else {
+      if (edgeNavTimerRef.current) { clearTimeout(edgeNavTimerRef.current); edgeNavTimerRef.current = null }
+    }
+
+    const dayColWidth = gridWidth / 7
     const dayIdx = Math.max(0, Math.min(6, Math.floor(relX / dayColWidth)))
     const relY = me.clientY - rect.top
     const hour = Math.max(GRID_START_HOUR, Math.min(GRID_START_HOUR + HOURS.length - 1, GRID_START_HOUR + Math.floor(relY / 60)))
@@ -741,6 +771,7 @@ export default function CalendarPage() {
     const onMouseUp = () => {
       document.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('mouseup', onMouseUp)
+      if (edgeNavTimerRef.current) { clearTimeout(edgeNavTimerRef.current); edgeNavTimerRef.current = null }
       const drag = dragRef.current; const preview = dragPreviewRef.current
       dragRef.current = null; setDraggingEventId(null); setDragPreview(null)
       if (drag) finalizeDrop(drag, preview)
@@ -758,6 +789,20 @@ export default function CalendarPage() {
       if (!gridRef.current) return
       const rect = gridRef.current.getBoundingClientRect()
       const HOUR_COL = 60
+      const EDGE_ZONE = 40
+      const NAV_DELAY = 800
+      const rawX = me.clientX - rect.left
+      if (rawX < EDGE_ZONE) {
+        if (!edgeNavTimerRef.current) {
+          edgeNavTimerRef.current = setTimeout(() => { edgeNavTimerRef.current = null; setStartDateRef.current((d) => addDays(d, -7)) }, NAV_DELAY)
+        }
+      } else if (rawX > rect.width - EDGE_ZONE) {
+        if (!edgeNavTimerRef.current) {
+          edgeNavTimerRef.current = setTimeout(() => { edgeNavTimerRef.current = null; setStartDateRef.current((d) => addDays(d, 7)) }, NAV_DELAY)
+        }
+      } else {
+        if (edgeNavTimerRef.current) { clearTimeout(edgeNavTimerRef.current); edgeNavTimerRef.current = null }
+      }
       const dayColWidth = (rect.width - HOUR_COL) / 7
       const relX = me.clientX - rect.left - HOUR_COL
       const dayIdx = Math.max(0, Math.min(6, Math.floor(relX / dayColWidth)))
@@ -767,9 +812,9 @@ export default function CalendarPage() {
     const onMouseUp = () => {
       document.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('mouseup', onMouseUp)
+      if (edgeNavTimerRef.current) { clearTimeout(edgeNavTimerRef.current); edgeNavTimerRef.current = null }
       const drag = dragRef.current; const preview = dragPreviewRef.current
       dragRef.current = null; setDraggingEventId(null); setDragPreview(null)
-      // Previously had `preview.hour >= 7` which was never true (hour is always 0) — bug fixed
       if (drag && preview) finalizeDrop(drag, preview)
     }
     document.addEventListener('mousemove', onMouseMove)
@@ -1032,7 +1077,9 @@ export default function CalendarPage() {
           touchStartXRef.current = e.clientX
         }}
         onPointerUp={(e) => {
-          if (touchStartXRef.current === null || e.pointerType === 'touch') return
+          // Skip swipe detection when an event/task drag just finished — isDragging is still true
+          // at pointerup time (pointerup fires before mouseup which clears dragging state).
+          if (touchStartXRef.current === null || e.pointerType === 'touch' || isDragging) return
           const delta = e.clientX - touchStartXRef.current
           touchStartXRef.current = null
           if (Math.abs(delta) < 80) return
