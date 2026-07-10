@@ -4,6 +4,9 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['@libsql/client', '@prisma/adapter-libsql', '@prisma/client'],
   experimental: {
     serverActions: { bodySizeLimit: '2mb' },
+    // Google Drive sync drops desktop.ini files into .next/dev/cache/turbopack/,
+    // which corrupts Turbopack's persistent cache and crashes `next dev` on startup.
+    turbopackFileSystemCacheForDev: false,
   },
   images: {
     remotePatterns: [

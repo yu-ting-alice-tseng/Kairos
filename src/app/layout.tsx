@@ -4,6 +4,7 @@ import Script from 'next/script'
 import './globals.css'
 import { SessionProvider } from '@/components/providers/SessionProvider'
 import { ToastProvider } from '@/components/providers/ToastProvider'
+import { PWARegister } from '@/components/providers/PWARegister'
 
 const cormorant = Cormorant_Garamond({ subsets: ['latin'], weight: ['300', '400', '500', '600', '700'], variable: '--font-cormorant' })
 const script = Dancing_Script({ subsets: ['latin'], weight: ['700'], variable: '--font-dancing-script' })
@@ -38,7 +39,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="fr" className={`${cormorant.variable} ${script.variable} h-full antialiased`}>
       <head>
         {/* Google Tag Manager */}
-        {/* eslint-disable-next-line @next/next/no-before-interactive-script-component */}
         <script dangerouslySetInnerHTML={{ __html: `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','GTM-PPKKJ8GS');` }} />
         {/* CJK fonts loaded directly — next/font CJK subset support is unreliable in dev */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -56,6 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           gtag('js', new Date());
           gtag('config', 'G-DYCZHN8RV5');
         `}</Script>
+        <PWARegister />
         <SessionProvider>
           <ToastProvider>
             {children}

@@ -1,8 +1,10 @@
 {
+  "id": "/",
   "name": "Kairos — 墨時",
   "short_name": "Kairos",
   "description": "Potrez le temps à l'encre. Planification intelligente avec IA.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#fbeacb",
   "theme_color": "#ab3326",
@@ -22,5 +24,22 @@
     }
   ],
   "screenshots": [],
-  "categories": ["productivity", "utilities"]
+  "categories": ["productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "今日任務",
+      "url": "/today",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "四象限",
+      "url": "/matrix",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "桌面小工具設定",
+      "url": "/widget",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
 }
