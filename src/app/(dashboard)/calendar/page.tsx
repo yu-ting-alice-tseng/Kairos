@@ -1421,6 +1421,7 @@ export default function CalendarPage() {
           lang={language}
           saving={eventSaving}
           tasks={tasks}
+          calendarAccounts={calendarAccounts}
           currentWeekEvents={externalEvents}
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
@@ -2029,12 +2030,13 @@ function ScheduledTaskPanel({
 // ─── Event Detail Panel ───────────────────────────────────────────────────────
 
 function EventDetailPanel({
-  event, lang, saving, tasks, currentWeekEvents, onSave, onDelete, onClose, onTasksRefresh, onNavigateToDate,
+  event, lang, saving, tasks, calendarAccounts, currentWeekEvents, onSave, onDelete, onClose, onTasksRefresh, onNavigateToDate,
 }: {
   event: CalendarEvent
   lang: 'fr' | 'en' | 'zh'
   saving: boolean
   tasks: Task[]
+  calendarAccounts?: { id: string; name: string; subCalendars?: { externalId: string; name: string }[] }[]
   currentWeekEvents: CalendarEvent[]
   onSave: (ev: CalendarEvent, title: string, start: string, end: string) => void
   onDelete: (ev: CalendarEvent) => void
@@ -2455,6 +2457,19 @@ function EventDetailPanel({
             {lang === 'fr' ? 'Toute la journée' : lang === 'zh' ? '整天' : 'All day'}
           </button>
         </div>
+
+        {/* Calendar account + sub-calendar */}
+        {event.calendarAccountId && (() => {
+          const account = calendarAccounts?.find((a) => a.id === event.calendarAccountId)
+          if (!account) return null
+          const subCal = account.subCalendars?.find((sc) => sc.externalId === event.calendarId)
+          return (
+            <div className="flex items-center gap-1.5 text-xs text-[#8a7a5e]">
+              <Calendar className="h-3.5 w-3.5 text-[#a99873] shrink-0" />
+              <span>{account.name}{subCal ? ` · ${subCal.name}` : ''}</span>
+            </div>
+          )
+        })()}
 
         {/* Location */}
         {event.location && (
