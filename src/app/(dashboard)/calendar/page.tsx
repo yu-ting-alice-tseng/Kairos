@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn, formatTime, getQuadrant, EISENHOWER_QUADRANTS } from '@/lib/utils'
 import {
-  ChevronLeft, ChevronRight, Calendar, Plus, Clock, Loader2, Pencil, Trash2, X,
+  ChevronLeft, ChevronRight, ChevronDown, Calendar, Plus, Clock, Loader2, Pencil, Trash2, X,
   MapPin, ExternalLink, GitBranch, AlignLeft, CheckCircle2, Circle, Check, Sparkles, Undo2, AlertTriangle, RefreshCw,
 } from 'lucide-react'
 import {
@@ -2645,56 +2645,104 @@ function EventDetailPanel({
           if (!account) return null
           const subCal = account.subCalendars?.find((sc) => sc.externalId === event.calendarId)
           const subCalLabel = subCal?.name ?? (lang === 'fr' ? 'Principal' : lang === 'zh' ? '主日曆' : 'Primary')
+          const subCalColor = subCal?.color ?? account.color ?? '#4285F4'
           const canEdit = !!event.editable && !!onMoveEvent && (calendarAccounts?.length ?? 0) > 0
           return (
-            <div className="flex flex-col gap-1">
+            <div className="relative">
               <button
                 disabled={!canEdit || movingCal}
                 onClick={() => canEdit && setCalPickerOpen((v) => !v)}
                 className={cn(
-                  'flex items-center gap-1.5 text-xs text-[#8a7a5e] text-left w-full rounded px-1 -mx-1 py-0.5 transition-colors',
+                  'flex items-center gap-2 text-xs text-[#5c5347] text-left w-full rounded-md px-2 py-1.5 -mx-2 transition-colors',
                   canEdit && 'hover:bg-[#f3ecdd] cursor-pointer',
-                  !canEdit && 'cursor-default'
+                  !canEdit && 'cursor-default',
+                  calPickerOpen && 'bg-[#f3ecdd]'
                 )}
               >
                 <Calendar className="h-3.5 w-3.5 text-[#a99873] shrink-0" />
-                <span className="truncate">{account.name}</span>
-                <span className="text-[#a99873]">·</span>
-                <span className="truncate">{subCalLabel}</span>
-                {canEdit && <Pencil className="h-3 w-3 text-[#c0b090] ml-auto shrink-0" />}
-                {movingCal && <Loader2 className="h-3 w-3 animate-spin ml-auto shrink-0" />}
-              </button>
-              {calPickerOpen && canEdit && (
-                <div className="ml-1 flex flex-col gap-0.5 border border-[#ece2cb] rounded bg-[#fbf7ee] p-1 max-h-48 overflow-y-auto">
-                  {calendarAccounts!.map((acc) => {
-                    const subCals = acc.subCalendars ?? []
-                    const options: { label: string; calId: string }[] =
-                      subCals.length > 0
-                        ? subCals.map((sc) => ({ label: `${acc.name} · ${sc.name}`, calId: sc.externalId }))
-                        : [{ label: `${acc.name} · ${lang === 'fr' ? 'Principal' : lang === 'zh' ? '主日曆' : 'Primary'}`, calId: 'primary' }]
-                    return options.map(({ label, calId }) => {
-                      const isCurrent = acc.id === event.calendarAccountId && calId === (event.calendarId ?? 'primary')
-                      return (
-                        <button
-                          key={`${acc.id}:${calId}`}
-                          className={cn(
-                            'text-left text-xs px-2 py-1 rounded hover:bg-[#f3ecdd] transition-colors truncate',
-                            isCurrent && 'bg-[#f3ecdd] font-medium text-[#2a2420]'
-                          )}
-                          onClick={async () => {
-                            if (isCurrent) { setCalPickerOpen(false); return }
-                            setCalPickerOpen(false)
-                            setMovingCal(true)
-                            await onMoveEvent!(event, acc.id, calId)
-                            setMovingCal(false)
-                          }}
-                        >
-                          {label}
-                        </button>
-                      )
-                    })
-                  })}
+                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                  <span className="text-[#8a7a5e] truncate">{account.name}</span>
+                  <span className="text-[#c0b090] shrink-0">›</span>
+                  <span
+                    className="inline-block h-2.5 w-2.5 rounded-sm shrink-0"
+                    style={{ backgroundColor: subCalColor }}
+                  />
+                  <span className="font-medium text-[#2a2420] truncate">{subCalLabel}</span>
                 </div>
+                {movingCal
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin text-[#a99873] shrink-0" />
+                  : canEdit && <ChevronDown className="h-3.5 w-3.5 text-[#c0b090] shrink-0" />
+                }
+              </button>
+
+              {calPickerOpen && canEdit && (
+                <>
+                  {/* backdrop */}
+                  <div className="fixed inset-0 z-40" onClick={() => setCalPickerOpen(false)} />
+                  {/* dropdown */}
+                  <div className="absolute left-0 top-full mt-1 z-50 w-72 max-h-80 overflow-y-auto rounded-xl border border-[#e8ddc8] bg-white shadow-xl">
+                    <div className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-[#a99873]">
+                      {lang === 'fr' ? 'Choisir un calendrier' : lang === 'zh' ? '選擇日曆' : 'Choose calendar'}
+                    </div>
+                    {calendarAccounts!.map((acc) => {
+                      const subCals = (acc.subCalendars ?? []).filter((sc) => sc.isActive !== false)
+                      const primaryLabel = lang === 'fr' ? 'Principal' : lang === 'zh' ? '主日曆' : 'Primary'
+                      return (
+                        <div key={acc.id} className="px-2 py-1">
+                          <div className="px-2 py-1 text-[10px] font-semibold text-[#a99873] truncate">{acc.name}</div>
+                          {subCals.length > 0
+                            ? subCals.map((sc) => {
+                                const isCurrent = acc.id === event.calendarAccountId && sc.externalId === (event.calendarId ?? 'primary')
+                                return (
+                                  <button
+                                    key={sc.externalId}
+                                    className={cn(
+                                      'w-full flex items-center gap-2.5 text-left text-sm px-2 py-1.5 rounded-lg transition-colors',
+                                      isCurrent ? 'bg-[#f3ecdd] text-[#2a2420]' : 'hover:bg-[#f9f5ee] text-[#3c3530]'
+                                    )}
+                                    onClick={async () => {
+                                      if (isCurrent) { setCalPickerOpen(false); return }
+                                      setCalPickerOpen(false)
+                                      setMovingCal(true)
+                                      await onMoveEvent!(event, acc.id, sc.externalId)
+                                      setMovingCal(false)
+                                    }}
+                                  >
+                                    <span className="h-3 w-3 rounded-sm shrink-0" style={{ backgroundColor: sc.color ?? acc.color ?? '#4285F4' }} />
+                                    <span className="truncate">{sc.name}</span>
+                                    {isCurrent && <Check className="h-3.5 w-3.5 ml-auto shrink-0 text-[#ab3326]" />}
+                                  </button>
+                                )
+                              })
+                            : (() => {
+                                const isCurrent = acc.id === event.calendarAccountId && (event.calendarId ?? 'primary') === 'primary'
+                                return (
+                                  <button
+                                    className={cn(
+                                      'w-full flex items-center gap-2.5 text-left text-sm px-2 py-1.5 rounded-lg transition-colors',
+                                      isCurrent ? 'bg-[#f3ecdd] text-[#2a2420]' : 'hover:bg-[#f9f5ee] text-[#3c3530]'
+                                    )}
+                                    onClick={async () => {
+                                      if (isCurrent) { setCalPickerOpen(false); return }
+                                      setCalPickerOpen(false)
+                                      setMovingCal(true)
+                                      await onMoveEvent!(event, acc.id, 'primary')
+                                      setMovingCal(false)
+                                    }}
+                                  >
+                                    <span className="h-3 w-3 rounded-sm shrink-0" style={{ backgroundColor: acc.color ?? '#4285F4' }} />
+                                    <span className="truncate">{primaryLabel}</span>
+                                    {isCurrent && <Check className="h-3.5 w-3.5 ml-auto shrink-0 text-[#ab3326]" />}
+                                  </button>
+                                )
+                              })()
+                          }
+                        </div>
+                      )
+                    })}
+                    <div className="h-2" />
+                  </div>
+                </>
               )}
             </div>
           )
