@@ -2685,7 +2685,7 @@ function EventDetailPanel({
                       {lang === 'fr' ? 'Choisir un calendrier' : lang === 'zh' ? '選擇日曆' : 'Choose calendar'}
                     </div>
                     {calendarAccounts!.map((acc) => {
-                      const subCals = (acc.subCalendars ?? []).filter((sc) => sc.isActive !== false)
+                      const subCals = (acc.subCalendars ?? []).filter((sc) => sc.isActive === true)
                       const primaryLabel = lang === 'fr' ? 'Principal' : lang === 'zh' ? '主日曆' : 'Primary'
                       return (
                         <div key={acc.id} className="px-2 py-1">
