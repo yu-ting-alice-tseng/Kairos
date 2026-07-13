@@ -23,8 +23,12 @@ export interface AppState {
   todayExcludePatterns: string[]
   keywordRules: KeywordRule[]
   hideHabitsViews: string[]
+  primaryTimezone: string | null   // null = browser local
+  secondaryTimezone: string | null // null = not shown
 
   setLanguage: (lang: Language) => void
+  setPrimaryTimezone: (tz: string | null) => void
+  setSecondaryTimezone: (tz: string | null) => void
   setTasks: (tasks: Task[]) => void
   addTask: (task: Task) => void
   updateTask: (id: string, updates: Partial<Task>) => void
@@ -60,8 +64,12 @@ export const useAppStore = create<AppState>()(
       todayExcludePatterns: [],
       keywordRules: [],
       hideHabitsViews: [],
+      primaryTimezone: null,
+      secondaryTimezone: null,
 
       setLanguage: (lang) => set({ language: lang }),
+      setPrimaryTimezone: (tz) => set({ primaryTimezone: tz }),
+      setSecondaryTimezone: (tz) => set({ secondaryTimezone: tz }),
       setTasks: (tasks) => set({ tasks }),
       addTask: (task) => set((state) => ({ tasks: [...state.tasks, task] })),
       updateTask: (id, updates) =>
@@ -107,6 +115,8 @@ export const useAppStore = create<AppState>()(
         matrixExcludePatterns: state.matrixExcludePatterns,
         todayExcludePatterns: state.todayExcludePatterns,
         hideHabitsViews: state.hideHabitsViews,
+        primaryTimezone: state.primaryTimezone,
+        secondaryTimezone: state.secondaryTimezone,
         // keywordRules loaded from DB on login — not persisted in localStorage
       }),
     }

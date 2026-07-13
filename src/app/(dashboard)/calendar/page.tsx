@@ -8,6 +8,7 @@ import { t } from '@/lib/i18n'
 import { TaskForm } from '@/components/tasks/TaskForm'
 import { InkLoader } from '@/components/ui/InkLoader'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn, formatTime, getQuadrant, EISENHOWER_QUADRANTS } from '@/lib/utils'
 import {
   ChevronLeft, ChevronRight, Calendar, Plus, Clock, Loader2, Pencil, Trash2, X,
@@ -141,7 +142,7 @@ interface UndoItem {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
-  const { language, tasks, setTasks, updateTask, removeTask, addTask, calendarAccounts, habits, setHabits, hideHabitsViews, toggleHabitsView } = useAppStore()
+  const { language, tasks, setTasks, updateTask, removeTask, addTask, calendarAccounts, habits, setHabits, hideHabitsViews, toggleHabitsView, primaryTimezone, secondaryTimezone, setPrimaryTimezone, setSecondaryTimezone } = useAppStore()
   const habitsHidden = hideHabitsViews.includes('calendar')
   const { toast } = useGlobalToast()
   // startDate is always Monday of the current week (Sunday → next Monday)
@@ -167,6 +168,24 @@ export default function CalendarPage() {
   const [retroSuggestion, setRetroSuggestion] = useState<RetroSuggestion | null>(null)
   const [retroSuggestionSaving, setRetroSuggestionSaving] = useState(false)
   const [hiddenAccountIds, setHiddenAccountIds] = useState<Set<string>>(new Set())
+  const [tzDialogOpen, setTzDialogOpen] = useState(false)
+
+  // Effective timezones (null = browser local)
+  const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const primaryTz = primaryTimezone ?? localTz
+  const secondaryTz = secondaryTimezone ?? null
+
+  // Format an hour (0-23) in a given IANA timezone, returning "HH:00"
+  const hourInTz = (hour: number, tz: string) => {
+    const d = new Date(); d.setHours(hour, 0, 0, 0)
+    return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz, hour12: false }).format(d)
+  }
+  // Short display name for a timezone
+  const tzLabel = (tz: string) => tz.split('/').pop()?.replace(/_/g, ' ') ?? tz
+
+  // Hour column width: 48px per timezone column
+  const HOUR_COL_PX = secondaryTz ? 96 : 48
+  const hourColClass = secondaryTz ? 'grid-cols-[96px_repeat(7,1fr)]' : 'grid-cols-[48px_repeat(7,1fr)]'
   const [chainPanelOpen, setChainPanelOpen] = useState(true)
 
   const toggleAccount = (id: string) =>
@@ -725,7 +744,7 @@ export default function CalendarPage() {
   const makeDragMouseMove = useCallback(() => (me: MouseEvent) => {
     if (!gridRef.current) return
     const rect = gridRef.current.getBoundingClientRect()
-    const HOUR_COL = 60
+    const HOUR_COL = HOUR_COL_PX
     const EDGE_ZONE = 40 // px from left/right edge that triggers week navigation
     const NAV_DELAY = 800 // ms between auto-navigations
 
@@ -788,7 +807,7 @@ export default function CalendarPage() {
     const onMouseMove = (me: MouseEvent) => {
       if (!gridRef.current) return
       const rect = gridRef.current.getBoundingClientRect()
-      const HOUR_COL = 60
+      const HOUR_COL = HOUR_COL_PX
       const EDGE_ZONE = 40
       const NAV_DELAY = 800
       const rawX = me.clientX - rect.left
@@ -1107,8 +1126,11 @@ export default function CalendarPage() {
       >
         <div className="min-w-[700px]">
           {/* Day headers */}
-          <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-[#ece2cb] bg-[#fbf7ee] sticky top-0 z-10">
-            <div className="py-3 px-2 text-xs text-[#a99873] border-r border-[#ece2cb]" />
+          <div className={cn('grid border-b border-[#ece2cb] bg-[#fbf7ee] sticky top-0 z-10', hourColClass)}>
+            <div className="py-2 px-1 text-[10px] text-[#a99873] border-r border-[#ece2cb] flex flex-col items-end justify-end gap-0.5 cursor-pointer hover:bg-[#f3ecdd] transition-colors" onClick={() => setTzDialogOpen(true)}>
+              {secondaryTz && <span className="text-[#c0a87a] leading-none">{tzLabel(secondaryTz)}</span>}
+              <span className="leading-none">{tzLabel(primaryTz)}</span>
+            </div>
             {weekDays.map((day) => (
               <div
                 key={day.toISOString()}
@@ -1123,7 +1145,7 @@ export default function CalendarPage() {
           </div>
 
           {/* All-day row (habits + all-day events only, no deadline column) */}
-          <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b-2 border-[#e2d6bc] bg-[#f3ecdd]/60">
+          <div className={cn('grid border-b-2 border-[#e2d6bc] bg-[#f3ecdd]/60', hourColClass)}>
             <div className="border-r border-[#e2d6bc]" />
             {weekDays.map((day, dayIdx) => {
               const allDayEvs = getAllDayEventsForDay(day)
@@ -1232,9 +1254,16 @@ export default function CalendarPage() {
           {/* Time grid */}
           <div className="relative" ref={gridRef}>
             {HOURS.map((hour) => (
-              <div key={hour} className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-[#f3ecdd] h-[60px]">
-                <div className="px-2 py-1 text-xs text-[#a99873] text-right border-r border-[#ece2cb] w-12 shrink-0">
-                  {hour}:00
+              <div key={hour} className={cn('grid border-b border-[#f3ecdd] h-[60px]', hourColClass)}>
+                <div className="flex border-r border-[#ece2cb] shrink-0">
+                  {secondaryTz && (
+                    <div className="w-12 px-1 py-1 text-xs text-[#c0a87a] text-right border-r border-[#ece2cb]/60">
+                      {hourInTz(hour, secondaryTz)}
+                    </div>
+                  )}
+                  <div className="w-12 px-1 py-1 text-xs text-[#a99873] text-right">
+                    {hourInTz(hour, primaryTz)}
+                  </div>
                 </div>
                 {weekDays.map((day, dayIdx) => {
                   const isPreviewHere = isDragging && dragPreview?.dayIdx === dayIdx && dragPreview?.hour === hour
@@ -1251,8 +1280,8 @@ export default function CalendarPage() {
             ))}
 
             {/* Absolutely positioned event blocks */}
-            <div className="absolute inset-0 grid grid-cols-[60px_repeat(7,1fr)] pointer-events-none">
-              <div className="w-12 shrink-0" />
+            <div className={cn('absolute inset-0 grid pointer-events-none', hourColClass)}>
+              <div className="shrink-0" style={{ width: HOUR_COL_PX }} />
               {weekDays.map((day, dayIdx) => {
                 const blocks = getDayBlocks(day)
                 const isPreviewHere = isDragging && dragPreview?.dayIdx === dayIdx && (dragPreview?.hour ?? -1) >= GRID_START_HOUR
@@ -1483,7 +1512,128 @@ export default function CalendarPage() {
         calendarAccounts={calendarAccounts}
         lang={language}
       />
+
+      {/* Timezone settings dialog */}
+      <TimezoneDialog
+        open={tzDialogOpen}
+        onClose={() => setTzDialogOpen(false)}
+        primaryTimezone={primaryTimezone}
+        secondaryTimezone={secondaryTimezone}
+        onSetPrimary={setPrimaryTimezone}
+        onSetSecondary={setSecondaryTimezone}
+        lang={language}
+      />
     </div>
+  )
+}
+
+// ─── Timezone Dialog ──────────────────────────────────────────────────────────
+
+const COMMON_TIMEZONES = [
+  'Africa/Abidjan', 'Africa/Cairo', 'Africa/Johannesburg', 'Africa/Lagos', 'Africa/Nairobi',
+  'America/Anchorage', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+  'America/Mexico_City', 'America/New_York', 'America/Sao_Paulo', 'America/Toronto',
+  'Asia/Bangkok', 'Asia/Dubai', 'Asia/Hong_Kong', 'Asia/Jakarta', 'Asia/Karachi',
+  'Asia/Kolkata', 'Asia/Seoul', 'Asia/Shanghai', 'Asia/Singapore', 'Asia/Taipei',
+  'Asia/Tehran', 'Asia/Tokyo', 'Australia/Melbourne', 'Australia/Sydney',
+  'Europe/Amsterdam', 'Europe/Berlin', 'Europe/Brussels', 'Europe/Dublin',
+  'Europe/Istanbul', 'Europe/Lisbon', 'Europe/London', 'Europe/Madrid',
+  'Europe/Moscow', 'Europe/Paris', 'Europe/Rome', 'Europe/Stockholm', 'Europe/Warsaw',
+  'Europe/Zurich', 'Pacific/Auckland', 'Pacific/Honolulu', 'UTC',
+]
+
+function TimezoneDialog({
+  open, onClose, primaryTimezone, secondaryTimezone, onSetPrimary, onSetSecondary, lang,
+}: {
+  open: boolean
+  onClose: () => void
+  primaryTimezone: string | null
+  secondaryTimezone: string | null
+  onSetPrimary: (tz: string | null) => void
+  onSetSecondary: (tz: string | null) => void
+  lang: 'fr' | 'en' | 'zh'
+}) {
+  const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const [primarySearch, setPrimarySearch] = React.useState('')
+  const [secondarySearch, setSecondarySearch] = React.useState('')
+
+  const filter = (search: string) => {
+    const q = search.toLowerCase()
+    return COMMON_TIMEZONES.filter((tz) => tz.toLowerCase().includes(q))
+  }
+
+  const label = (key: string, zh: string, fr: string, en: string) =>
+    lang === 'zh' ? zh : lang === 'fr' ? fr : en
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{label('tz', '時區設定', 'Fuseaux horaires', 'Timezone settings')}</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-5 mt-2">
+          {/* Primary */}
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold text-[#a99873] uppercase tracking-widest">
+              {label('primary', '主時區', 'Fuseau principal', 'Primary timezone')}
+            </p>
+            <input
+              className="border border-[#ece2cb] rounded px-2 py-1 text-sm bg-[#fbf7ee] focus:outline-none focus:ring-1 focus:ring-[#ab3326]/40"
+              placeholder={label('search', '搜尋…', 'Rechercher…', 'Search…')}
+              value={primarySearch}
+              onChange={(e) => setPrimarySearch(e.target.value)}
+            />
+            <div className="max-h-36 overflow-y-auto flex flex-col gap-0.5">
+              <button
+                className={`text-left px-2 py-1 rounded text-sm hover:bg-[#f3ecdd] ${!primaryTimezone ? 'bg-[#f3ecdd] font-medium' : ''}`}
+                onClick={() => { onSetPrimary(null); setPrimarySearch('') }}
+              >
+                {label('local', '本地時區', 'Heure locale', 'Local time')} ({localTz})
+              </button>
+              {filter(primarySearch).map((tz) => (
+                <button
+                  key={tz}
+                  className={`text-left px-2 py-1 rounded text-sm hover:bg-[#f3ecdd] ${primaryTimezone === tz ? 'bg-[#f3ecdd] font-medium' : ''}`}
+                  onClick={() => { onSetPrimary(tz); setPrimarySearch('') }}
+                >
+                  {tz}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Secondary */}
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold text-[#a99873] uppercase tracking-widest">
+              {label('secondary', '副時區', 'Fuseau secondaire', 'Secondary timezone')}
+            </p>
+            <input
+              className="border border-[#ece2cb] rounded px-2 py-1 text-sm bg-[#fbf7ee] focus:outline-none focus:ring-1 focus:ring-[#ab3326]/40"
+              placeholder={label('search', '搜尋…', 'Rechercher…', 'Search…')}
+              value={secondarySearch}
+              onChange={(e) => setSecondarySearch(e.target.value)}
+            />
+            <div className="max-h-36 overflow-y-auto flex flex-col gap-0.5">
+              <button
+                className={`text-left px-2 py-1 rounded text-sm hover:bg-[#f3ecdd] ${!secondaryTimezone ? 'bg-[#f3ecdd] font-medium' : ''}`}
+                onClick={() => { onSetSecondary(null); setSecondarySearch('') }}
+              >
+                {label('none', '不顯示', 'Aucun', 'None')}
+              </button>
+              {filter(secondarySearch).map((tz) => (
+                <button
+                  key={tz}
+                  className={`text-left px-2 py-1 rounded text-sm hover:bg-[#f3ecdd] ${secondaryTimezone === tz ? 'bg-[#f3ecdd] font-medium' : ''}`}
+                  onClick={() => { onSetSecondary(tz); setSecondarySearch('') }}
+                >
+                  {tz}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
