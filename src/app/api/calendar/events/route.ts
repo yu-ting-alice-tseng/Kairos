@@ -48,9 +48,11 @@ export async function GET(req: NextRequest) {
       if (!accessToken) return
 
       const activeSubCals = account.subCalendars.filter((sc) => sc.isActive)
-      const calendarIds = activeSubCals.length > 0
-        ? activeSubCals.map((sc) => ({ id: sc.externalId, color: sc.color }))
-        : [{ id: account.provider === 'GOOGLE' ? 'primary' : null, color: account.color }]
+      // Only fall back to primary when no sub-calendar records exist at all (account never configured).
+      // If records exist but all are inactive, the user explicitly disabled them — fetch nothing.
+      const calendarIds = account.subCalendars.length === 0
+        ? [{ id: account.provider === 'GOOGLE' ? 'primary' : null, color: account.color }]
+        : activeSubCals.map((sc) => ({ id: sc.externalId, color: sc.color }))
 
       await Promise.all(
         calendarIds
