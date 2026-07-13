@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { cn, formatTime, getQuadrant, EISENHOWER_QUADRANTS } from '@/lib/utils'
 import {
   ChevronLeft, ChevronRight, Calendar, Plus, Clock, Loader2, Pencil, Trash2, X,
-  MapPin, ExternalLink, GitBranch, AlignLeft, CheckCircle2, Circle, Check, Sparkles, Undo2, AlertTriangle,
+  MapPin, ExternalLink, GitBranch, AlignLeft, CheckCircle2, Circle, Check, Sparkles, Undo2, AlertTriangle, RefreshCw,
 } from 'lucide-react'
 import {
   format, addDays, isSameDay, isToday,
@@ -896,6 +896,15 @@ export default function CalendarPage() {
             </Button>
             <Button variant="outline" size="sm" onClick={() => { const d = new Date(); d.setHours(0,0,0,0); const dow = d.getDay(); d.setDate(d.getDate() + (dow === 0 ? 1 : 1 - dow)); setStartDate(d) }}>
               {t('today', language)}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={language === 'fr' ? 'Actualiser' : language === 'zh' ? '重新整理' : 'Refresh'}
+              disabled={eventsLoading}
+              onClick={() => { loadTasks(); loadExternalEvents() }}
+            >
+              <RefreshCw className={cn('h-4 w-4', eventsLoading && 'animate-spin')} />
             </Button>
           </div>
         </div>
