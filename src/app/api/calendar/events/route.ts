@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { listGoogleEvents, createGoogleEvent, updateGoogleEvent, deleteGoogleEvent } from '@/lib/calendar/google'
+import { listGoogleEvents, createGoogleEvent, updateGoogleEvent, deleteGoogleEvent, moveGoogleEvent } from '@/lib/calendar/google'
 import { listOutlookEvents } from '@/lib/calendar/outlook'
 import { listNotionEvents } from '@/lib/calendar/notion'
 import { CalendarEvent } from '@/types'
@@ -278,12 +278,23 @@ export async function PATCH(req: NextRequest) {
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { eventId, calendarAccountId, calendarId, title, description, start, end, allDay } = await req.json()
+  const { eventId, calendarAccountId, calendarId, title, description, start, end, allDay, action, destinationCalendarId } = await req.json()
 
   const account = await prisma.calendarAccount.findFirst({
     where: { id: calendarAccountId, userId },
   })
   if (!account?.accessToken) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+
+  // Move event to another sub-calendar within the same Google account
+  if (action === 'move' && account.provider === 'GOOGLE') {
+    const destId = destinationCalendarId ?? 'primary'
+    if (destId !== 'primary') {
+      const ownedDest = await prisma.subCalendar.findFirst({ where: { calendarAccountId: account.id, externalId: destId } })
+      if (!ownedDest) return NextResponse.json({ error: 'Destination calendar not found' }, { status: 404 })
+    }
+    await moveGoogleEvent(account.id, account.accessToken, calendarId ?? 'primary', eventId, destId, account.refreshToken, account.expiresAt)
+    return NextResponse.json({ ok: true })
+  }
 
   // Verify the calendarId belongs to this account (prevents modifying events on foreign calendars)
   const resolvedCalendarId = calendarId ?? 'primary'

@@ -61,6 +61,7 @@ export async function GET() {
   const accounts = await prisma.calendarAccount.findMany({
     where: { userId, isActive: true },
     orderBy: { createdAt: 'asc' },
+    include: { subCalendars: { orderBy: { name: 'asc' } } },
   })
 
   return NextResponse.json(accounts)

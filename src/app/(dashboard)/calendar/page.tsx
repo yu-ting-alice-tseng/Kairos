@@ -508,6 +508,33 @@ export default function CalendarPage() {
   const setStartDateRef = useRef(setStartDate)
   setStartDateRef.current = setStartDate
 
+  const handleMoveEvent = async (ev: CalendarEvent, newCalendarAccountId: string, newCalendarId: string) => {
+    const res = await fetch('/api/calendar/events', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'move',
+        eventId: ev.id,
+        calendarAccountId: ev.calendarAccountId,
+        calendarId: ev.calendarId,
+        destinationCalendarId: newCalendarId,
+      }),
+    })
+    if (res.ok) {
+      setExternalEvents((prev) => prev.map((e) => e.id === ev.id
+        ? { ...e, calendarAccountId: newCalendarAccountId, calendarId: newCalendarId }
+        : e
+      ))
+      setEditingEvent((prev) => prev?.id === ev.id
+        ? { ...prev, calendarAccountId: newCalendarAccountId, calendarId: newCalendarId }
+        : prev
+      )
+      toast({ title: language === 'fr' ? 'Calendrier modifié' : language === 'zh' ? '日曆已更新' : 'Calendar updated', variant: 'success' })
+    } else {
+      toast({ title: language === 'fr' ? 'Erreur lors du déplacement' : language === 'zh' ? '移動失敗' : 'Move failed', variant: 'error' })
+    }
+  }
+
   const handleDeleteEvent = async (ev: CalendarEvent) => {
     const res = await fetch('/api/calendar/events', {
       method: 'DELETE',
@@ -1467,6 +1494,7 @@ export default function CalendarPage() {
             setStartDate(d)
             if (taskId) { setHighlightedTaskId(taskId); setTimeout(() => setHighlightedTaskId(null), 3000) }
           }}
+          onMoveEvent={handleMoveEvent}
         />
       ) : viewingScheduledTask ? (
         <ScheduledTaskPanel
@@ -2180,7 +2208,7 @@ function ScheduledTaskPanel({
 // ─── Event Detail Panel ───────────────────────────────────────────────────────
 
 function EventDetailPanel({
-  event, lang, saving, tasks, calendarAccounts, currentWeekEvents, onSave, onDelete, onClose, onTasksRefresh, onNavigateToDate,
+  event, lang, saving, tasks, calendarAccounts, currentWeekEvents, onSave, onDelete, onClose, onTasksRefresh, onNavigateToDate, onMoveEvent,
 }: {
   event: CalendarEvent
   lang: 'fr' | 'en' | 'zh'
@@ -2193,6 +2221,7 @@ function EventDetailPanel({
   onClose: () => void
   onTasksRefresh: () => void | Promise<void>
   onNavigateToDate?: (date: Date, taskId?: string) => void
+  onMoveEvent?: (ev: CalendarEvent, newCalendarAccountId: string, newCalendarId: string) => Promise<void>
 }) {
   const router = useRouter()
   const toLocal = (d: Date | string) => {
@@ -2208,6 +2237,8 @@ function EventDetailPanel({
   const [isAllDay, setIsAllDay] = React.useState(!!event.allDay)
   const [renamingTaskId, setRenamingTaskId] = React.useState<string | null>(null)
   const [renameDraft, setRenameDraft] = React.useState('')
+  const [calPickerOpen, setCalPickerOpen] = React.useState(false)
+  const [movingCal, setMovingCal] = React.useState(false)
   const renameInputRef = React.useRef<HTMLInputElement>(null)
   const { updateTask, addTask } = useAppStore()
 
@@ -2608,15 +2639,63 @@ function EventDetailPanel({
           </button>
         </div>
 
-        {/* Calendar account + sub-calendar */}
+        {/* Calendar account + sub-calendar (clickable to change) */}
         {event.calendarAccountId && (() => {
           const account = calendarAccounts?.find((a) => a.id === event.calendarAccountId)
           if (!account) return null
           const subCal = account.subCalendars?.find((sc) => sc.externalId === event.calendarId)
+          const subCalLabel = subCal?.name ?? (lang === 'fr' ? 'Principal' : lang === 'zh' ? '主日曆' : 'Primary')
+          const canEdit = !!event.editable && !!onMoveEvent && (calendarAccounts?.length ?? 0) > 0
           return (
-            <div className="flex items-center gap-1.5 text-xs text-[#8a7a5e]">
-              <Calendar className="h-3.5 w-3.5 text-[#a99873] shrink-0" />
-              <span>{account.name}{subCal ? ` · ${subCal.name}` : ''}</span>
+            <div className="flex flex-col gap-1">
+              <button
+                disabled={!canEdit || movingCal}
+                onClick={() => canEdit && setCalPickerOpen((v) => !v)}
+                className={cn(
+                  'flex items-center gap-1.5 text-xs text-[#8a7a5e] text-left w-full rounded px-1 -mx-1 py-0.5 transition-colors',
+                  canEdit && 'hover:bg-[#f3ecdd] cursor-pointer',
+                  !canEdit && 'cursor-default'
+                )}
+              >
+                <Calendar className="h-3.5 w-3.5 text-[#a99873] shrink-0" />
+                <span className="truncate">{account.name}</span>
+                <span className="text-[#a99873]">·</span>
+                <span className="truncate">{subCalLabel}</span>
+                {canEdit && <Pencil className="h-3 w-3 text-[#c0b090] ml-auto shrink-0" />}
+                {movingCal && <Loader2 className="h-3 w-3 animate-spin ml-auto shrink-0" />}
+              </button>
+              {calPickerOpen && canEdit && (
+                <div className="ml-1 flex flex-col gap-0.5 border border-[#ece2cb] rounded bg-[#fbf7ee] p-1 max-h-48 overflow-y-auto">
+                  {calendarAccounts!.map((acc) => {
+                    const subCals = acc.subCalendars ?? []
+                    const options: { label: string; calId: string }[] =
+                      subCals.length > 0
+                        ? subCals.map((sc) => ({ label: `${acc.name} · ${sc.name}`, calId: sc.externalId }))
+                        : [{ label: `${acc.name} · ${lang === 'fr' ? 'Principal' : lang === 'zh' ? '主日曆' : 'Primary'}`, calId: 'primary' }]
+                    return options.map(({ label, calId }) => {
+                      const isCurrent = acc.id === event.calendarAccountId && calId === (event.calendarId ?? 'primary')
+                      return (
+                        <button
+                          key={`${acc.id}:${calId}`}
+                          className={cn(
+                            'text-left text-xs px-2 py-1 rounded hover:bg-[#f3ecdd] transition-colors truncate',
+                            isCurrent && 'bg-[#f3ecdd] font-medium text-[#2a2420]'
+                          )}
+                          onClick={async () => {
+                            if (isCurrent) { setCalPickerOpen(false); return }
+                            setCalPickerOpen(false)
+                            setMovingCal(true)
+                            await onMoveEvent!(event, acc.id, calId)
+                            setMovingCal(false)
+                          }}
+                        >
+                          {label}
+                        </button>
+                      )
+                    })
+                  })}
+                </div>
+              )}
             </div>
           )
         })()}

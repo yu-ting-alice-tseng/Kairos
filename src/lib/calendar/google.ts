@@ -187,6 +187,21 @@ export async function updateGoogleEvent(
   await flush()
 }
 
+export async function moveGoogleEvent(
+  accountId: string,
+  accessToken: string,
+  sourceCalendarId: string,
+  eventId: string,
+  destinationCalendarId: string,
+  refreshToken?: string | null,
+  expiresAt?: Date | null
+): Promise<void> {
+  const { client, flush } = getOAuth2Client(accountId, accessToken, refreshToken, expiresAt)
+  const calendar = google.calendar({ version: 'v3', auth: client })
+  await calendar.events.move({ calendarId: sourceCalendarId, eventId, destination: destinationCalendarId })
+  await flush()
+}
+
 export async function deleteGoogleEvent(
   accountId: string,
   accessToken: string,
