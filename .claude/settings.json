@@ -7,7 +7,7 @@
           {
             "type": "command",
             "shell": "bash",
-            "command": "f=$(jq -r '.tool_input.file_path // empty' 2>/dev/null); if [ -n \"$f\" ]; then git add \"$f\" 2>/dev/null && git diff --cached --quiet || (git commit -m \"auto: $(date '+%Y-%m-%d %H:%M')\" 2>/dev/null && git push 2>/dev/null); fi; true"
+            "command": "f=$(jq -r '.tool_input.file_path // empty' 2>/dev/null); if [ -n \"$f\" ]; then git add \"$f\" 2>/dev/null && git diff --cached --quiet || git commit -m \"auto: $(date '+%Y-%m-%d %H:%M')\" 2>/dev/null; git push origin main 2>/dev/null &; fi; true"
           }
         ]
       }
