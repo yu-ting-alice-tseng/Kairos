@@ -2214,7 +2214,7 @@ function EventDetailPanel({
   lang: 'fr' | 'en' | 'zh'
   saving: boolean
   tasks: Task[]
-  calendarAccounts?: { id: string; name: string; subCalendars?: { externalId: string; name: string }[] }[]
+  calendarAccounts?: { id: string; name: string; color?: string; subCalendars?: { externalId: string; name: string; color?: string; isActive?: boolean }[] }[]
   currentWeekEvents: CalendarEvent[]
   onSave: (ev: CalendarEvent, title: string, start: string, end: string) => void
   onDelete: (ev: CalendarEvent) => void
