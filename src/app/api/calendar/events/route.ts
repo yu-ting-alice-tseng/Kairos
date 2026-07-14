@@ -287,7 +287,10 @@ export async function POST(req: NextRequest) {
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { calendarAccountId, calendarId, title, description, start, end, allDay } = await req.json()
+  const parsed = eventPostSchema.safeParse(await req.json())
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 })
+
+  const { calendarAccountId, calendarId, title, description, start, end, allDay } = parsed.data
 
   const account = await prisma.calendarAccount.findFirst({
     where: { id: calendarAccountId, userId },
