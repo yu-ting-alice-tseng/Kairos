@@ -3,12 +3,26 @@ import { auth } from '@/lib/auth'
 import { suggestReschedule } from '@/lib/ai'
 import { prisma } from '@/lib/prisma'
 import { addMinutes, addDays, setHours, setMinutes } from 'date-fns'
+import { z } from 'zod'
+
+const reschedulePostSchema = z.object({
+  taskId: z.string().min(1),
+  lang: z.string().max(10).optional(),
+})
+const reschedulePatchSchema = z.object({
+  taskId: z.string().min(1),
+  start: z.string().datetime(),
+  end: z.string().datetime(),
+})
 
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { taskId, lang } = await req.json()
+  const parsed = reschedulePostSchema.safeParse(await req.json())
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 })
+
+  const { taskId, lang } = parsed.data
 
   const task = await prisma.task.findUnique({
     where: { id: taskId, userId: session.user.id },
