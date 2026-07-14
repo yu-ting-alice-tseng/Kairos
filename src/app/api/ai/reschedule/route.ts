@@ -74,7 +74,10 @@ export async function PATCH(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { taskId, start, end } = await req.json()
+  const parsed = reschedulePatchSchema.safeParse(await req.json())
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 })
+
+  const { taskId, start, end } = parsed.data
 
   const task = await prisma.task.update({
     where: { id: taskId, userId: session.user.id },
