@@ -29,9 +29,11 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { text, type } = await req.json()
+  const parsed = goalPostSchema.safeParse(await req.json())
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 })
+
   const goal = await prisma.goal.create({
-    data: { userId: session.user.id, text, type: type ?? 'LONG_TERM' },
+    data: { userId: session.user.id, text: parsed.data.text, type: parsed.data.type ?? 'LONG_TERM' },
   })
   return NextResponse.json(goal, { status: 201 })
 }
@@ -40,10 +42,12 @@ export async function PATCH(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { id, text } = await req.json()
+  const parsed = goalPatchSchema.safeParse(await req.json())
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 })
+
   const goal = await prisma.goal.update({
-    where: { id, userId: session.user.id },
-    data: { text },
+    where: { id: parsed.data.id, userId: session.user.id },
+    data: { text: parsed.data.text },
   })
   return NextResponse.json(goal)
 }
@@ -52,7 +56,9 @@ export async function DELETE(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { id } = await req.json()
-  await prisma.goal.delete({ where: { id, userId: session.user.id } })
+  const parsed = goalDeleteSchema.safeParse(await req.json())
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 })
+
+  await prisma.goal.delete({ where: { id: parsed.data.id, userId: session.user.id } })
   return NextResponse.json({ success: true })
 }
