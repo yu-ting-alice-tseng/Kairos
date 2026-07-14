@@ -27,7 +27,9 @@ export function Sidebar() {
   const pathname    = usePathname()
   const { language, setLanguage, setTasks, setHabits, setCalendarAccounts, setKeywordRules } = useAppStore()
   const { data: session } = useSession()
-  const [collapsed, setCollapsed]       = React.useState(false)
+  const [collapsed, setCollapsed] = React.useState(() => {
+    try { return localStorage.getItem('sidebar-collapsed') === 'true' } catch { return false }
+  })
   const [avatarOpen, setAvatarOpen]     = React.useState(false)
   const [feedbackRating, setFeedbackRating] = React.useState(0)
   const avatarRef = React.useRef<HTMLDivElement>(null)
@@ -100,7 +102,7 @@ export function Sidebar() {
         </div>
         {!collapsed && (
           <button
-            onClick={() => setCollapsed(true)}
+            onClick={() => { setCollapsed(true); try { localStorage.setItem('sidebar-collapsed', 'true') } catch {} }}
             className="p-1.5 rounded-lg text-[#7a6c54] hover:text-[#d9c79f] hover:bg-[#fbf7ee]/[0.06] transition-all"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -110,7 +112,7 @@ export function Sidebar() {
 
       {collapsed && (
         <button
-          onClick={() => setCollapsed(false)}
+          onClick={() => { setCollapsed(false); try { localStorage.setItem('sidebar-collapsed', 'false') } catch {} }}
           className="absolute -right-[13px] top-[76px] z-30 h-6 w-6 rounded-full bg-[#3d2e1a] border border-[rgba(225,200,150,0.14)] shadow-lg flex items-center justify-center text-[#8a7a5e] hover:text-[#d9c79f] transition-all"
         >
           <ChevronRight className="h-3 w-3" />
