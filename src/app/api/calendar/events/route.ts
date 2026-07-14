@@ -6,6 +6,34 @@ import { listOutlookEvents } from '@/lib/calendar/outlook'
 import { listNotionEvents } from '@/lib/calendar/notion'
 import { CalendarEvent } from '@/types'
 import { calculatePriority } from '@/lib/utils'
+import { z } from 'zod'
+
+const eventPostSchema = z.object({
+  calendarAccountId: z.string().min(1),
+  calendarId: z.string().optional(),
+  title: z.string().min(1).max(1000),
+  description: z.string().max(10000).optional(),
+  start: z.string().min(1),
+  end: z.string().optional(),
+  allDay: z.boolean().optional(),
+})
+const eventPatchSchema = z.object({
+  eventId: z.string().min(1),
+  calendarAccountId: z.string().min(1),
+  calendarId: z.string().optional(),
+  action: z.string().optional(),
+  destinationCalendarId: z.string().optional(),
+  title: z.string().min(1).max(1000).optional(),
+  description: z.string().max(10000).optional(),
+  start: z.string().optional(),
+  end: z.string().optional(),
+  allDay: z.boolean().optional(),
+})
+const eventDeleteSchema = z.object({
+  eventId: z.string().min(1),
+  calendarAccountId: z.string().min(1),
+  calendarId: z.string().optional(),
+})
 
 export async function GET(req: NextRequest) {
   const session = await auth()
