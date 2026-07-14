@@ -130,6 +130,9 @@ export async function PATCH(req: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id, name, color } = await req.json()
+  if (!id || typeof id !== 'string') {
+    return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
+  }
   const account = await prisma.calendarAccount.update({
     where: { id, userId: session.user.id },
     data: { ...(name ? { name } : {}), ...(color ? { color } : {}) },
