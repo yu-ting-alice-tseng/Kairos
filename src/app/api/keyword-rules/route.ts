@@ -28,11 +28,13 @@ export async function PUT(request: Request) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const rules = await request.json()
+  const parsed = rulesSchema.safeParse(await request.json())
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 })
+
   await prisma.user.update({
     where: { id: session.user.id },
-    data: { keywordRules: JSON.stringify(rules) },
+    data: { keywordRules: JSON.stringify(parsed.data) },
   })
 
-  return NextResponse.json(rules)
+  return NextResponse.json(parsed.data)
 }
