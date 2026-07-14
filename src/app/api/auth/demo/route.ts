@@ -41,7 +41,11 @@ export async function POST(req: NextRequest) {
     }
     await seedDemoData(user.id)
 
-    const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? 'flowplan-demo-secret-replace-in-prod'
+    const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET
+    if (!secret) {
+      console.error('AUTH_SECRET is not set — demo login disabled')
+      return NextResponse.json({ error: 'Demo unavailable' }, { status: 503 })
+    }
     const now = Math.floor(Date.now() / 1000)
     const maxAge = 365 * 24 * 60 * 60
 
