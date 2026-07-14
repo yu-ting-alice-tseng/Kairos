@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { z } from 'zod'
+
+const keywordRuleSchema = z.object({
+  keyword: z.string().min(1).max(200),
+  importance: z.number().int().min(1).max(10).optional(),
+  urgency: z.number().int().min(1).max(10).optional(),
+  tag: z.string().max(100).optional(),
+})
+const rulesSchema = z.array(keywordRuleSchema).max(200)
 
 export async function GET() {
   const session = await auth()
