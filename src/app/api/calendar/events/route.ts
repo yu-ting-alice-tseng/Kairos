@@ -376,7 +376,10 @@ export async function DELETE(req: NextRequest) {
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { eventId, calendarAccountId, calendarId } = await req.json()
+  const parsed = eventDeleteSchema.safeParse(await req.json())
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 })
+
+  const { eventId, calendarAccountId, calendarId } = parsed.data
 
   const account = await prisma.calendarAccount.findFirst({
     where: { id: calendarAccountId, userId },
