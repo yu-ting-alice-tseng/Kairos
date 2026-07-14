@@ -320,7 +320,10 @@ export async function PATCH(req: NextRequest) {
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { eventId, calendarAccountId, calendarId, title, description, start, end, allDay, action, destinationCalendarId } = await req.json()
+  const parsed = eventPatchSchema.safeParse(await req.json())
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 })
+
+  const { eventId, calendarAccountId, calendarId, title, description, start, end, allDay, action, destinationCalendarId } = parsed.data
 
   const account = await prisma.calendarAccount.findFirst({
     where: { id: calendarAccountId, userId },
