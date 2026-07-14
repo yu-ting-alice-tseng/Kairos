@@ -145,11 +145,11 @@ export default function CalendarPage() {
   const { language, tasks, setTasks, updateTask, removeTask, addTask, calendarAccounts, habits, setHabits, hideHabitsViews, toggleHabitsView, primaryTimezone, secondaryTimezone, setPrimaryTimezone, setSecondaryTimezone } = useAppStore()
   const habitsHidden = hideHabitsViews.includes('calendar')
   const { toast } = useGlobalToast()
-  // startDate is always Monday of the current week (Sunday → next Monday)
+  // startDate is always Monday of the current week (Sunday → previous Monday)
   const [startDate, setStartDate] = useState(() => {
     const d = new Date(); d.setHours(0, 0, 0, 0)
     const dow = d.getDay() // 0=Sun
-    const toMon = dow === 0 ? 1 : 1 - dow
+    const toMon = dow === 0 ? -6 : 1 - dow
     d.setDate(d.getDate() + toMon)
     return d
   })
@@ -200,11 +200,12 @@ export default function CalendarPage() {
   const taskDragRef = useRef<TaskDragState | null>(null)
   const [draggingEventId, setDraggingEventId] = useState<string | null>(null)
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null)
-  const [dragPreview, setDragPreview] = useState<{ dayIdx: number; hour: number } | null>(null)
+  const [dragPreview, setDragPreview] = useState<{ dayIdx: number; hour: number; minute?: number } | null>(null)
   const gridRef = useRef<HTMLDivElement>(null)
 
   // Undo stack for drag moves
   const undoStackRef = useRef<UndoItem[]>([])
+  const [undoCount, setUndoCount] = useState(0)
 
   // Dismissed suggestion IDs — persisted in localStorage so navigation re-mounts don't re-show them
   const dismissedRef = useRef<Set<string>>(new Set<string>())
@@ -220,7 +221,7 @@ export default function CalendarPage() {
   const wheelAccRef = useRef(0)
 
   const weekDaysRef = useRef<Date[]>([])
-  const dragPreviewRef = useRef<{ dayIdx: number; hour: number } | null>(null)
+  const dragPreviewRef = useRef<{ dayIdx: number; hour: number; minute?: number } | null>(null)
   const edgeNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   dragPreviewRef.current = dragPreview
 
@@ -248,7 +249,9 @@ export default function CalendarPage() {
         // Server auto-creates/syncs tasks during this fetch — refresh store to pick them up
         loadTasks()
       }
-    } catch { /* best-effort */ }
+    } catch {
+      toast({ title: language === 'fr' ? 'Impossible de charger les événements' : language === 'zh' ? '無法載入行程，請稍後再試' : 'Failed to load events', variant: 'error' })
+    }
     setEventsLoading(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calendarAccounts.length, weekStart.toISOString(), weekEnd.toISOString()])
@@ -276,6 +279,7 @@ export default function CalendarPage() {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && undoStackRef.current.length > 0) {
         e.preventDefault()
         const item = undoStackRef.current.pop()!
+        setUndoCount(undoStackRef.current.length)
         handleSaveEventRef.current(item.event, item.event.title, item.prevStart, item.prevEnd, item.prevAllDay)
         toast({ title: language === 'fr' ? 'Action annulée' : language === 'zh' ? '已復原' : 'Undone', variant: 'success' })
       }
@@ -490,6 +494,7 @@ export default function CalendarPage() {
           prevEnd: new Date(ev.end).toISOString(),
           prevAllDay: ev.allDay,
         })
+        setUndoCount(undoStackRef.current.length)
       }
       toast({ title: language === 'fr' ? 'Événement mis à jour' : language === 'zh' ? '活動已更新' : 'Event updated', variant: 'success' })
       setEditingEvent(null)
@@ -565,7 +570,21 @@ export default function CalendarPage() {
 
   const handleCompleteHabit = useCallback(async (habit: Habit) => {
     const alreadyDone = (habit.completions?.length ?? 0) > 0
-    if (alreadyDone) return
+    if (alreadyDone) {
+      // Toggle off — delete the completion
+      const res = await fetch('/api/habits/complete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ habitId: habit.id }),
+      })
+      if (res.ok) {
+        setHabits(habits.map((h) => h.id === habit.id
+          ? { ...h, completions: [] }
+          : h
+        ))
+      }
+      return
+    }
     const res = await fetch('/api/habits/complete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -751,7 +770,7 @@ export default function CalendarPage() {
 
   // ─── Drag helpers ────────────────────────────────────────────────────────────
 
-  const finalizeDrop = useCallback((drag: DragState, preview: { dayIdx: number; hour: number } | null) => {
+  const finalizeDrop = useCallback((drag: DragState, preview: { dayIdx: number; hour: number; minute?: number } | null) => {
     if (!preview) return
     const targetDay = weekDaysRef.current[preview.dayIdx]
     if (!targetDay) return
@@ -760,7 +779,7 @@ export default function CalendarPage() {
       const newEnd = new Date(newStart); newEnd.setHours(23, 59, 59, 999)
       handleSaveEventRef.current(drag.event, drag.event.title, newStart.toISOString(), newEnd.toISOString(), true)
     } else {
-      const newStart = new Date(targetDay); newStart.setHours(preview.hour, 0, 0, 0)
+      const newStart = new Date(targetDay); newStart.setHours(preview.hour, preview.minute ?? 0, 0, 0)
       const newEnd = new Date(newStart.getTime() + drag.eventDurationMs)
       handleSaveEventRef.current(drag.event, drag.event.title, newStart.toISOString(), newEnd.toISOString(), false)
     }
@@ -801,8 +820,11 @@ export default function CalendarPage() {
     const dayColWidth = gridWidth / 7
     const dayIdx = Math.max(0, Math.min(6, Math.floor(relX / dayColWidth)))
     const relY = me.clientY - rect.top
-    const hour = Math.max(GRID_START_HOUR, Math.min(GRID_START_HOUR + HOURS.length - 1, GRID_START_HOUR + Math.floor(relY / 60)))
-    setDragPreview({ dayIdx, hour })
+    const rawHour = GRID_START_HOUR + relY / 60
+    const snappedHour = Math.round(rawHour * 4) / 4 // snap to 15-min intervals
+    const hour = Math.max(GRID_START_HOUR, Math.min(GRID_START_HOUR + HOURS.length - 1, Math.floor(snappedHour)))
+    const minute = Math.round((snappedHour - Math.floor(snappedHour)) * 60)
+    setDragPreview({ dayIdx, hour, minute })
   }, [])
 
   const startDrag = useCallback((e: React.MouseEvent, ev: CalendarEvent) => {
@@ -867,7 +889,7 @@ export default function CalendarPage() {
     document.addEventListener('mouseup', onMouseUp)
   }, [finalizeDrop])
 
-  const finalizeTaskDrop = useCallback(async (drag: TaskDragState, preview: { dayIdx: number; hour: number } | null) => {
+  const finalizeTaskDrop = useCallback(async (drag: TaskDragState, preview: { dayIdx: number; hour: number; minute?: number } | null) => {
     if (!preview || preview.hour < GRID_START_HOUR) return
     const targetDay = weekDaysRef.current[preview.dayIdx]
     if (!targetDay) return
@@ -940,7 +962,7 @@ export default function CalendarPage() {
             <Button variant="ghost" size="icon-sm" aria-label={language === 'fr' ? 'Semaine suivante' : language === 'zh' ? '下一週' : 'Next week'} onClick={() => setStartDate((d) => addDays(d, 7))}>
               <ChevronRight className="h-4 w-4" />
             </Button>
-            <Button variant="outline" size="sm" onClick={() => { const d = new Date(); d.setHours(0,0,0,0); const dow = d.getDay(); d.setDate(d.getDate() + (dow === 0 ? 1 : 1 - dow)); setStartDate(d) }}>
+            <Button variant="outline" size="sm" onClick={() => { const d = new Date(); d.setHours(0,0,0,0); const dow = d.getDay(); d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow)); setStartDate(d) }}>
               {t('today', language)}
             </Button>
             <Button
@@ -955,13 +977,14 @@ export default function CalendarPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 min-w-0 flex-1 justify-end overflow-hidden">
-          {undoStackRef.current.length > 0 && (
+          {undoCount > 0 && (
             <Button
               variant="ghost"
               size="icon-sm"
               title={language === 'fr' ? 'Annuler (Ctrl+Z)' : language === 'zh' ? '復原 (Ctrl+Z)' : 'Undo (Ctrl+Z)'}
               onClick={() => {
                 const item = undoStackRef.current.pop()
+                setUndoCount(undoStackRef.current.length)
                 if (item) handleSaveEventRef.current(item.event, item.event.title, item.prevStart, item.prevEnd, item.prevAllDay)
               }}
             >
@@ -2599,14 +2622,16 @@ function EventDetailPanel({
               type="date"
               value={start.slice(0, 10)}
               onChange={(e) => setStart(e.target.value + (isAllDay ? 'T00:00' : 'T' + (start.slice(11) || '09:00')))}
-              className="flex-1 min-w-0 text-xs bg-[#f3ecdd]/60 border border-[#e2d6bc] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#ab3326]/30 text-[#3a3326] cursor-pointer"
+              disabled={!event.editable}
+              className="flex-1 min-w-0 text-xs bg-[#f3ecdd]/60 border border-[#e2d6bc] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#ab3326]/30 text-[#3a3326] cursor-pointer disabled:opacity-60 disabled:cursor-default"
             />
             <ChevronRight className="h-3 w-3 text-[#c4b48a] shrink-0" />
             <input
               type="date"
               value={end.slice(0, 10)}
               onChange={(e) => setEnd(e.target.value + (isAllDay ? 'T00:00' : 'T' + (end.slice(11) || '10:00')))}
-              className="flex-1 min-w-0 text-xs bg-[#f3ecdd]/60 border border-[#e2d6bc] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#ab3326]/30 text-[#3a3326] cursor-pointer"
+              disabled={!event.editable}
+              className="flex-1 min-w-0 text-xs bg-[#f3ecdd]/60 border border-[#e2d6bc] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#ab3326]/30 text-[#3a3326] cursor-pointer disabled:opacity-60 disabled:cursor-default"
             />
           </div>
           {/* Time row (hidden for all-day) */}
@@ -2616,21 +2641,24 @@ function EventDetailPanel({
                 type="time"
                 value={start.slice(11) || ''}
                 onChange={(e) => setStart(start.slice(0, 10) + 'T' + e.target.value)}
-                className="flex-1 min-w-0 text-xs bg-[#f3ecdd]/60 border border-[#e2d6bc] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#ab3326]/30 text-[#3a3326]"
+                disabled={!event.editable}
+                className="flex-1 min-w-0 text-xs bg-[#f3ecdd]/60 border border-[#e2d6bc] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#ab3326]/30 text-[#3a3326] disabled:opacity-60 disabled:cursor-default"
               />
               <ChevronRight className="h-3 w-3 text-[#c4b48a] shrink-0" />
               <input
                 type="time"
                 value={end.slice(11) || ''}
                 onChange={(e) => setEnd(end.slice(0, 10) + 'T' + e.target.value)}
-                className="flex-1 min-w-0 text-xs bg-[#f3ecdd]/60 border border-[#e2d6bc] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#ab3326]/30 text-[#3a3326]"
+                disabled={!event.editable}
+                className="flex-1 min-w-0 text-xs bg-[#f3ecdd]/60 border border-[#e2d6bc] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#ab3326]/30 text-[#3a3326] disabled:opacity-60 disabled:cursor-default"
               />
             </div>
           )}
           {/* All-day toggle */}
           <button
-            onClick={() => setIsAllDay((v) => !v)}
-            className="flex items-center gap-2 text-xs text-[#8a7a5e] hover:text-[#3a3326] mt-0.5 w-fit transition-colors"
+            onClick={() => event.editable && setIsAllDay((v) => !v)}
+            disabled={!event.editable}
+            className="flex items-center gap-2 text-xs text-[#8a7a5e] hover:text-[#3a3326] mt-0.5 w-fit transition-colors disabled:opacity-60 disabled:cursor-default"
           >
             <div className={`w-7 h-3.5 rounded-full relative transition-colors ${isAllDay ? 'bg-[#ab3326]' : 'bg-[#d9c79f]'}`}>
               <div className={`absolute top-0.5 h-2.5 w-2.5 rounded-full bg-white shadow transition-transform ${isAllDay ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
@@ -2685,8 +2713,12 @@ function EventDetailPanel({
                       {lang === 'fr' ? 'Choisir un calendrier' : lang === 'zh' ? '選擇日曆' : 'Choose calendar'}
                     </div>
                     {calendarAccounts!.map((acc) => {
-                      const subCals = (acc.subCalendars ?? []).filter((sc) => sc.isActive === true)
+                      const allSubCals = acc.subCalendars ?? []
+                      const subCals = allSubCals.filter((sc) => sc.isActive === true)
                       const primaryLabel = lang === 'fr' ? 'Principal' : lang === 'zh' ? '主日曆' : 'Primary'
+                      // If the account has DB records but none are active, hide the whole section
+                      const showPrimary = allSubCals.length === 0
+                      if (!showPrimary && subCals.length === 0) return null
                       return (
                         <div key={acc.id} className="px-2 py-1">
                           <div className="px-2 py-1 text-[10px] font-semibold text-[#a99873] truncate">{acc.name}</div>

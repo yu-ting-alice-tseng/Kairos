@@ -106,7 +106,15 @@ export async function GET(req: NextRequest) {
 
   // Sync tasks with fetched calendar events (non-habit events only)
   // Skip when noSync=true (e.g. link dialog — read-only display, must not delete tasks)
-  if (noSync) return NextResponse.json(allEvents)
+  // Deduplicate events by id — same event can appear from duplicate CalendarAccount rows
+  const seenEventIds = new Set<string>()
+  const dedupedEvents = allEvents.filter((e) => {
+    if (seenEventIds.has(e.id)) return false
+    seenEventIds.add(e.id)
+    return true
+  })
+
+  if (noSync) return NextResponse.json(dedupedEvents)
   try {
     const syncableEvents = allEvents.filter((e) => !e.habitId)
     const syncEventIds = syncableEvents.map((e) => e.id)
@@ -225,6 +233,7 @@ export async function GET(req: NextRequest) {
           OR: [
             { scheduledStart: { gte: timeMin, lte: timeMax } },
             { scheduledStart: null, deadline: { gte: timeMin, lte: timeMax } },
+            { scheduledStart: null, deadline: null },
           ],
         },
         select: { id: true, calendarEventId: true },
@@ -241,7 +250,7 @@ export async function GET(req: NextRequest) {
     console.error('[calendar/events] task sync failed:', err)
   }
 
-  return NextResponse.json(allEvents)
+  return NextResponse.json(dedupedEvents)
 }
 
 // POST — create a Google Calendar event and return its id

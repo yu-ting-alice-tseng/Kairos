@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { listGoogleCalendars } from '@/lib/calendar/google'
 
 const OAUTH_PROVIDER_MAP: Record<string, { provider: string; name: string; color: string }> = {
   'google': { provider: 'GOOGLE', name: 'Google Calendar', color: '#4285F4' },
@@ -64,6 +65,22 @@ export async function GET() {
     include: { subCalendars: { orderBy: { name: 'asc' } } },
   })
 
+  // Auto-clean stale sub-calendar records (calendars deleted from Google)
+  await Promise.all(accounts.map(async (account) => {
+    if (account.provider !== 'GOOGLE' || !account.accessToken || account.subCalendars.length === 0) return
+    try {
+      const providerCals = await listGoogleCalendars(account.id, account.accessToken, account.refreshToken, account.expiresAt)
+      const providerIds = new Set(providerCals.map((c) => c.id ?? ''))
+      const staleIds = account.subCalendars.filter((sc) => !providerIds.has(sc.externalId)).map((sc) => sc.id)
+      if (staleIds.length > 0) {
+        await prisma.subCalendar.deleteMany({ where: { id: { in: staleIds } } })
+        account.subCalendars = account.subCalendars.filter((sc) => !staleIds.includes(sc.id))
+      }
+    } catch {
+      // Non-fatal: skip cleanup if Google API fails
+    }
+  }))
+
   return NextResponse.json(accounts)
 }
 
@@ -73,8 +90,9 @@ export async function POST(req: NextRequest) {
 
   const { provider, name, color, accessToken, refreshToken, calendarId } = await req.json()
 
-  const account = await prisma.calendarAccount.create({
-    data: {
+  const account = await prisma.calendarAccount.upsert({
+    where: { userId_provider_name: { userId: session.user.id, provider, name } },
+    create: {
       userId: session.user.id,
       provider,
       name,
@@ -82,6 +100,14 @@ export async function POST(req: NextRequest) {
       accessToken,
       refreshToken,
       calendarId,
+      isActive: true,
+    },
+    update: {
+      color: color ?? '#4F46E5',
+      accessToken,
+      refreshToken,
+      calendarId,
+      isActive: true,
     },
   })
 

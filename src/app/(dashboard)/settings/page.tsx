@@ -132,12 +132,16 @@ function SubCalendarPanel({ account, lang }: { account: CalendarAccount; lang: '
 
   const toggleAll = async (isActive: boolean) => {
     setTogglingAll(true)
-    await fetch(`/api/calendar/accounts/${account.id}/calendars`, {
+    const res = await fetch(`/api/calendar/accounts/${account.id}/calendars`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ isActive, calendars: calendars.map((c) => ({ externalId: c.externalId, name: c.name, color: c.color })) }),
     })
-    setCalendars((prev) => prev.map((c) => ({ ...c, isActive })))
+    if (res.ok) {
+      setCalendars((prev) => prev.map((c) => ({ ...c, isActive })))
+    } else {
+      toast({ title: lang === 'fr' ? 'Erreur lors de la mise à jour' : lang === 'zh' ? '更新失敗，請稍後再試' : 'Update failed', variant: 'error' })
+    }
     setTogglingAll(false)
   }
 
@@ -653,11 +657,15 @@ export default function SettingsPage() {
   }
 
   const handleDeleteCalendar = async (id: string) => {
-    await fetch('/api/calendar/accounts', {
+    const res = await fetch('/api/calendar/accounts', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
     })
+    if (!res.ok) {
+      toast({ title: language === 'fr' ? 'Erreur lors de la suppression' : language === 'zh' ? '移除失敗，請稍後再試' : 'Failed to remove calendar', variant: 'error' })
+      return
+    }
     setCalendarAccounts(calendarAccounts.filter((a) => a.id !== id))
     setDeleteConfirm(null)
     toast({ title: language === 'fr' ? 'Calendrier supprimé' : language === 'zh' ? '日曆已移除' : 'Calendar removed', variant: 'info' })

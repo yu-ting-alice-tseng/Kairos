@@ -53,6 +53,15 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
     const activeMap = new Map(account.subCalendars.map((sc) => [sc.externalId, sc]))
 
+    // Delete DB records for sub-calendars that no longer exist in Google Calendar
+    const providerIds = new Set(providerCalendars.map((pc) => pc.id))
+    const staleIds = account.subCalendars
+      .filter((sc) => !providerIds.has(sc.externalId))
+      .map((sc) => sc.id)
+    if (staleIds.length > 0) {
+      await prisma.subCalendar.deleteMany({ where: { id: { in: staleIds } } })
+    }
+
     const result = providerCalendars.map((pc) => {
       const saved = activeMap.get(pc.id)
       return {
