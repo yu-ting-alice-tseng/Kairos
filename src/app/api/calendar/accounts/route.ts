@@ -90,6 +90,17 @@ export async function POST(req: NextRequest) {
 
   const { provider, name, color, accessToken, refreshToken, calendarId } = await req.json()
 
+  const VALID_PROVIDERS = ['GOOGLE', 'OUTLOOK', 'NOTION']
+  if (!provider || !VALID_PROVIDERS.includes(provider)) {
+    return NextResponse.json({ error: 'Invalid provider' }, { status: 400 })
+  }
+  if (!name || typeof name !== 'string' || name.length > 255) {
+    return NextResponse.json({ error: 'Invalid name' }, { status: 400 })
+  }
+  if (!accessToken || typeof accessToken !== 'string') {
+    return NextResponse.json({ error: 'Invalid accessToken' }, { status: 400 })
+  }
+
   const account = await prisma.calendarAccount.upsert({
     where: { userId_provider_name: { userId: session.user.id, provider, name } },
     create: {
