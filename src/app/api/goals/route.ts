@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { z } from 'zod'
+
+const VALID_TYPES = ['SHORT_TERM', 'LONG_TERM', 'LIFE'] as const
+const goalPostSchema = z.object({
+  text: z.string().min(1).max(2000),
+  type: z.enum(VALID_TYPES).optional(),
+})
+const goalPatchSchema = z.object({
+  id: z.string().min(1),
+  text: z.string().min(1).max(2000),
+})
+const goalDeleteSchema = z.object({ id: z.string().min(1) })
 
 export async function GET() {
   const session = await auth()
