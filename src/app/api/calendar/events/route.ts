@@ -116,7 +116,7 @@ export async function GET(req: NextRequest) {
 
   if (noSync) return NextResponse.json(dedupedEvents)
   try {
-    const syncableEvents = allEvents.filter((e) => !e.habitId)
+    const syncableEvents = dedupedEvents.filter((e) => !e.habitId)
     const syncEventIds = syncableEvents.map((e) => e.id)
 
     const existingTasks = await prisma.task.findMany({
