@@ -125,6 +125,7 @@ export const useAppStore = create<AppState>()(
         hideHabitsViews: state.hideHabitsViews,
         primaryTimezone: state.primaryTimezone,
         secondaryTimezone: state.secondaryTimezone,
+        hasCompletedOnboarding: state.hasCompletedOnboarding,
         // keywordRules loaded from DB on login — not persisted in localStorage
       }),
     }
