@@ -49,7 +49,12 @@ export async function POST(req: NextRequest) {
     const now = Math.floor(Date.now() / 1000)
     const maxAge = 365 * 24 * 60 * 60
 
-    // Create a properly signed JWT that NextAuth JWT strategy will accept
+    const proto = req.headers.get('x-forwarded-proto') ?? req.nextUrl.protocol.replace(':', '')
+    const isHttps = proto === 'https'
+    const cookieName = isHttps ? '__Secure-authjs.session-token' : 'authjs.session-token'
+
+    // Create a properly signed JWT that NextAuth JWT strategy will accept.
+    // NextAuth decrypts session cookies with salt = cookie name, so encode must match.
     const token = await encode({
       token: {
         sub: DEMO_USER_ID,
@@ -61,12 +66,8 @@ export async function POST(req: NextRequest) {
         jti: crypto.randomUUID(),
       },
       secret,
-      salt: '',
+      salt: cookieName,
     })
-
-    const proto = req.headers.get('x-forwarded-proto') ?? req.nextUrl.protocol.replace(':', '')
-    const isHttps = proto === 'https'
-    const cookieName = isHttps ? '__Secure-authjs.session-token' : 'authjs.session-token'
 
     const response = NextResponse.json({ ok: true })
     response.cookies.set(cookieName, token, {
