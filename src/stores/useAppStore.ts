@@ -70,8 +70,12 @@ export const useAppStore = create<AppState>()(
       hideHabitsViews: [],
       primaryTimezone: null,
       secondaryTimezone: null,
+      hasCompletedOnboarding: false,
+      onboardingOpen: false,
 
       setLanguage: (lang) => set({ language: lang }),
+      setOnboardingOpen: (open) => set({ onboardingOpen: open }),
+      completeOnboarding: () => set({ hasCompletedOnboarding: true, onboardingOpen: false }),
       setPrimaryTimezone: (tz) => set({ primaryTimezone: tz }),
       setSecondaryTimezone: (tz) => set({ secondaryTimezone: tz }),
       setTasks: (tasks) => set({ tasks }),
