@@ -25,7 +25,7 @@ const navItems = [
 
 export function Sidebar() {
   const pathname    = usePathname()
-  const { language, setLanguage, setTasks, setHabits, setCalendarAccounts, setKeywordRules } = useAppStore()
+  const { language, setLanguage, setTasks, setHabits, setCalendarAccounts, setKeywordRules, setOnboardingOpen } = useAppStore()
   const { data: session } = useSession()
   const [collapsed, setCollapsed] = React.useState(() => {
     try { return localStorage.getItem('sidebar-collapsed') === 'true' } catch { return false }
