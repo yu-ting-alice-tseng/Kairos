@@ -25,8 +25,12 @@ export interface AppState {
   hideHabitsViews: string[]
   primaryTimezone: string | null   // null = browser local
   secondaryTimezone: string | null // null = not shown
+  hasCompletedOnboarding: boolean
+  onboardingOpen: boolean
 
   setLanguage: (lang: Language) => void
+  setOnboardingOpen: (open: boolean) => void
+  completeOnboarding: () => void
   setPrimaryTimezone: (tz: string | null) => void
   setSecondaryTimezone: (tz: string | null) => void
   setTasks: (tasks: Task[]) => void
