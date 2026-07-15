@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import {
   Zap, LayoutGrid, Calendar, Repeat2,
   ChevronLeft, ChevronRight, Globe, GitBranch,
-  Info, Settings, LogOut, Shield, MessageSquare, Star,
+  Info, Settings, LogOut, Shield, MessageSquare, Star, HelpCircle,
 } from 'lucide-react'
 
 const LANG_LABEL: Record<'fr' | 'en' | 'zh', string> = { fr: 'EN', en: '中', zh: 'FR' }
