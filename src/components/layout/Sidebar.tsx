@@ -236,6 +236,13 @@ export function Sidebar() {
                     <Settings className="h-3.5 w-3.5 shrink-0" />
                     {language === 'fr' ? 'Paramètres' : language === 'zh' ? '設定' : 'Settings'}
                   </Link>
+                  <button
+                    onClick={() => { setAvatarOpen(false); setOnboardingOpen(true) }}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#a87f3e] hover:bg-[#fbf7ee]/[0.08] hover:text-[#fbeacb] transition-all text-xs font-medium text-left"
+                  >
+                    <HelpCircle className="h-3.5 w-3.5 shrink-0" />
+                    {language === 'fr' ? 'Guide de découverte' : language === 'zh' ? '使用教學' : 'Take the tour'}
+                  </button>
                 </div>
 
                 {/* Privacy & Feedback quick section */}
