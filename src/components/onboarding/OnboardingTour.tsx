@@ -333,7 +333,7 @@ export function OnboardingTour() {
   )
 
   return createPortal(
-    <div aria-live="polite">
+    <div aria-live="polite" data-tour-root>
       {/* Dim layer — visual only, never blocks the page (spotlight target stays clickable) */}
       {step.dim && !hasSpot && <div className="fixed inset-0 z-[80] bg-[#140c04]/55 backdrop-blur-[1px] animate-fade-in pointer-events-none" style={{ animationDuration: '0.25s' }} />}
 
