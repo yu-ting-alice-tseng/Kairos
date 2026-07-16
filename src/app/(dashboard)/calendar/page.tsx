@@ -1354,14 +1354,16 @@ export default function CalendarPage() {
                     {blocks.map((block) => {
                       const top = block.start
                       const height = Math.max(block.end - block.start, MIN_BLOCK_HEIGHT)
-                      const widthPct = 100 / block.cols
-                      const leftPct = block.col * widthPct
+                      // Cascade overlapping blocks: each level shifts 4px right and narrows by 4px,
+                      // rather than splitting into very narrow side-by-side columns.
+                      const CASCADE = 4
                       const boxStyle: React.CSSProperties = {
                         position: 'absolute',
                         top,
                         height,
-                        left: `${leftPct}%`,
-                        width: `calc(${widthPct}% - 4px)`,
+                        left: block.col * CASCADE,
+                        right: (block.cols - 1 - block.col) * CASCADE + 4,
+                        zIndex: block.col,
                       }
 
                       if (block.kind === 'event') {
