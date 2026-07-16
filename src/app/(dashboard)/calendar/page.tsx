@@ -433,8 +433,14 @@ export default function CalendarPage() {
     })
 
     const visible = raw
-      .filter((it) => it.end > 0 && it.start < GRID_TOTAL_MIN)
-      .map((it) => ({ ...it, start: Math.max(0, it.start), end: Math.min(GRID_TOTAL_MIN, it.end) }))
+      .filter((it) => it.start < GRID_TOTAL_MIN)
+      .map((it) => ({
+        ...it,
+        start: Math.max(0, it.start),
+        // Events ending past midnight have negative gridMinutes — extend them to grid bottom
+        end: it.end < 0 && it.start >= 0 ? GRID_TOTAL_MIN : Math.min(GRID_TOTAL_MIN, Math.max(0, it.end)),
+      }))
+      .filter((it) => it.end > 0 && it.end > it.start)
 
     // Deduplicate by id before assigning columns — prevents duplicate-id blocks
     // from getting the same Map entry and both rendering at the same position.
