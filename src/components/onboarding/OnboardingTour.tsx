@@ -279,14 +279,12 @@ export function OnboardingTour() {
   React.useEffect(() => {
     if (!onboardingOpen || step.advance !== 'click' || !step.target) return
     const selector = step.target
-    console.log('[tour] click listener ATTACH', step.key)
     const handler = (e: MouseEvent) => {
       const t = e.target as Element | null
-      console.log('[tour] click seen', step.key, t?.closest?.(selector) ? 'MATCH' : 'no-match')
       if (t?.closest?.(selector)) setTimeout(next, 150) // let the app's own click handler run first
     }
     window.addEventListener('click', handler, true)
-    return () => { console.log('[tour] click listener DETACH', step.key); window.removeEventListener('click', handler, true) }
+    return () => window.removeEventListener('click', handler, true)
   }, [onboardingOpen, step, next])
 
   // Esc skips the whole tour; → advances (same as skip-step/next).
