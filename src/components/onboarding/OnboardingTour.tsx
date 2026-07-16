@@ -266,7 +266,7 @@ export function OnboardingTour() {
     setIndex((i) => Math.min(i + 1, total - 1))
   }, [total])
 
-  const { rect, missing, elRef } = useTargetRect(step.target, onboardingOpen, pathname)
+  const { rect, missing } = useTargetRect(step.target, onboardingOpen, pathname)
 
   // Advance when the user reaches the step's route (also auto-skips if already there)
   React.useEffect(() => {
