@@ -830,21 +830,35 @@ export default function CalendarPage() {
   const startDrag = useCallback((e: React.MouseEvent, ev: CalendarEvent) => {
     if (!ev.editable) return
     e.preventDefault(); e.stopPropagation()
+    const startX = e.clientX; const startY = e.clientY
     const durationMs = ev.start && ev.end
       ? new Date(ev.end as string).getTime() - new Date(ev.start as string).getTime()
       : 60 * 60 * 1000
-    dragRef.current = { event: ev, startMouseY: e.clientY, startMouseX: e.clientX, eventDurationMs: durationMs }
-    setDraggingEventId(ev.id)
+    dragRef.current = { event: ev, startMouseY: startY, startMouseX: startX, eventDurationMs: durationMs }
+    let didMove = false
+    const DRAG_THRESHOLD = 5
     const onMouseMove = makeDragMouseMove()
+    const wrappedMove = (me: MouseEvent) => {
+      if (!didMove && (Math.abs(me.clientX - startX) > DRAG_THRESHOLD || Math.abs(me.clientY - startY) > DRAG_THRESHOLD)) {
+        didMove = true
+        setDraggingEventId(ev.id)
+      }
+      if (didMove) onMouseMove(me)
+    }
     const onMouseUp = () => {
-      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mousemove', wrappedMove)
       document.removeEventListener('mouseup', onMouseUp)
       if (edgeNavTimerRef.current) { clearTimeout(edgeNavTimerRef.current); edgeNavTimerRef.current = null }
       const drag = dragRef.current; const preview = dragPreviewRef.current
       dragRef.current = null; setDraggingEventId(null); setDragPreview(null)
-      if (drag) finalizeDrop(drag, preview)
+      if (!didMove) {
+        // No movement — treat as a click: open the event detail panel
+        setViewingScheduledTask(null); setEditingEvent(ev)
+      } else if (drag) {
+        finalizeDrop(drag, preview)
+      }
     }
-    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mousemove', wrappedMove)
     document.addEventListener('mouseup', onMouseUp)
   }, [finalizeDrop, makeDragMouseMove])
 
