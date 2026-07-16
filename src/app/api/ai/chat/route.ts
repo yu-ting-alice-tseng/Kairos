@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   const { message, history, lang } = parsed.data
 
   try {
-    const response = await askForTaskDetails(message, history ?? [], lang ?? 'fr')
+    const response = await askForTaskDetails(message, history ?? [], (lang ?? 'fr') as 'fr' | 'en' | 'zh')
     return NextResponse.json({ response })
   } catch (err) {
     console.error('Chat error:', err)
