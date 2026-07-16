@@ -138,6 +138,7 @@ export function Sidebar() {
               )}
               <Link
                 href={href}
+                data-tour={`nav-${key}`}
                 title={collapsed ? t(key, language) : undefined}
                 className={cn(
                   'relative flex items-center gap-3 rounded-xl text-sm font-medium transition-all duration-200',
