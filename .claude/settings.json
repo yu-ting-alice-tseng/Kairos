@@ -7,7 +7,7 @@
           {
             "type": "command",
             "shell": "bash",
-            "command": "git add -A 2>/dev/null; git diff --cached --quiet || git commit -m \"auto: $(date '+%Y-%m-%d %H:%M')\" 2>/dev/null; git push origin main 2>/dev/null || true"
+            "command": "STAMP=\"$(date +%s)$$\"; echo \"$STAMP\" > /tmp/kairos_push; git add -A 2>/dev/null; git diff --cached --quiet || git commit -m \"auto: $(date '+%Y-%m-%d %H:%M')\" 2>/dev/null; (sleep 10; [ \"$(cat /tmp/kairos_push 2>/dev/null)\" = \"$STAMP\" ] && git push origin main 2>/dev/null || true) &"
           }
         ]
       }
