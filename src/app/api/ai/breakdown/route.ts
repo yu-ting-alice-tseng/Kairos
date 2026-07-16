@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       description ?? '',
       deadline ?? 'non définie',
       totalHours ?? 2,
-      lang ?? 'fr'
+      (lang ?? 'fr') as 'fr' | 'en' | 'zh'
     )
 
     if (taskId) {
