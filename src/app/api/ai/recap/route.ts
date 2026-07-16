@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
       todayTasks as never,
       completedYesterday as never,
       missedYesterday as never,
-      lang ?? 'fr'
+      (lang ?? 'fr') as 'fr' | 'en' | 'zh'
     )
 
     await prisma.dailyRecap.create({
