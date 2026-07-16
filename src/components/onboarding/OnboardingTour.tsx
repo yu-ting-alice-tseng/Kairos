@@ -274,20 +274,30 @@ export function OnboardingTour() {
     if (step.advance === 'route' && step.route && pathname === step.route) next()
   }, [onboardingOpen, step, pathname, next])
 
-  // Advance when the user clicks the spotlighted element
+  // Advance when the user clicks the spotlighted element.
+  // Window-level capture + closest(): survives the page re-rendering the target node.
   React.useEffect(() => {
-    if (!onboardingOpen || step.advance !== 'click') return
-    const el = elRef.current
-    if (!el) return
-    const handler = () => setTimeout(next, 150) // let the app's own click handler run first
-    el.addEventListener('click', handler, { once: true, capture: true })
-    return () => el.removeEventListener('click', handler, { capture: true })
-  }, [onboardingOpen, step, next, rect, elRef])
+    if (!onboardingOpen || step.advance !== 'click' || !step.target) return
+    const selector = step.target
+    const handler = (e: MouseEvent) => {
+      const t = e.target as Element | null
+      if (t?.closest?.(selector)) setTimeout(next, 150) // let the app's own click handler run first
+    }
+    window.addEventListener('click', handler, true)
+    return () => window.removeEventListener('click', handler, true)
+  }, [onboardingOpen, step, next])
 
-  // Esc skips the whole tour; → advances (same as skip-step/next)
+  // Esc skips the whole tour; → advances (same as skip-step/next).
+  // Ignored while typing or while an app dialog (e.g. task form) is open —
+  // Esc must close that dialog, not kill the tour.
   React.useEffect(() => {
     if (!onboardingOpen) return
     const handler = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && (
+        t.closest('input, textarea, select, [contenteditable="true"]') ||
+        (t.closest('[role="dialog"]') && !t.closest('[data-tour-root]'))
+      )) return
       if (e.key === 'Escape') { e.preventDefault(); finish() }
       if (e.key === 'ArrowRight') { e.preventDefault(); if (isLast) finish(); else next() }
     }
