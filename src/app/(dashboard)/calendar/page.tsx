@@ -437,7 +437,37 @@ export default function CalendarPage() {
       .map((it) => ({ ...it, start: Math.max(0, it.start), end: Math.min(GRID_TOTAL_MIN, it.end) }))
 
     const cols = assignColumns(visible)
-    return visible.map((it) => ({ ...it, ...(cols.get(it.id) ?? { col: 0, cols: 1 }) })) as DayBlock[]
+    const blocks = visible.map((it) => ({ ...it, ...(cols.get(it.id) ?? { col: 0, cols: 1 }) })) as DayBlock[]
+
+    // Post-pass: detect blocks that are visually at the same position (same col+cols AND
+    // overlapping in time) and re-assign them into proper side-by-side columns.
+    // This catches edge cases where assignColumns puts touching/zero-duration blocks
+    // in separate clusters (both ending up col=0,cols=1) and they visually stack.
+    const sorted = [...blocks].sort((a, b) => a.start - b.start)
+    const fixed: DayBlock[] = []
+    for (const block of sorted) {
+      // Find already-placed blocks that visually overlap with this one
+      const overlapping = fixed.filter(
+        (b) => b.start < block.end && b.end > block.start
+      )
+      if (overlapping.length === 0) {
+        fixed.push({ ...block, col: 0, cols: 1 })
+      } else {
+        // Assign the smallest unused col within this overlap group
+        const usedCols = new Set(overlapping.map((b) => b.col))
+        let nextCol = 0
+        while (usedCols.has(nextCol)) nextCol++
+        const totalCols = nextCol + 1
+        // Widen cols for all blocks in the group to match the new total
+        for (const b of fixed) {
+          if (overlapping.includes(b)) {
+            b.cols = totalCols
+          }
+        }
+        fixed.push({ ...block, col: nextCol, cols: totalCols })
+      }
+    }
+    return fixed
   }
 
   // ─── Event handlers ─────────────────────────────────────────────────────────
