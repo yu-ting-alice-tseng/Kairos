@@ -276,7 +276,7 @@ export default function HabitsPage() {
           <h1 className="text-2xl font-serif text-[#2a2420]">{t('habits', language)}</h1>
           <Badge variant="default" className="bg-[#ab3326] text-[#f3ecdd]">{habits.length}</Badge>
         </div>
-        <Button size="sm" onClick={() => setShowForm(true)}>
+        <Button size="sm" onClick={() => setShowForm(true)} data-tour="add-habit">
           <Plus className="h-4 w-4" />
           {t('addHabit', language)}
         </Button>
