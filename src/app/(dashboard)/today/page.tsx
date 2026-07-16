@@ -587,7 +587,7 @@ export default function TodayPage() {
             <SlidersHorizontal className="h-3.5 w-3.5" />
             {language === 'fr' ? 'Filtres' : language === 'zh' ? '篩選' : 'Filters'}
           </button>
-          <Button size="sm" onClick={() => setShowTaskForm(true)}
+          <Button size="sm" onClick={() => setShowTaskForm(true)} data-tour="add-task"
             className="bg-gradient-to-br from-[#c44a3a] to-[#861f17] hover:from-[#ab3326] hover:to-[#6e190f] text-[#f3ecdd] border-0 shadow-md shadow-[#ab3326]/25 transition-all hover:scale-[1.02] active:scale-[0.98]">
             <Plus className="h-4 w-4" />
             {t('addTask', language)}
