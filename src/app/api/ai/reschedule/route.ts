@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     const suggestion = await suggestReschedule(
       task as never,
       available.length > 0 ? available : slots,
-      lang ?? 'fr'
+      (lang ?? 'fr') as 'fr' | 'en' | 'zh'
     )
 
     return NextResponse.json({ suggestion, availableSlots: available.length > 0 ? available : slots })
