@@ -263,11 +263,8 @@ export function OnboardingTour() {
 
   const finish = React.useCallback(() => completeOnboarding(), [completeOnboarding])
   const next = React.useCallback(() => {
-    setIndex((i) => {
-      if (i >= total - 1) { completeOnboarding(); return i }
-      return i + 1
-    })
-  }, [total, completeOnboarding])
+    setIndex((i) => Math.min(i + 1, total - 1))
+  }, [total])
 
   const { rect, missing, elRef } = useTargetRect(step.target, onboardingOpen, pathname)
 
