@@ -233,7 +233,7 @@ function useTargetRect(selector: string | undefined, active: boolean, pathname: 
     }
   }, [selector, active, pathname])
 
-  return { rect, missing, elRef }
+  return { rect, missing }
 }
 
 export function OnboardingTour() {
