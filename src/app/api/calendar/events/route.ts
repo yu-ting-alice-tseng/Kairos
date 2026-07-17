@@ -225,24 +225,24 @@ async function syncTasksWithEvents(
       })
     }
 
-    // Sync title / deadline / calendarAccountId from calendar event → task
-    for (const e of syncableEvents) {
+    // Sync title / deadline / calendarAccountId from calendar event → task.
+    // Each update touches a distinct task id, so these are independent — run in parallel.
+    await Promise.all(syncableEvents.map((e) => {
       const task = byEventId.get(e.id)
-      if (!task) continue
+      if (!task) return
       const evDeadline = e.allDay ? new Date(e.start) : new Date(e.end)
       const taskDeadline = task.deadline ? new Date(String(task.deadline)) : null
       const deadlineChanged = evDeadline.toDateString() !== taskDeadline?.toDateString()
       const titleChanged = e.title !== task.title
       const accountChanged = (e.calendarAccountId ?? null) !== task.calendarAccountId
-      if (titleChanged || deadlineChanged || accountChanged) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const updateData: Record<string, any> = {}
-        if (titleChanged) updateData.title = e.title
-        if (deadlineChanged) updateData.deadline = evDeadline
-        if (accountChanged) updateData.calendarAccountId = e.calendarAccountId ?? null
-        await prisma.task.update({ where: { id: task.id }, data: updateData })
-      }
-    }
+      if (!titleChanged && !deadlineChanged && !accountChanged) return
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const updateData: Record<string, any> = {}
+      if (titleChanged) updateData.title = e.title
+      if (deadlineChanged) updateData.deadline = evDeadline
+      if (accountChanged) updateData.calendarAccountId = e.calendarAccountId ?? null
+      return prisma.task.update({ where: { id: task.id }, data: updateData })
+    }))
 
     // Remove duplicate siblings: same parentTaskId + same title + same deadline day
     const allSiblings = await prisma.task.findMany({
