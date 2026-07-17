@@ -144,27 +144,26 @@ export async function GET(req: NextRequest) {
 
   if (noSync) return NextResponse.json(dedupedEvents)
 
-  // Task sync is DB-only bookkeeping that doesn't affect what the client renders this
-  // request — defer it with `after()` so the response (and the calendar UI) isn't
-  // blocked waiting on it. Still runs every request, so freshness is unchanged.
+  // The client re-fetches /api/tasks right after this call expecting newly
+  // auto-created/synced tasks to already exist, so that part must stay
+  // blocking. The cleanup passes below (sibling dedup, orphan deletion) are
+  // full-table background gardening unrelated to this request's events —
+  // deferred with `after()` so they don't hold up the response. Still runs
+  // every request, so freshness is unchanged, just not on the critical path.
+  const syncEventIds = await syncTasksWithEvents(userId, dedupedEvents)
+
   after(async () => {
-    await syncTasksWithEvents(userId, dedupedEvents, timeMin, timeMax, safeToOrphanDeleteAccountIds)
+    await cleanupTasks(userId, syncEventIds, timeMin, timeMax, safeToOrphanDeleteAccountIds)
   })
 
   return NextResponse.json(dedupedEvents)
 }
 
-async function syncTasksWithEvents(
-  userId: string,
-  dedupedEvents: CalendarEvent[],
-  timeMin: Date,
-  timeMax: Date,
-  safeToOrphanDeleteAccountIds: Set<string>
-) {
-  try {
-    const syncableEvents = dedupedEvents.filter((e) => !e.habitId)
-    const syncEventIds = syncableEvents.map((e) => e.id)
+async function syncTasksWithEvents(userId: string, dedupedEvents: CalendarEvent[]): Promise<string[]> {
+  const syncableEvents = dedupedEvents.filter((e) => !e.habitId)
+  const syncEventIds = syncableEvents.map((e) => e.id)
 
+  try {
     const existingTasks = await prisma.task.findMany({
       where: { userId, calendarEventId: { in: syncEventIds } },
       select: { id: true, calendarEventId: true, title: true, deadline: true, calendarAccountId: true, importance: true, urgency: true, parentTaskId: true },
