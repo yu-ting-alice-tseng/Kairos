@@ -143,6 +143,24 @@ export async function GET(req: NextRequest) {
   })
 
   if (noSync) return NextResponse.json(dedupedEvents)
+
+  // Task sync is DB-only bookkeeping that doesn't affect what the client renders this
+  // request — defer it with `after()` so the response (and the calendar UI) isn't
+  // blocked waiting on it. Still runs every request, so freshness is unchanged.
+  after(async () => {
+    await syncTasksWithEvents(userId, dedupedEvents, timeMin, timeMax, safeToOrphanDeleteAccountIds)
+  })
+
+  return NextResponse.json(dedupedEvents)
+}
+
+async function syncTasksWithEvents(
+  userId: string,
+  dedupedEvents: CalendarEvent[],
+  timeMin: Date,
+  timeMax: Date,
+  safeToOrphanDeleteAccountIds: Set<string>
+) {
   try {
     const syncableEvents = dedupedEvents.filter((e) => !e.habitId)
     const syncEventIds = syncableEvents.map((e) => e.id)
