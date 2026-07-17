@@ -295,8 +295,6 @@ async function syncTasksWithEvents(
   } catch (err) {
     console.error('[calendar/events] task sync failed:', err)
   }
-
-  return NextResponse.json(dedupedEvents)
 }
 
 // POST — create a Google Calendar event and return its id
