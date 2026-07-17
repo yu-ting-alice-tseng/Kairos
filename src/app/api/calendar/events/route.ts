@@ -242,7 +242,21 @@ async function syncTasksWithEvents(userId: string, dedupedEvents: CalendarEvent[
       if (accountChanged) updateData.calendarAccountId = e.calendarAccountId ?? null
       return prisma.task.update({ where: { id: task.id }, data: updateData })
     }))
+  } catch (err) {
+    console.error('[calendar/events] task sync failed:', err)
+  }
 
+  return syncEventIds
+}
+
+async function cleanupTasks(
+  userId: string,
+  syncEventIds: string[],
+  timeMin: Date,
+  timeMax: Date,
+  safeToOrphanDeleteAccountIds: Set<string>
+) {
+  try {
     // Remove duplicate siblings: same parentTaskId + same title + same deadline day
     const allSiblings = await prisma.task.findMany({
       where: { userId, parentTaskId: { not: null } },
