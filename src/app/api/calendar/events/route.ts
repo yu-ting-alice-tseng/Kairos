@@ -202,26 +202,32 @@ async function syncTasksWithEvents(userId: string, dedupedEvents: CalendarEvent[
       await prisma.task.deleteMany({ where: { id: { in: dupeIds }, userId } })
     }
 
-    // Auto-create tasks for events that don't have one yet
+    // Auto-create tasks for events that don't have one yet.
+    // This used to be a findFirst + create per event — 2N sequential round trips
+    // to the DB, which dominated the response time on a busy week. One re-check
+    // query plus one batch insert gives the same guard against concurrent
+    // requests (the Today page fires two overlapping range fetches) in 2 trips.
     const toCreate = syncableEvents.filter((e) => !byEventId.has(e.id))
-    for (const e of toCreate) {
-      // Re-check just before creating to guard against concurrent requests
-      const alreadyExists = await prisma.task.findFirst({ where: { userId, calendarEventId: e.id }, select: { id: true } })
-      if (alreadyExists) continue
-      const deadline = e.allDay ? new Date(e.start) : new Date(e.end)
-      await prisma.task.create({
-        data: {
+    if (toCreate.length > 0) {
+      const raced = await prisma.task.findMany({
+        where: { userId, calendarEventId: { in: toCreate.map((e) => e.id) } },
+        select: { calendarEventId: true },
+      })
+      const racedIds = new Set(raced.map((t) => t.calendarEventId))
+      const rows = toCreate
+        .filter((e) => !racedIds.has(e.id))
+        .map((e) => ({
           userId,
           title: e.title,
           calendarEventId: e.id,
           calendarAccountId: e.calendarAccountId ?? null,
-          deadline,
+          deadline: e.allDay ? new Date(e.start) : new Date(e.end),
           importance: 5,
           urgency: 5,
           priority: calculatePriority(5, 5),
           status: 'PENDING',
-        },
-      })
+        }))
+      if (rows.length > 0) await prisma.task.createMany({ data: rows })
     }
 
     // Sync title / deadline / calendarAccountId from calendar event → task.
