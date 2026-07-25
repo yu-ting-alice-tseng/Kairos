@@ -86,6 +86,11 @@ export async function listGoogleEvents(
       orderBy: 'startTime',
       maxResults: 2500,
       pageToken,
+      // Only ask for the fields we actually map below. A default events.list row
+      // carries attendees, reminders, conferenceData, creator/organizer etc. —
+      // dropping them cuts the response by roughly an order of magnitude, which
+      // is the bulk of the wait on calendars with many events.
+      fields: 'nextPageToken,items(id,summary,start,end,description,location,htmlLink)',
     })
     allItems.push(...(res.data.items ?? []))
     pageToken = res.data.nextPageToken ?? undefined
