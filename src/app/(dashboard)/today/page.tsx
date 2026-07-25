@@ -218,13 +218,15 @@ export default function TodayPage() {
   // user's accounts itself, so gating on the client copy only added a round trip
   // to first paint. A later change to the connected set still refetches below.
   const accountKey = calendarAccounts.map((a) => a.id).sort().join(',')
-  const prevAccountKeyRef = React.useRef<string | null>(null)
+  const prevFetchKeyRef = React.useRef<{ accounts: string; date: string } | null>(null)
 
   useEffect(() => {
-    const prev = prevAccountKeyRef.current
-    prevAccountKeyRef.current = accountKey
-    // '' means the list hasn't landed yet — the fetch below already covered it.
-    if (prev === '' || prev === accountKey) return
+    const dateKey = selectedDate.toISOString()
+    const prev = prevFetchKeyRef.current
+    prevFetchKeyRef.current = { accounts: accountKey, date: dateKey }
+    // Skip exactly one re-run: the sidebar's account list landing on an unchanged
+    // date. The fetch already asked the server for every connected account.
+    if (prev && prev.date === dateKey && prev.accounts === '' && accountKey !== '') return
     const fetchEvents = async () => {
       try {
         const todayStart = new Date(selectedDate); todayStart.setHours(0, 0, 0, 0)
