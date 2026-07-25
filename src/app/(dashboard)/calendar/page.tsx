@@ -292,8 +292,14 @@ export default function CalendarPage() {
   // navigated away from can't overwrite the week now on screen.
   const eventReqSeqRef = useRef(0)
 
+  // The account list arrives from the sidebar a full round trip after the
+  // session resolves, and this fetch used to wait for it. It doesn't need to —
+  // the server reads the user's accounts itself — so we fire straight away and
+  // only redo the request if the connected set actually changes afterwards.
+  const accountKey = calendarAccounts.map((a) => a.id).sort().join(',')
+  const prevAccountKeyRef = useRef<string | null>(null)
+
   const loadExternalEvents = useCallback(async () => {
-    if (calendarAccounts.length === 0) return
     const seq = ++eventReqSeqRef.current
 
     // Paint whatever we already know about this week, then revalidate below.
