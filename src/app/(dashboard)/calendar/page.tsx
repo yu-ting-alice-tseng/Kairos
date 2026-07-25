@@ -345,6 +345,7 @@ export default function CalendarPage() {
   // Warm the neighbouring weeks once the current one has settled, so ← / →
   // paint instantly. Read-only (noSync) — prefetching must not create tasks for
   // a week the user never opens; the real fetch on arrival does the syncing.
+  // Skipped entirely for users with no calendar connected — nothing to warm.
   useEffect(() => {
     if (calendarAccounts.length === 0 || eventsLoading) return
     const timer = setTimeout(() => {
