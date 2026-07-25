@@ -269,6 +269,9 @@ export default function CalendarPage() {
   const locale = language === 'fr' ? fr : language === 'zh' ? zhTW : enUS
   const weekStart = startDate
   const weekEnd = addDays(startDate, 6)
+  // Fetch range end, not the displayed one: weekEnd is Sunday 00:00 and Google's
+  // timeMax is exclusive, so querying up to weekEnd drops everything on Sunday.
+  const rangeEnd = addDays(startDate, 7)
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(startDate, i))
   weekDaysRef.current = weekDays
 
