@@ -583,6 +583,7 @@ export default function CalendarPage() {
       body: JSON.stringify(body),
     })
     if (res.ok) {
+      invalidateEventCache()
       // Push old state to undo stack (only for position changes, not title edits)
       if (startChanged || endChanged) {
         undoStackRef.current.push({
