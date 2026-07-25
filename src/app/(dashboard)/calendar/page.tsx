@@ -139,6 +139,47 @@ interface UndoItem {
   prevAllDay?: boolean
 }
 
+// ─── Week event cache ─────────────────────────────────────────────────────────
+// Every week change re-hits Google's API (one paged request per sub-calendar),
+// so the grid used to sit empty for the whole round trip. We keep the last
+// response per week at module level — surviving page re-mounts — and paint it
+// immediately while the network fetch runs. The fetch ALWAYS runs, so what ends
+// up on screen is never more than one round trip behind Google; the cache only
+// removes the blank wait, it never serves as the final answer.
+
+const eventCache = new Map<string, CalendarEvent[]>()
+const inFlightEvents = new Map<string, Promise<CalendarEvent[] | null>>()
+
+const weekKey = (start: Date, end: Date) => `${start.toISOString()}|${end.toISOString()}`
+
+/**
+ * Fetches a week's events, writing through to the cache. Concurrent callers for
+ * the same range share one request (the page mounts and prefetches can overlap).
+ * `sync: false` hits the read-only endpoint — used for prefetching weeks the
+ * user has not opened, so we never auto-create tasks for a week just because it
+ * happened to be adjacent.
+ */
+async function fetchWeekEvents(start: Date, end: Date, sync: boolean): Promise<CalendarEvent[] | null> {
+  const key = weekKey(start, end)
+  const dedupeKey = `${key}|${sync}`
+  const pending = inFlightEvents.get(dedupeKey)
+  if (pending) return pending
+
+  const promise = (async () => {
+    const res = await fetch(
+      `/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}${sync ? '' : '&noSync=true'}`
+    )
+    if (!res.ok) return null
+    const data: CalendarEvent[] = await res.json()
+    eventCache.set(key, data)
+    return data
+  })()
+
+  inFlightEvents.set(dedupeKey, promise)
+  promise.catch(() => {}).finally(() => inFlightEvents.delete(dedupeKey))
+  return promise
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
