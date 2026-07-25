@@ -325,10 +325,22 @@ export default function CalendarPage() {
       if (seq === eventReqSeqRef.current) setEventsLoading(false)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calendarAccounts.length, weekStart.toISOString(), rangeEnd.toISOString()])
+  }, [weekStart.toISOString(), rangeEnd.toISOString()])
 
   useEffect(() => { loadTasks() }, [loadTasks])
   useEffect(() => { loadExternalEvents() }, [loadExternalEvents])
+
+  // Connecting or disconnecting a calendar changes what the server returns, so
+  // that has to invalidate and refetch. The initial '' → populated transition is
+  // not one of those: the fetch above already asked for every connected account
+  // while the list was still in flight, so redoing it would buy nothing.
+  useEffect(() => {
+    const prev = prevAccountKeyRef.current
+    prevAccountKeyRef.current = accountKey
+    if (prev === null || prev === '' || prev === accountKey) return
+    invalidateEventCache()
+    loadExternalEvents()
+  }, [accountKey, loadExternalEvents])
 
   // Warm the neighbouring weeks once the current one has settled, so ← / →
   // paint instantly. Read-only (noSync) — prefetching must not create tasks for
