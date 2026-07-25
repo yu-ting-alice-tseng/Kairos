@@ -180,6 +180,13 @@ async function fetchWeekEvents(start: Date, end: Date, sync: boolean): Promise<C
   return promise
 }
 
+/**
+ * Drops every cached week after a write. An edit can move an event into another
+ * week, so nothing but the whole cache is safe to keep — otherwise navigating
+ * back would briefly show the pre-edit snapshot.
+ */
+const invalidateEventCache = () => eventCache.clear()
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
