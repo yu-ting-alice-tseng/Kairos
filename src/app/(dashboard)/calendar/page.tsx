@@ -743,6 +743,7 @@ export default function CalendarPage() {
           if (evRes.ok) {
             const evData = await evRes.json()
             calendarEventId = evData.eventId
+            invalidateEventCache()
           }
         } catch { /* best-effort */ }
       }
