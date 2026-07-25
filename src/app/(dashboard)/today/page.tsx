@@ -247,7 +247,7 @@ export default function TodayPage() {
     }
     fetchEvents()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calendarAccounts.length, selectedDate])
+  }, [accountKey, selectedDate])
 
   const isExcludedFromToday = (title: string) =>
     todayExcludePatterns.some((p) => p && title.toLowerCase().includes(p.toLowerCase()))
