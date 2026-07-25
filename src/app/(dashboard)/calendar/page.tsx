@@ -281,27 +281,58 @@ export default function CalendarPage() {
     setLoading(false) // only ever sets to false — initial true cleared after first load
   }, [setTasks])
 
+  // Bumped on every week change so a slow response for a week the user already
+  // navigated away from can't overwrite the week now on screen.
+  const eventReqSeqRef = useRef(0)
+
   const loadExternalEvents = useCallback(async () => {
     if (calendarAccounts.length === 0) return
+    const seq = ++eventReqSeqRef.current
+
+    // Paint whatever we already know about this week, then revalidate below.
+    const cached = eventCache.get(weekKey(weekStart, rangeEnd))
+    if (cached) setExternalEvents(cached)
+
     setEventsLoading(true)
     try {
-      const res = await fetch(
-        `/api/calendar/events?start=${weekStart.toISOString()}&end=${weekEnd.toISOString()}`
-      )
-      if (res.ok) {
-        setExternalEvents(await res.json())
+      const data = await fetchWeekEvents(weekStart, rangeEnd, true)
+      if (seq !== eventReqSeqRef.current) return // a newer week is being shown
+      if (data) {
+        setExternalEvents(data)
         // Server auto-creates/syncs tasks during this fetch — refresh store to pick them up
         loadTasks()
+      } else {
+        throw new Error('request failed')
       }
     } catch {
-      toast({ title: language === 'fr' ? 'Impossible de charger les événements' : language === 'zh' ? '無法載入行程，請稍後再試' : 'Failed to load events', variant: 'error' })
+      if (seq === eventReqSeqRef.current) {
+        toast({ title: language === 'fr' ? 'Impossible de charger les événements' : language === 'zh' ? '無法載入行程，請稍後再試' : 'Failed to load events', variant: 'error' })
+      }
+    } finally {
+      if (seq === eventReqSeqRef.current) setEventsLoading(false)
     }
-    setEventsLoading(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calendarAccounts.length, weekStart.toISOString(), weekEnd.toISOString()])
+  }, [calendarAccounts.length, weekStart.toISOString(), rangeEnd.toISOString()])
 
   useEffect(() => { loadTasks() }, [loadTasks])
   useEffect(() => { loadExternalEvents() }, [loadExternalEvents])
+
+  // Warm the neighbouring weeks once the current one has settled, so ← / →
+  // paint instantly. Read-only (noSync) — prefetching must not create tasks for
+  // a week the user never opens; the real fetch on arrival does the syncing.
+  useEffect(() => {
+    if (calendarAccounts.length === 0 || eventsLoading) return
+    const timer = setTimeout(() => {
+      for (const offset of [7, -7]) {
+        const start = addDays(weekStart, offset)
+        const end = addDays(start, 7)
+        if (eventCache.has(weekKey(start, end))) continue
+        fetchWeekEvents(start, end, false).catch(() => {})
+      }
+    }, 500)
+    return () => clearTimeout(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendarAccounts.length, weekStart.toISOString(), eventsLoading])
   useEffect(() => {
     if (habits.length === 0) {
       fetch('/api/habits').then((r) => r.json()).then(setHabits).catch(() => {})
