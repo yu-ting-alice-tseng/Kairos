@@ -624,6 +624,7 @@ export default function CalendarPage() {
       }),
     })
     if (res.ok) {
+      invalidateEventCache()
       setExternalEvents((prev) => prev.map((e) => e.id === ev.id
         ? { ...e, calendarAccountId: newCalendarAccountId, calendarId: newCalendarId }
         : e
