@@ -646,6 +646,7 @@ export default function CalendarPage() {
       body: JSON.stringify({ eventId: ev.id, calendarAccountId: ev.calendarAccountId, calendarId: ev.calendarId }),
     })
     if (res.ok) {
+      invalidateEventCache()
       setExternalEvents((prev) => prev.filter((e) => e.id !== ev.id))
       toast({ title: language === 'fr' ? 'Événement supprimé' : language === 'zh' ? '活動已刪除' : 'Event deleted', variant: 'success' })
       setEditingEvent(null)
