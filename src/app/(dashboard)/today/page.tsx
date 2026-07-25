@@ -214,8 +214,17 @@ export default function TodayPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Fires without waiting for the sidebar's account list: the server resolves the
+  // user's accounts itself, so gating on the client copy only added a round trip
+  // to first paint. A later change to the connected set still refetches below.
+  const accountKey = calendarAccounts.map((a) => a.id).sort().join(',')
+  const prevAccountKeyRef = React.useRef<string | null>(null)
+
   useEffect(() => {
-    if (calendarAccounts.length === 0) return
+    const prev = prevAccountKeyRef.current
+    prevAccountKeyRef.current = accountKey
+    // '' means the list hasn't landed yet — the fetch below already covered it.
+    if (prev === '' || prev === accountKey) return
     const fetchEvents = async () => {
       try {
         const todayStart = new Date(selectedDate); todayStart.setHours(0, 0, 0, 0)
