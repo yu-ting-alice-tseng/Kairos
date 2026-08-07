@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { useAppStore } from '@/stores/useAppStore'
 import { Task, CalendarEvent, Habit, RetroTemplate } from '@/types'
@@ -13,6 +14,7 @@ import { cn, formatTime, getQuadrant, EISENHOWER_QUADRANTS } from '@/lib/utils'
 import {
   ChevronLeft, ChevronRight, ChevronDown, Calendar, Plus, Clock, Loader2, Pencil, Trash2, X,
   MapPin, ExternalLink, GitBranch, AlignLeft, CheckCircle2, Circle, Check, Sparkles, Undo2, AlertTriangle, RefreshCw,
+  Search,
 } from 'lucide-react'
 import {
   format, addDays, isSameDay, isToday,
@@ -185,7 +187,262 @@ async function fetchWeekEvents(start: Date, end: Date, sync: boolean): Promise<C
  * week, so nothing but the whole cache is safe to keep — otherwise navigating
  * back would briefly show the pre-edit snapshot.
  */
-const invalidateEventCache = () => eventCache.clear()
+const invalidateEventCache = () => {
+  eventCache.clear()
+  searchIndexCache = null
+}
+
+// ─── Search index ─────────────────────────────────────────────────────────────
+// Searching only the week on screen would find almost nothing, so the box works
+// off one wide read-only pull covering the months around today. Read-only
+// matters: this range is far bigger than anything the user opened, and syncing
+// it would auto-create a task for every event in it.
+
+const SEARCH_DAYS_BACK = 180
+const SEARCH_DAYS_FORWARD = 365
+const SEARCH_INDEX_TTL_MS = 5 * 60_000
+
+let searchIndexCache: { events: CalendarEvent[]; fetchedAt: number } | null = null
+let searchIndexInFlight: Promise<CalendarEvent[] | null> | null = null
+
+async function fetchSearchIndex(): Promise<CalendarEvent[] | null> {
+  if (searchIndexCache && Date.now() - searchIndexCache.fetchedAt < SEARCH_INDEX_TTL_MS) {
+    return searchIndexCache.events
+  }
+  if (searchIndexInFlight) return searchIndexInFlight
+
+  const start = addDays(new Date(), -SEARCH_DAYS_BACK); start.setHours(0, 0, 0, 0)
+  const end = addDays(new Date(), SEARCH_DAYS_FORWARD); end.setHours(23, 59, 59, 999)
+
+  const promise = (async () => {
+    const res = await fetch(
+      `/api/calendar/events?start=${start.toISOString()}&end=${end.toISOString()}&noSync=true`
+    )
+    if (!res.ok) return null
+    const data: CalendarEvent[] = await res.json()
+    searchIndexCache = { events: data, fetchedAt: Date.now() }
+    return data
+  })()
+
+  searchIndexInFlight = promise
+  promise.catch(() => {}).finally(() => { searchIndexInFlight = null })
+  return promise
+}
+
+/** Accent- and case-insensitive, so "reunion" finds "Réunion". */
+const searchNormalize = (s: string) =>
+  s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+
+/**
+ * An all-day event carries a bare "2026-08-06", which `new Date` reads as UTC
+ * midnight and can land on the previous day once rendered locally. Parse those
+ * as a local date instead; everything else is a real instant.
+ */
+function eventStartDate(ev: CalendarEvent): Date {
+  const raw = String(ev.start)
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw)
+  if (dateOnly) return new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+  return new Date(raw)
+}
+
+/** Monday of the week containing `d` (Sunday belongs to the week that just ended). */
+function mondayOf(d: Date): Date {
+  const mon = new Date(d)
+  mon.setHours(0, 0, 0, 0)
+  const dow = mon.getDay()
+  mon.setDate(mon.getDate() + (dow === 0 ? -6 : 1 - dow))
+  return mon
+}
+
+// ─── Event search ─────────────────────────────────────────────────────────────
+
+function EventSearchBox({ lang, calendarAccounts, onPick }: {
+  lang: 'fr' | 'en' | 'zh'
+  calendarAccounts: { id: string; color: string; name: string }[]
+  onPick: (ev: CalendarEvent) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+  const [index, setIndex] = useState<CalendarEvent[] | null>(null)
+  const [indexLoading, setIndexLoading] = useState(false)
+  const [indexFailed, setIndexFailed] = useState(false)
+  const [activeIdx, setActiveIdx] = useState(0)
+  const boxRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const locale = lang === 'fr' ? fr : lang === 'zh' ? zhTW : enUS
+
+  // Opening pulls the index. `fetchSearchIndex` serves its cache while it is
+  // fresh, so re-opening costs nothing — but an edit in between clears that
+  // cache, which is exactly when the results need to be re-read.
+  const openBox = useCallback(() => {
+    setOpen(true)
+    setIndexLoading(true)
+    fetchSearchIndex()
+      .then((data) => {
+        setIndexFailed(!data)
+        if (data) setIndex(data)
+      })
+      .catch(() => setIndexFailed(true))
+      .finally(() => setIndexLoading(false))
+  }, [])
+
+  // Click outside closes the results, Ctrl/⌘+K focuses the box from anywhere
+  // (focusing opens it — see onFocus).
+  useEffect(() => {
+    const onPointerDown = (e: MouseEvent) => {
+      const target = e.target as Node
+      // The panel lives in a portal, so it is outside boxRef — closing on
+      // mousedown without this check would unmount a result before its click.
+      if (boxRef.current?.contains(target) || panelRef.current?.contains(target)) return
+      setOpen(false)
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        inputRef.current?.focus()
+      }
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [])
+
+  const trimmed = query.trim()
+  const results = React.useMemo(() => {
+    const q = searchNormalize(trimmed)
+    if (q.length < 2 || !index) return []
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+    const boundary = todayStart.getTime()
+    return index
+      .filter((ev) => !ev.habitId)
+      .filter((ev) => searchNormalize(`${ev.title} ${ev.description ?? ''} ${ev.location ?? ''}`).includes(q))
+      .map((ev) => ({ ev, time: eventStartDate(ev).getTime() }))
+      // Upcoming first, soonest at the top; past ones after, most recent first.
+      .sort((a, b) => {
+        const aPast = a.time < boundary
+        const bPast = b.time < boundary
+        if (aPast !== bPast) return aPast ? 1 : -1
+        return aPast ? b.time - a.time : a.time - b.time
+      })
+      .slice(0, 50)
+      .map((r) => r.ev)
+  }, [index, trimmed])
+
+  const pick = (ev: CalendarEvent) => {
+    onPick(ev)
+    setOpen(false)
+    inputRef.current?.blur()
+  }
+
+  const showPanel = open && (trimmed.length > 0 || indexLoading)
+
+  return (
+    <div ref={boxRef} className="relative shrink-0">
+      <div className="flex items-center gap-1.5 rounded-xl border border-[#e2d6bc] bg-white/70 px-2 py-1.5 transition-all focus-within:border-[#cba968] focus-within:bg-white">
+        <Search className="h-3.5 w-3.5 text-[#a99873] shrink-0" />
+        <input
+          ref={inputRef}
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setActiveIdx(0); setOpen(true) }}
+          onFocus={openBox}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') { setQuery(''); setOpen(false); inputRef.current?.blur(); return }
+            if (results.length === 0) return
+            if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx((i) => (i + 1) % results.length) }
+            if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIdx((i) => (i - 1 + results.length) % results.length) }
+            if (e.key === 'Enter') { e.preventDefault(); pick(results[Math.min(activeIdx, results.length - 1)]) }
+          }}
+          placeholder={lang === 'fr' ? 'Rechercher un événement…' : lang === 'zh' ? '搜尋行程…' : 'Search events…'}
+          aria-label={lang === 'fr' ? 'Rechercher un événement' : lang === 'zh' ? '搜尋行程' : 'Search events'}
+          className="w-36 focus:w-56 transition-all bg-transparent text-xs text-[#3a3326] placeholder:text-[#c4b48a] focus:outline-none"
+        />
+        {query && (
+          <button
+            onClick={() => { setQuery(''); setActiveIdx(0); inputRef.current?.focus() }}
+            className="text-[#c4b48a] hover:text-[#ab3326] shrink-0"
+            aria-label={lang === 'fr' ? 'Effacer' : lang === 'zh' ? '清除' : 'Clear'}
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+
+      {/* Portalled to the body: the page header is `sticky z-10`, which makes it a
+          stacking context, so a panel rendered inside it can never paint above
+          the grid's own sticky day-header row. */}
+      {showPanel && createPortal(
+        <div className="fixed top-[72px] right-6 z-50 w-[380px] max-h-[60vh] overflow-y-auto rounded-2xl border border-[#e2d6bc] bg-[#fbf7ee] shadow-xl shadow-black/10" ref={panelRef}>
+          {indexLoading && (
+            <p className="flex items-center gap-2 px-4 py-3 text-xs text-[#8a7a5e]">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              {lang === 'fr' ? 'Chargement des événements…' : lang === 'zh' ? '載入行程中…' : 'Loading events…'}
+            </p>
+          )}
+          {!indexLoading && indexFailed && (
+            <p className="px-4 py-3 text-xs text-red-600">
+              {lang === 'fr' ? 'Impossible de charger les événements' : lang === 'zh' ? '無法載入行程' : 'Failed to load events'}
+            </p>
+          )}
+          {!indexLoading && !indexFailed && trimmed.length < 2 && (
+            <p className="px-4 py-3 text-xs text-[#a99873]">
+              {lang === 'fr' ? 'Tapez au moins 2 caractères' : lang === 'zh' ? '請至少輸入 2 個字元' : 'Type at least 2 characters'}
+            </p>
+          )}
+          {!indexLoading && !indexFailed && trimmed.length >= 2 && results.length === 0 && (
+            <p className="px-4 py-3 text-xs text-[#a99873]">
+              {lang === 'fr' ? 'Aucun événement trouvé' : lang === 'zh' ? '找不到符合的行程' : 'No events found'}
+            </p>
+          )}
+          {results.map((ev, i) => {
+            const start = eventStartDate(ev)
+            const color = ev.color ?? calendarAccounts.find((a) => a.id === ev.calendarAccountId)?.color ?? '#6366F1'
+            const past = start < new Date(new Date().setHours(0, 0, 0, 0))
+            return (
+              <button
+                key={ev.id}
+                onMouseEnter={() => setActiveIdx(i)}
+                onClick={() => pick(ev)}
+                className={cn(
+                  'flex w-full items-start gap-2 px-3 py-2 text-left border-b border-[#f0e7d4] last:border-b-0 transition-colors',
+                  i === activeIdx ? 'bg-[#f3ecdd]' : 'hover:bg-[#f3ecdd]/60'
+                )}
+              >
+                <span className="mt-1 h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                <span className="min-w-0 flex-1">
+                  <span className={cn('block text-xs font-medium truncate', past ? 'text-[#8a7a5e]' : 'text-[#2a2420]')}>
+                    {ev.title || (lang === 'fr' ? '(sans titre)' : lang === 'zh' ? '(無標題)' : '(untitled)')}
+                  </span>
+                  <span className="block text-[10px] text-[#a99873]">
+                    {format(start, 'EEE d MMM yyyy', { locale })}
+                    {' · '}
+                    {ev.allDay
+                      ? (lang === 'fr' ? 'Journée entière' : lang === 'zh' ? '整天' : 'All day')
+                      : formatTime(String(ev.start))}
+                    {ev.location ? ` · ${ev.location}` : ''}
+                  </span>
+                </span>
+              </button>
+            )
+          })}
+          {!indexLoading && results.length > 0 && (
+            <p className="px-3 py-2 text-[10px] text-[#c4b48a] border-t border-[#f0e7d4]">
+              {lang === 'fr'
+                ? `${results.length} résultat${results.length > 1 ? 's' : ''} · 6 derniers mois → 12 prochains mois`
+                : lang === 'zh'
+                  ? `${results.length} 筆結果 · 範圍：過去 6 個月 → 未來 12 個月`
+                  : `${results.length} result${results.length > 1 ? 's' : ''} · last 6 months → next 12 months`}
+            </p>
+          )}
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
@@ -1126,6 +1383,15 @@ export default function CalendarPage() {
             </Button>
           )}
           {eventsLoading && <Loader2 className="h-4 w-4 animate-spin text-[#a99873]" />}
+          <EventSearchBox
+            lang={language}
+            calendarAccounts={calendarAccounts}
+            onPick={(ev) => {
+              setStartDate(mondayOf(eventStartDate(ev)))
+              setViewingScheduledTask(null)
+              setEditingEvent(ev)
+            }}
+          />
           {calendarAccounts.length > 0 && (
             <div className="flex items-center gap-1 min-w-0 overflow-x-auto scrollbar-none shrink-1">
               {calendarAccounts.map((acc) => {
@@ -1226,13 +1492,7 @@ export default function CalendarPage() {
                       const ev = externalEvents.find((e) => e.id === linkedEventId)
                       if (ev) {
                         // Navigate calendar to the week containing this event then open panel
-                        if (headDeadline) {
-                          const dow = headDeadline.getDay()
-                          const mon = new Date(headDeadline)
-                          mon.setDate(headDeadline.getDate() + (dow === 0 ? 1 : 1 - dow))
-                          mon.setHours(0, 0, 0, 0)
-                          setStartDate(mon)
-                        }
+                        if (headDeadline) setStartDate(mondayOf(headDeadline))
                         setViewingScheduledTask(null)
                         setEditingEvent(ev)
                       }
