@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse, after } from 'next/server'
 import { auth } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { prisma, isUniqueConstraintError } from '@/lib/prisma'
 import { listGoogleEvents, createGoogleEvent, updateGoogleEvent, deleteGoogleEvent, moveGoogleEvent } from '@/lib/calendar/google'
 import { listOutlookEvents } from '@/lib/calendar/outlook'
 import { listNotionEvents } from '@/lib/calendar/notion'
@@ -203,10 +203,10 @@ async function syncTasksWithEvents(userId: string, dedupedEvents: CalendarEvent[
     }
 
     // Auto-create tasks for events that don't have one yet.
-    // This used to be a findFirst + create per event — 2N sequential round trips
-    // to the DB, which dominated the response time on a busy week. One re-check
-    // query plus one batch insert gives the same guard against concurrent
-    // requests (the Today page fires two overlapping range fetches) in 2 trips.
+    // The re-check query catches the common case (another in-flight sync already
+    // inserted the row); the unique index on (userId, calendarEventId) catches
+    // the rest, since two syncs can pass their re-check before either inserts.
+    // A loser of that race is a no-op, not a failure — and no longer a duplicate.
     const toCreate = syncableEvents.filter((e) => !byEventId.has(e.id))
     if (toCreate.length > 0) {
       const raced = await prisma.task.findMany({
@@ -227,7 +227,11 @@ async function syncTasksWithEvents(userId: string, dedupedEvents: CalendarEvent[
           priority: calculatePriority(5, 5),
           status: 'PENDING',
         }))
-      if (rows.length > 0) await prisma.task.createMany({ data: rows })
+      await Promise.all(rows.map((data) =>
+        prisma.task.create({ data }).catch((err) => {
+          if (!isUniqueConstraintError(err)) throw err
+        })
+      ))
     }
 
     // Sync title / deadline / calendarAccountId from calendar event → task.

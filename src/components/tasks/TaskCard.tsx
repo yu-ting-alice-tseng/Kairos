@@ -5,7 +5,7 @@ import { Task, QUADRANT_LABEL_ZH } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { t } from '@/lib/i18n'
-import { formatDate, formatDuration, getQuadrant, EISENHOWER_QUADRANTS, isOverdue } from '@/lib/utils'
+import { formatDate, formatDeadlineLabel, deadlineTooltip, formatDuration, getQuadrant, EISENHOWER_QUADRANTS, isOverdue } from '@/lib/utils'
 import { isSameDay } from 'date-fns'
 import {
   CheckCircle2, Circle, Clock, Calendar, Sparkles, ChevronDown, ChevronRight,
@@ -118,9 +118,13 @@ export function TaskCard({
               </span>
             )}
             {task.deadline && !(selectedDate && isSameDay(new Date(String(task.deadline)), selectedDate)) && (
-              <Badge variant={overdue ? 'destructive' : 'warning'} className="text-xs py-0">
+              <Badge
+                variant={overdue ? 'destructive' : 'warning'}
+                className="text-xs py-0"
+                title={deadlineTooltip(task.deadline, lang, selectedDate)}
+              >
                 {overdue && <AlertTriangle className="h-3 w-3 mr-1" />}
-                {formatDate(task.deadline, lang)}
+                {formatDeadlineLabel(task.deadline, lang, selectedDate)}
               </Badge>
             )}
             {task.aiSuggested && (

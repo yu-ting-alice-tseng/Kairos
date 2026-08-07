@@ -28,6 +28,45 @@ export function formatDate(date: Date | string, lang = 'fr') {
   return format(d, 'MMM d, yyyy', { locale })
 }
 
+/**
+ * Label for the date badge on a task row. A date that already passed is not an
+ * upcoming due date — it is the day the task (or the multi-day calendar event
+ * behind it) started and has been running since, so it reads "depuis le 6 août"
+ * instead of a bare "6 août" that looks like a deadline.
+ */
+export function formatDeadlineLabel(
+  deadline: Date | string,
+  lang = 'fr',
+  referenceDate: Date = new Date()
+) {
+  const d = new Date(deadline)
+  const label = formatDate(d, lang)
+  const dayStart = new Date(referenceDate)
+  dayStart.setHours(0, 0, 0, 0)
+  if (d >= dayStart) return label
+  return lang === 'fr' ? `depuis le ${label}` : lang === 'zh' ? `自 ${label}起` : `since ${label}`
+}
+
+/** Tooltip spelling out what {@link formatDeadlineLabel} shortened. */
+export function deadlineTooltip(
+  deadline: Date | string,
+  lang = 'fr',
+  referenceDate: Date = new Date()
+) {
+  const d = new Date(deadline)
+  const label = formatDate(d, lang)
+  const dayStart = new Date(referenceDate)
+  dayStart.setHours(0, 0, 0, 0)
+  if (d >= dayStart) {
+    return lang === 'fr' ? `Échéance : ${label}` : lang === 'zh' ? `截止：${label}` : `Due ${label}`
+  }
+  return lang === 'fr'
+    ? `En cours depuis le ${label}`
+    : lang === 'zh'
+      ? `自 ${label} 起持續進行中`
+      : `Ongoing since ${label}`
+}
+
 export function formatTime(date: Date | string, lang = 'fr') {
   const d = new Date(date)
   return format(d, 'HH:mm', { locale: getLocale(lang) })

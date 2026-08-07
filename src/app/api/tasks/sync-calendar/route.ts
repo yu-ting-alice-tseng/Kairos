@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { prisma, isUniqueConstraintError } from '@/lib/prisma'
 import { listGoogleEvents } from '@/lib/calendar/google'
 import { CalendarEvent } from '@/types'
 import { calculatePriority } from '@/lib/utils'
@@ -135,13 +135,19 @@ export async function POST() {
       const existingCheck = await prisma.task.findFirst({ where: { userId, calendarEventId: e.id }, select: { id: true } })
       if (existingCheck) continue
       const deadline = e.allDay ? new Date(e.start) : new Date(e.end)
-      await prisma.task.create({
-        data: {
-          userId, title: e.title, calendarEventId: e.id,
-          calendarAccountId: e.calendarAccountId ?? null, deadline,
-          importance: 5, urgency: 5, priority: calculatePriority(5, 5), status: 'PENDING',
-        },
-      })
+      try {
+        await prisma.task.create({
+          data: {
+            userId, title: e.title, calendarEventId: e.id,
+            calendarAccountId: e.calendarAccountId ?? null, deadline,
+            importance: 5, urgency: 5, priority: calculatePriority(5, 5), status: 'PENDING',
+          },
+        })
+      } catch (err) {
+        // A page load fires this sync alongside the calendar-events fetch; the
+        // unique index on (userId, calendarEventId) settles who creates the task.
+        if (!isUniqueConstraintError(err)) throw err
+      }
     }
 
     return NextResponse.json({ synced, dupes: dupeIds.length })

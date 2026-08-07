@@ -131,6 +131,13 @@ model Task {
   calendarAccount CalendarAccount? @relation(fields: [calendarAccountId], references: [id])
   parentTask      Task?            @relation("SubTasks", fields: [parentTaskId], references: [id])
   subTasks        Task[]           @relation("SubTasks")
+
+  // One task per calendar event. The Today/Matrix pages fire several syncs at
+  // once (sync-calendar + one events fetch per visible range) and a multi-day
+  // all-day event shows up in more than one of them, so the read-then-create
+  // guards in those routes could all miss each other and insert the same event
+  // twice. SQLite treats NULLs as distinct, so plain tasks are unaffected.
+  @@unique([userId, calendarEventId])
 }
 
 model Habit {

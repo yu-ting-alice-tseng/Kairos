@@ -25,4 +25,17 @@ function createPrismaClient() {
 export const prisma: PrismaClient =
   globalForPrisma.prisma ?? createPrismaClient()
 
+/**
+ * True for a unique-constraint violation (Prisma P2002, or the raw libsql
+ * message when the adapter surfaces the driver error). Lets a create that
+ * lost a race against a concurrent identical create be treated as a no-op
+ * instead of failing the whole sync.
+ */
+export function isUniqueConstraintError(err: unknown): boolean {
+  const code = (err as { code?: string })?.code
+  if (code === 'P2002' || code === 'SQLITE_CONSTRAINT_UNIQUE') return true
+  const message = (err as { message?: string })?.message ?? ''
+  return message.includes('UNIQUE constraint failed')
+}
+
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma

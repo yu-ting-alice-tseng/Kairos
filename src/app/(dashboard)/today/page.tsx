@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { Sundial } from '@/components/ui/Sundial'
 import { Candle } from '@/components/ui/Candle'
 import { InkLoader } from '@/components/ui/InkLoader'
-import { generatePriorityList, formatDate, formatTime, cn } from '@/lib/utils'
+import { generatePriorityList, formatDate, formatDeadlineLabel, deadlineTooltip, formatTime, cn } from '@/lib/utils'
 import {
   Plus, Sparkles, Sun, Flame, RefreshCw, MessageSquare, ChevronRight, ChevronLeft,
   CheckCircle2, Clock, Loader2, X, AlarmCheck, Zap, CalendarDays, SlidersHorizontal,
@@ -27,6 +27,47 @@ import {
 } from '@dnd-kit/core'
 
 const SCHEDULE_HOURS = Array.from({ length: 16 }, (_, i) => i + 7) // 07–22
+
+/**
+ * Does an event belong to `day`? The fetch covers today *and* tomorrow, so the
+ * day it renders on is decided here. All-day events are compared as calendar
+ * dates with an exclusive end (how Google/Outlook report them) — parsing their
+ * date-only strings as instants would shift them by the UTC offset and spill a
+ * 6 August event onto 7 August.
+ */
+function eventOccursOn(ev: CalendarEvent, day: Date): boolean {
+  if (!ev.start) return false
+  const dayKey = format(day, 'yyyy-MM-dd')
+  if (ev.allDay) {
+    const startKey = String(ev.start).slice(0, 10)
+    const endKey = ev.end ? String(ev.end).slice(0, 10) : startKey
+    return endKey > startKey ? dayKey >= startKey && dayKey < endKey : dayKey === startKey
+  }
+  const dayStart = new Date(day); dayStart.setHours(0, 0, 0, 0)
+  const dayEnd = new Date(day); dayEnd.setHours(23, 59, 59, 999)
+  const start = new Date(ev.start)
+  const end = ev.end ? new Date(ev.end) : start
+  return start <= dayEnd && end >= dayStart
+}
+
+/**
+ * Collapses tasks the calendar sync produced more than once for what is really
+ * the same entry — same title, same day. The server already dedupes by event
+ * id; this catches the case it cannot see, an event mirrored on two connected
+ * calendars, where each copy carries its own id. Tasks the user typed in stay
+ * untouched, duplicate titles and all.
+ */
+function dedupeCalendarTasks(tasks: Task[]): Task[] {
+  const seen = new Set<string>()
+  return tasks.filter((task) => {
+    if (!task.calendarEventId) return true
+    const day = task.deadline ? new Date(String(task.deadline)).toDateString() : 'none'
+    const key = `${task.title}|${day}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
 
 function DraggableTaskRow({ task, index, onComplete, onEdit, onDelete, onBreakdown, onReschedule, lang, selectedDate }: {
   task: Task; index: number
@@ -178,7 +219,6 @@ export default function TodayPage() {
   const [rescheduleSuggestion, setRescheduleSuggestion] = useState<{ start: string; end: string; reason: string } | null>(null)
   const [rescheduleLoading, setRescheduleLoading] = useState(false)
   const [todayEvents, setTodayEvents] = useState<CalendarEvent[]>([])
-  const [tomorrowEvents, setTomorrowEvents] = useState<CalendarEvent[]>([])
   const [selectedDate, setSelectedDate] = useState<Date>(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d })
   const dateInputRef = React.useRef<HTMLInputElement>(null)
 
@@ -229,18 +269,21 @@ export default function TodayPage() {
     if (prev && prev.date === dateKey && prev.accounts === '' && accountKey !== '') return
     const fetchEvents = async () => {
       try {
-        const todayStart = new Date(selectedDate); todayStart.setHours(0, 0, 0, 0)
-        const todayEnd = new Date(selectedDate); todayEnd.setHours(23, 59, 59, 999)
-        const tmrStart = new Date(selectedDate); tmrStart.setDate(tmrStart.getDate() + 1); tmrStart.setHours(0, 0, 0, 0)
-        const tmrEnd = new Date(selectedDate); tmrEnd.setDate(tmrEnd.getDate() + 1); tmrEnd.setHours(23, 59, 59, 999)
+        // One request for today *and* tomorrow. Two overlapping range fetches
+        // used to run in parallel, and a multi-day all-day event lands in both:
+        // each request found no task for it and created one, so those events
+        // showed up twice in the list. Tomorrow stays in the range because the
+        // fetch is also what syncs its events into tasks.
+        const rangeStart = new Date(selectedDate); rangeStart.setHours(0, 0, 0, 0)
+        const rangeEnd = new Date(selectedDate); rangeEnd.setDate(rangeEnd.getDate() + 1); rangeEnd.setHours(23, 59, 59, 999)
 
-        const [todayRes, tmrRes] = await Promise.all([
-          fetch(`/api/calendar/events?start=${todayStart.toISOString()}&end=${todayEnd.toISOString()}`),
-          fetch(`/api/calendar/events?start=${tmrStart.toISOString()}&end=${tmrEnd.toISOString()}`),
-        ])
-        if (todayRes.ok) setTodayEvents(await todayRes.json())
-        if (tmrRes.ok) setTomorrowEvents(await tmrRes.json())
-        if (!todayRes.ok || !tmrRes.ok) toast({ title: language === 'fr' ? 'Erreur de synchronisation du calendrier' : language === 'zh' ? '日曆同步失敗' : 'Calendar sync failed', variant: 'error' })
+        const res = await fetch(`/api/calendar/events?start=${rangeStart.toISOString()}&end=${rangeEnd.toISOString()}`)
+        if (res.ok) {
+          const events: CalendarEvent[] = await res.json()
+          setTodayEvents(events.filter((ev) => eventOccursOn(ev, selectedDate)))
+        } else {
+          toast({ title: language === 'fr' ? 'Erreur de synchronisation du calendrier' : language === 'zh' ? '日曆同步失敗' : 'Calendar sync failed', variant: 'error' })
+        }
       } catch {
         toast({ title: language === 'fr' ? 'Erreur de synchronisation du calendrier' : language === 'zh' ? '日曆同步失敗' : 'Calendar sync failed', variant: 'error' })
       }
@@ -277,7 +320,7 @@ export default function TodayPage() {
     return { ...task, importance: match.importance, urgency: match.urgence }
   }
 
-  const prioritizedTasks = generatePriorityList(
+  const prioritizedTasks = dedupeCalendarTasks(generatePriorityList(
     tasks.filter((t) =>
       t.status !== 'COMPLETED' &&
       t.status !== 'CANCELLED' &&
@@ -287,7 +330,7 @@ export default function TodayPage() {
       isDueOnDate(t.deadline, selectedDate) &&
       !isExcludedFromToday(t.title)
     ).map(applyKeywordRules)
-  )
+  ))
 
   // All-day events that aren't linked to any task — shown as calendar entries in the list
   const linkedCalendarEventIds = new Set(tasks.map((t) => t.calendarEventId).filter(Boolean))
@@ -303,11 +346,11 @@ export default function TodayPage() {
     scheduledTasks.filter((t) => t.scheduledStart && new Date(String(t.scheduledStart)).getHours() === hour)
 
   // Show a completed task in the day whose DEADLINE matches, or (no deadline) in the day it was completed
-  const completedToday = tasks.filter((t) => {
+  const completedToday = dedupeCalendarTasks(tasks.filter((t) => {
     if (t.status !== 'COMPLETED') return false
     if (t.deadline) return isSameDay(new Date(String(t.deadline)), selectedDate)
     return !!(t.completedAt && isSameDay(new Date(t.completedAt), selectedDate))
-  })
+  }))
 
   const handleComplete = async (id: string) => {
     const task = tasks.find((t) => t.id === id)
@@ -862,7 +905,12 @@ export default function TodayPage() {
                         </button>
                         <span className="flex-1 text-xs text-[#3a3326] truncate">{task.title}</span>
                         {task.deadline && !isSameDay(new Date(String(task.deadline)), selectedDate) && (
-                          <span className="text-[10px] text-red-400 shrink-0">{formatDate(String(task.deadline), language)}</span>
+                          <span
+                            className="text-[10px] text-red-400 shrink-0"
+                            title={deadlineTooltip(String(task.deadline), language, selectedDate)}
+                          >
+                            {formatDeadlineLabel(String(task.deadline), language, selectedDate)}
+                          </span>
                         )}
                       </div>
                     ))}
