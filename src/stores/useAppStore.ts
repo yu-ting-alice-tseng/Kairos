@@ -27,7 +27,14 @@ export interface AppState {
   secondaryTimezone: string | null // null = not shown
   hasCompletedOnboarding: boolean
   onboardingOpen: boolean
+  /**
+   * True once a page has handed the store its server-rendered tasks/habits.
+   * Until then a page renders from its own props, so the first paint matches
+   * the HTML the server sent instead of an empty store.
+   */
+  dataSeeded: boolean
 
+  seedServerData: (tasks: Task[], habits: Habit[]) => void
   setLanguage: (lang: Language) => void
   setOnboardingOpen: (open: boolean) => void
   completeOnboarding: () => void
@@ -72,7 +79,9 @@ export const useAppStore = create<AppState>()(
       secondaryTimezone: null,
       hasCompletedOnboarding: false,
       onboardingOpen: false,
+      dataSeeded: false,
 
+      seedServerData: (tasks, habits) => set({ tasks, habits, dataSeeded: true }),
       setLanguage: (lang) => set({ language: lang }),
       setOnboardingOpen: (open) => set({ onboardingOpen: open }),
       completeOnboarding: () => set({ hasCompletedOnboarding: true, onboardingOpen: false }),

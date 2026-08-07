@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { isDemoUser, getDemoHabits } from '@/lib/demo-data'
+import { loadUserHabits } from '@/lib/queries'
 import { z } from 'zod'
 
 const createHabitSchema = z.object({
@@ -21,24 +21,7 @@ export async function GET() {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  if (isDemoUser(session.user.id)) return NextResponse.json(getDemoHabits())
-
-  const habits = await prisma.habit.findMany({
-    where: { userId: session.user.id, isActive: true },
-    include: {
-      completions: {
-        where: {
-          completedAt: {
-            gte: new Date(new Date().setHours(0, 0, 0, 0)),
-            lte: new Date(new Date().setHours(23, 59, 59, 999)),
-          },
-        },
-      },
-    },
-    orderBy: { createdAt: 'asc' },
-  })
-
-  return NextResponse.json(habits)
+  return NextResponse.json(await loadUserHabits(session.user.id))
 }
 
 export async function POST(req: NextRequest) {

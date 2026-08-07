@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { calculatePriority } from '@/lib/utils'
-import { isDemoUser, getDemoTasks } from '@/lib/demo-data'
+import { isDemoUser } from '@/lib/demo-data'
+import { loadUserTasks } from '@/lib/queries'
 import { z } from 'zod'
 
 const createTaskSchema = z.object({
@@ -25,13 +26,11 @@ export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  if (isDemoUser(session.user.id)) return NextResponse.json(getDemoTasks())
-
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status')
   const date = searchParams.get('date')
 
-  const where: Record<string, unknown> = { userId: session.user.id }
+  const where: Record<string, unknown> = {}
   if (status) where.status = status
   if (date) {
     const start = new Date(date)
@@ -45,13 +44,7 @@ export async function GET(req: NextRequest) {
     ]
   }
 
-  const tasks = await prisma.task.findMany({
-    where,
-    include: { subTasks: true, calendarAccount: true },
-    orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
-  })
-
-  return NextResponse.json(tasks)
+  return NextResponse.json(await loadUserTasks(session.user.id, where))
 }
 
 export async function POST(req: NextRequest) {
