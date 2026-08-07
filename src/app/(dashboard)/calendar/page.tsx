@@ -245,6 +245,16 @@ function eventStartDate(ev: CalendarEvent): Date {
   return new Date(raw)
 }
 
+/**
+ * The task the calendar sync keeps for an event — what "this event is done"
+ * is actually recorded on. When a retro chain hangs off the event, the parent
+ * is the one that carries its status.
+ */
+function taskForEvent(tasks: Task[], eventId: string): Task | undefined {
+  const linked = tasks.filter((t) => t.calendarEventId === eventId)
+  return linked.find((t) => !t.parentTaskId) ?? linked[0]
+}
+
 /** Monday of the week containing `d` (Sunday belongs to the week that just ended). */
 function mondayOf(d: Date): Date {
   const mon = new Date(d)
@@ -531,6 +541,10 @@ export default function CalendarPage() {
   dragPreviewRef.current = dragPreview
 
   const locale = language === 'fr' ? fr : language === 'zh' ? zhTW : enUS
+  const doneToggleLabel = {
+    done: language === 'fr' ? 'Marquer comme terminé' : language === 'zh' ? '標為完成' : 'Mark as done',
+    undo: language === 'fr' ? 'Marquer comme non terminé' : language === 'zh' ? '標為未完成' : 'Mark as not done',
+  }
   const weekStart = startDate
   const weekEnd = addDays(startDate, 6)
   // Fetch range end, not the displayed one: weekEnd is Sunday 00:00 and Google's
@@ -943,6 +957,39 @@ export default function CalendarPage() {
     if (res.ok) { const data = await res.json(); updateTask(task.id, data) }
     else updateTask(task.id, task)
   }, [updateTask])
+
+  /**
+   * Crossing an event out is really completing the task the calendar sync keeps
+   * for it. An event the sync has not reached yet (just created in Google, or
+   * on a calendar whose window was never opened) has no task, so make one that
+   * points at the event and complete that. POST /api/tasks returns the existing
+   * row when the event is already linked, so this cannot fork a second task.
+   */
+  const toggleEventDone = useCallback(async (ev: CalendarEvent) => {
+    const linked = taskForEvent(tasks, ev.id)
+    if (linked) { await handleCompleteTask(linked); return }
+
+    const deadline = ev.allDay ? new Date(String(ev.start)) : new Date(String(ev.end ?? ev.start))
+    const res = await fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: ev.title,
+        calendarEventId: ev.id,
+        calendarAccountId: ev.calendarAccountId,
+        deadline: deadline.toISOString(),
+      }),
+    })
+    if (!res.ok) {
+      toast({ title: language === 'fr' ? 'Impossible de marquer comme terminé' : language === 'zh' ? '無法標記為完成' : 'Could not mark as done', variant: 'error' })
+      return
+    }
+    const created: Task = await res.json()
+    if (tasks.some((t) => t.id === created.id)) updateTask(created.id, created)
+    else addTask(created)
+    if (created.status !== 'COMPLETED') await handleCompleteTask(created)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, handleCompleteTask, addTask, updateTask, language])
 
   const handleCompleteHabit = useCallback(async (habit: Habit) => {
     const alreadyDone = (habit.completions?.length ?? 0) > 0
@@ -1606,7 +1653,7 @@ export default function CalendarPage() {
                   {allDayEvs.map((ev) => {
                     const color = ev.color ?? calendarAccounts.find((a) => a.id === ev.calendarAccountId)?.color ?? '#6366F1'
                     const isDraggingThis = draggingEventId === ev.id
-                    const linkedTask = tasks.find((t) => t.calendarEventId === ev.id)
+                    const linkedTask = taskForEvent(tasks, ev.id)
                     const isLinkedDone = linkedTask?.status === 'COMPLETED'
                     const isHighlighted = linkedTask?.id === highlightedTaskId
                     return (
@@ -1618,6 +1665,18 @@ export default function CalendarPage() {
                         onMouseDown={(e) => { if (ev.editable) startAllDayDrag(e, ev) }}
                         onClick={(e) => { e.stopPropagation(); if (!isDragging) { setViewingScheduledTask(null); setEditingEvent(ev) } }}
                       >
+                        {!ev.habitId && (
+                          <button
+                            className="shrink-0 hover:scale-110 transition-transform"
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => { e.stopPropagation(); toggleEventDone(ev) }}
+                            title={isLinkedDone ? doneToggleLabel.undo : doneToggleLabel.done}
+                          >
+                            {isLinkedDone
+                              ? <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                              : <Circle className="h-3 w-3 text-[#cbb98e]" />}
+                          </button>
+                        )}
                         <span className={cn('text-[#2a2420] truncate flex-1', isLinkedDone && 'line-through text-[#6e6147]')} title={ev.title}>{ev.title}</span>
                         {linkedTask && (
                           <span className="shrink-0 text-[9px] opacity-60 font-mono whitespace-nowrap">
@@ -1750,6 +1809,7 @@ export default function CalendarPage() {
                         const ev = block.data
                         const evColor = ev.color ?? calendarAccounts.find((a) => a.id === ev.calendarAccountId)?.color ?? '#6366F1'
                         const isDraggingThis = draggingEventId === ev.id
+                        const evDone = taskForEvent(tasks, ev.id)?.status === 'COMPLETED'
                         return (
                           <div
                             key={block.id}
@@ -1759,16 +1819,30 @@ export default function CalendarPage() {
                               'rounded-lg px-2 py-1 text-xs border border-dashed overflow-hidden group',
                               isDragging ? 'pointer-events-none' : 'pointer-events-auto',
                               ev.editable ? 'cursor-grab hover:brightness-95' : 'select-none',
-                              isDraggingThis && 'opacity-40'
+                              isDraggingThis && 'opacity-40',
+                              evDone && 'opacity-60'
                             )}
                             style={{ ...boxStyle, backgroundColor: evColor + '22', borderColor: evColor }}
                           >
-                            <p className="font-medium truncate text-[#2a2420]" title={ev.title}>{ev.title}</p>
+                            <p className={cn('font-medium truncate text-[#2a2420]', evDone && 'line-through text-[#6e6147]')} title={ev.title}>{ev.title}</p>
                             {ev.start && ev.end && (
                               <p className="flex items-center gap-1 text-[#5c5347]">
                                 <Clock className="h-2.5 w-2.5" />
                                 {formatTime(ev.start)} – {formatTime(ev.end)}
                               </p>
+                            )}
+                            {!ev.habitId && (
+                              <button
+                                className={cn(
+                                  'absolute bottom-1 right-1 h-4 w-4 rounded-full flex items-center justify-center bg-white/80 hover:bg-emerald-50 transition-all',
+                                  evDone ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                                )}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={(e) => { e.stopPropagation(); toggleEventDone(ev) }}
+                                title={evDone ? doneToggleLabel.undo : doneToggleLabel.done}
+                              >
+                                <Check className={cn('h-2.5 w-2.5', evDone ? 'text-emerald-600' : 'text-[#a99873]')} />
+                              </button>
                             )}
                           </div>
                         )
@@ -1900,6 +1974,7 @@ export default function CalendarPage() {
           currentWeekEvents={externalEvents}
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
+          onToggleDone={toggleEventDone}
           onClose={() => setEditingEvent(null)}
           onTasksRefresh={async () => {
             const res = await fetch('/api/tasks')
@@ -2627,7 +2702,7 @@ function ScheduledTaskPanel({
 // ─── Event Detail Panel ───────────────────────────────────────────────────────
 
 function EventDetailPanel({
-  event, lang, saving, tasks, calendarAccounts, currentWeekEvents, onSave, onDelete, onClose, onTasksRefresh, onNavigateToDate, onMoveEvent,
+  event, lang, saving, tasks, calendarAccounts, currentWeekEvents, onSave, onDelete, onClose, onTasksRefresh, onNavigateToDate, onMoveEvent, onToggleDone,
 }: {
   event: CalendarEvent
   lang: 'fr' | 'en' | 'zh'
@@ -2637,6 +2712,7 @@ function EventDetailPanel({
   currentWeekEvents: CalendarEvent[]
   onSave: (ev: CalendarEvent, title: string, start: string, end: string) => void
   onDelete: (ev: CalendarEvent) => void
+  onToggleDone: (ev: CalendarEvent) => Promise<void>
   onClose: () => void
   onTasksRefresh: () => void | Promise<void>
   onNavigateToDate?: (date: Date, taskId?: string) => void
@@ -2702,6 +2778,8 @@ function EventDetailPanel({
     () => tasks.filter((t) => t.calendarEventId === event.id),
     [tasks, event.id]
   )
+  const [togglingDone, setTogglingDone] = React.useState(false)
+  const eventDone = taskForEvent(tasks, event.id)?.status === 'COMPLETED'
   // Find the chain parent: task linked directly or parent of a linked sub-task
   const chainParent = React.useMemo(() => {
     const direct = directlyLinkedTasks.find((t) => !t.parentTaskId)
@@ -3007,7 +3085,34 @@ function EventDetailPanel({
             onChange={(e) => setTitle(e.target.value)}
           />
         ) : (
-          <h2 className="text-sm font-semibold text-[#2a2420] leading-snug">{event.title}</h2>
+          <h2 className={cn('text-sm font-semibold leading-snug', eventDone ? 'line-through text-[#8a7a5e]' : 'text-[#2a2420]')}>{event.title}</h2>
+        )}
+
+        {/* Done toggle — writes to the task the sync keeps for this event */}
+        {!event.habitId && (
+          <button
+            onClick={async () => {
+              if (togglingDone) return
+              setTogglingDone(true)
+              try { await onToggleDone(event) } finally { setTogglingDone(false) }
+            }}
+            disabled={togglingDone}
+            className={cn(
+              'flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium transition-colors w-full disabled:opacity-60',
+              eventDone
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                : 'border-[#e2d6bc] bg-[#f3ecdd]/60 text-[#5c5347] hover:bg-[#f3ecdd] hover:border-[#cba968]'
+            )}
+          >
+            {togglingDone
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+              : eventDone
+                ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                : <Circle className="h-3.5 w-3.5 shrink-0 text-[#c4b48a]" />}
+            {eventDone
+              ? (lang === 'fr' ? 'Terminé' : lang === 'zh' ? '已完成' : 'Done')
+              : (lang === 'fr' ? 'Marquer comme terminé' : lang === 'zh' ? '標為完成' : 'Mark as done')}
+          </button>
         )}
 
         {/* Date / time — Notion-style always-visible inline editor */}
