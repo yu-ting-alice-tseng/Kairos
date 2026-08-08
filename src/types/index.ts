@@ -22,6 +22,7 @@ export interface Task {
   isRecurring: boolean
   parentTaskId?: string | null
   calendarEventId?: string | null
+  calendarId?: string | null
   tags?: string | null
   notes?: string | null
   aiSuggested: boolean
@@ -216,4 +217,36 @@ export interface TimeSlotSuggestion {
   score: number
   reason: string
   reasonFr: string
+}
+
+/** One column of the monthly-review chart. */
+export interface MonthBucket {
+  key: string        // YYYY-MM, local time
+  completed: number  // tasks finished in that month
+  due: number        // tasks whose deadline falls in it
+}
+
+export interface MonthlyStats {
+  months: MonthBucket[]
+  summary: {
+    key: string
+    completed: number
+    previousCompleted: number | null
+    due: number
+    stillOpen: number
+    openOverdue: number
+    completionRate: number | null   // null when nothing was due that month
+    activeDays: number
+    bestDay: { date: string; count: number } | null
+    habitCompletions: number
+    byQuadrant: Record<EisenhowerQuadrant['id'], number>
+  }
+  completedTasks: {
+    id: string
+    title: string
+    completedAt: string
+    importance: number
+    urgency: number
+    isSubTask: boolean
+  }[]
 }

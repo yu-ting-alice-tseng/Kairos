@@ -21,7 +21,7 @@ export async function POST() {
     // Find all linked tasks and determine their date range
     const linkedTasks = await prisma.task.findMany({
       where: { userId, calendarEventId: { not: null } },
-      select: { id: true, calendarEventId: true, calendarAccountId: true, title: true, deadline: true, importance: true, urgency: true, parentTaskId: true },
+      select: { id: true, calendarEventId: true, calendarAccountId: true, calendarId: true, title: true, deadline: true, importance: true, urgency: true, parentTaskId: true },
     })
     if (linkedTasks.length === 0) return NextResponse.json({ synced: 0 })
 
@@ -51,7 +51,7 @@ export async function POST() {
             account.id, account.accessToken!, calId, timeMin, timeMax,
             account.refreshToken, account.expiresAt,
           )
-          evs.forEach((e) => allEvents.push({ ...e, calendarAccountId: account.id }))
+          evs.forEach((e) => allEvents.push({ ...e, calendarAccountId: account.id, calendarId: calId }))
         } catch { /* ignore per-calendar errors */ }
       }))
     }))
@@ -118,12 +118,14 @@ export async function POST() {
       const titleChanged = ev.title !== task.title
       const deadlineChanged = evDeadline.toDateString() !== taskDeadline?.toDateString()
       const accountChanged = (ev.calendarAccountId ?? null) !== task.calendarAccountId
-      if (titleChanged || deadlineChanged || accountChanged) {
+      const calendarChanged = (ev.calendarId ?? null) !== task.calendarId
+      if (titleChanged || deadlineChanged || accountChanged || calendarChanged) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const data: Record<string, any> = {}
         if (titleChanged) data.title = ev.title
         if (deadlineChanged) data.deadline = evDeadline
         if (accountChanged) data.calendarAccountId = ev.calendarAccountId ?? null
+        if (calendarChanged) data.calendarId = ev.calendarId ?? null
         await prisma.task.update({ where: { id: task.id }, data })
         synced++
       }
@@ -139,7 +141,7 @@ export async function POST() {
         await prisma.task.create({
           data: {
             userId, title: e.title, calendarEventId: e.id,
-            calendarAccountId: e.calendarAccountId ?? null, deadline,
+            calendarAccountId: e.calendarAccountId ?? null, calendarId: e.calendarId ?? null, deadline,
             importance: 5, urgency: 5, priority: calculatePriority(5, 5), status: 'PENDING',
           },
         })

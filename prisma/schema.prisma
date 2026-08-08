@@ -121,6 +121,9 @@ model Task {
   isRecurring       Boolean    @default(false)
   parentTaskId      String?
   calendarEventId   String?
+  // Sub-calendar the event lives on (Google calendar id). Recorded by the sync
+  // so the monthly review can be filtered down to one calendar of an account.
+  calendarId        String?
   tags              String?
   notes             String?
   aiSuggested       Boolean    @default(false)

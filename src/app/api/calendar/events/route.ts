@@ -166,7 +166,7 @@ async function syncTasksWithEvents(userId: string, dedupedEvents: CalendarEvent[
   try {
     const existingTasks = await prisma.task.findMany({
       where: { userId, calendarEventId: { in: syncEventIds } },
-      select: { id: true, calendarEventId: true, title: true, deadline: true, calendarAccountId: true, importance: true, urgency: true, parentTaskId: true },
+      select: { id: true, calendarEventId: true, title: true, deadline: true, calendarAccountId: true, calendarId: true, importance: true, urgency: true, parentTaskId: true },
     })
 
     // Determine which tasks are chain parents (other tasks point to them)
@@ -221,6 +221,7 @@ async function syncTasksWithEvents(userId: string, dedupedEvents: CalendarEvent[
           title: e.title,
           calendarEventId: e.id,
           calendarAccountId: e.calendarAccountId ?? null,
+          calendarId: e.calendarId ?? null,
           deadline: e.allDay ? new Date(e.start) : new Date(e.end),
           importance: 5,
           urgency: 5,
@@ -244,12 +245,14 @@ async function syncTasksWithEvents(userId: string, dedupedEvents: CalendarEvent[
       const deadlineChanged = evDeadline.toDateString() !== taskDeadline?.toDateString()
       const titleChanged = e.title !== task.title
       const accountChanged = (e.calendarAccountId ?? null) !== task.calendarAccountId
-      if (!titleChanged && !deadlineChanged && !accountChanged) return
+      const calendarChanged = (e.calendarId ?? null) !== task.calendarId
+      if (!titleChanged && !deadlineChanged && !accountChanged && !calendarChanged) return
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const updateData: Record<string, any> = {}
       if (titleChanged) updateData.title = e.title
       if (deadlineChanged) updateData.deadline = evDeadline
       if (accountChanged) updateData.calendarAccountId = e.calendarAccountId ?? null
+      if (calendarChanged) updateData.calendarId = e.calendarId ?? null
       return prisma.task.update({ where: { id: task.id }, data: updateData })
     }))
   } catch (err) {

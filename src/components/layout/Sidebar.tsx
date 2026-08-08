@@ -8,7 +8,7 @@ import { useAppStore } from '@/stores/useAppStore'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import {
-  Zap, LayoutGrid, Calendar, Repeat2,
+  Zap, LayoutGrid, Calendar, Repeat2, BarChart3,
   ChevronLeft, ChevronRight, Globe, GitBranch,
   Info, Settings, LogOut, Shield, MessageSquare, Star, HelpCircle,
 } from 'lucide-react'
@@ -21,6 +21,7 @@ const navItems = [
   { href: '/calendar',      icon: Calendar,    key: 'calendar'      as const },
   { href: '/habits',        icon: Repeat2,     key: 'habits'        as const },
   { href: '/retroplanning', icon: GitBranch,   key: 'retroplanning' as const },
+  { href: '/review',        icon: BarChart3,   key: 'review'        as const },
 ]
 
 export function Sidebar() {
