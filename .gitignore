@@ -49,3 +49,9 @@ prisma/dev.db-journal
 
 .vercel
 .env*
+
+# Windows / Google Drive litter. These also land inside .git itself, where
+# .gitignore cannot help — a desktop.ini under .git/refs/ reads as a broken ref
+# and breaks fetch ("bad object refs/desktop.ini").
+desktop.ini
+Thumbs.db
