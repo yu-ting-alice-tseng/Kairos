@@ -90,7 +90,10 @@ export async function listGoogleEvents(
       // carries attendees, reminders, conferenceData, creator/organizer etc. —
       // dropping them cuts the response by roughly an order of magnitude, which
       // is the bulk of the wait on calendars with many events.
-      fields: 'nextPageToken,items(id,summary,start,end,description,location,htmlLink)',
+      // recurringEventId marks an instance of a repeating event and points at
+      // the series it belongs to — the edit dialog needs it to offer "this and
+      // following" / "all events".
+      fields: 'nextPageToken,items(id,summary,start,end,description,location,htmlLink,recurringEventId)',
     })
     allItems.push(...(res.data.items ?? []))
     pageToken = res.data.nextPageToken ?? undefined
@@ -107,6 +110,7 @@ export async function listGoogleEvents(
     description: event.description ?? undefined,
     location: event.location ?? undefined,
     htmlLink: event.htmlLink ?? undefined,
+    recurringEventId: event.recurringEventId ?? undefined,
   }))
 }
 
@@ -187,6 +191,146 @@ export async function updateGoogleEvent(
           ? { date: toDateStr(event.end) }
           : { dateTime: event.end.toISOString() }
         : undefined,
+    },
+  })
+  await flush()
+}
+
+// ─── Repeating events ─────────────────────────────────────────────────────────
+// Google has no "edit this and following" call — its own UI splits the series,
+// and so do we: the old series is cut short just before the instance the user
+// edited, and a new one starts there carrying the edit. "All events" is a patch
+// of the series master, which is a single call.
+
+/** UTC basic format Google wants inside an RRULE UNTIL. */
+function toRRuleUntil(d: Date): string {
+  return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+}
+
+/**
+ * Replaces whatever end condition a rule has with `UNTIL`. A COUNT-based rule
+ * cannot keep its count once it is cut short — the remaining occurrences move
+ * to the new series — so COUNT is dropped rather than left to over-run.
+ */
+function ruleEndingAt(rrule: string, until: Date): string {
+  const body = rrule.replace(/^RRULE:/, '')
+  const parts = body.split(';').filter((p) => p && !/^(UNTIL|COUNT)=/i.test(p))
+  parts.push(`UNTIL=${toRRuleUntil(until)}`)
+  return `RRULE:${parts.join(';')}`
+}
+
+/** Same rule with any explicit end condition removed, for the new series. */
+function ruleWithoutEnd(rrule: string, remainingCount: number | null): string {
+  const body = rrule.replace(/^RRULE:/, '')
+  const parts = body.split(';').filter((p) => p && !/^(UNTIL|COUNT)=/i.test(p))
+  if (remainingCount !== null && remainingCount > 0) parts.push(`COUNT=${remainingCount}`)
+  return `RRULE:${parts.join(';')}`
+}
+
+/**
+ * Applies an edit to a whole repeating series, or to one instance onwards.
+ *
+ * `scope: 'all'` keeps each occurrence on its own date and moves only the time
+ * of day — the same thing Google Calendar does — because rewriting the master's
+ * date would drag the entire series to the edited instance's day.
+ */
+export async function updateGoogleSeries(
+  accountId: string,
+  accessToken: string,
+  calendarId: string,
+  masterId: string,
+  instanceStart: Date,
+  scope: 'following' | 'all',
+  event: { title?: string; description?: string; start?: Date; end?: Date; allDay?: boolean },
+  refreshToken?: string | null,
+  expiresAt?: Date | null
+): Promise<void> {
+  const { client, flush } = getOAuth2Client(accountId, accessToken, refreshToken, expiresAt)
+  const calendar = google.calendar({ version: 'v3', auth: client })
+
+  const toDateStr = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+  const master = (await calendar.events.get({ calendarId, eventId: masterId })).data
+  const recurrence = master.recurrence ?? []
+  const rruleIndex = recurrence.findIndex((r) => r.startsWith('RRULE:'))
+  const rrule = rruleIndex >= 0 ? recurrence[rruleIndex] : null
+
+  if (scope === 'all') {
+    const body: calendar_v3.Schema$Event = {}
+    if (event.title !== undefined) body.summary = event.title
+    if (event.description !== undefined) body.description = event.description
+
+    // Carry the new time of day onto the master's own date; every later
+    // occurrence follows from the rule.
+    if (event.start || event.end) {
+      const masterStart = master.start?.dateTime ?? master.start?.date
+      if (masterStart) {
+        const base = new Date(masterStart)
+        const applyTime = (from: Date) => {
+          const d = new Date(base)
+          d.setHours(from.getHours(), from.getMinutes(), 0, 0)
+          return d
+        }
+        if (event.allDay) {
+          if (event.start) body.start = { date: toDateStr(base) }
+          if (event.end && event.start) {
+            const days = Math.max(1, Math.round((event.end.getTime() - event.start.getTime()) / 86400000))
+            const endDate = new Date(base); endDate.setDate(endDate.getDate() + days)
+            body.end = { date: toDateStr(endDate) }
+          }
+        } else {
+          if (event.start) body.start = { dateTime: applyTime(event.start).toISOString() }
+          if (event.end && event.start) {
+            const durationMs = event.end.getTime() - event.start.getTime()
+            body.end = { dateTime: new Date(applyTime(event.start).getTime() + durationMs).toISOString() }
+          }
+        }
+      }
+    }
+
+    await calendar.events.patch({ calendarId, eventId: masterId, requestBody: body })
+    await flush()
+    return
+  }
+
+  // scope === 'following' — cut the old series short, start a new one here.
+  let remainingCount: number | null = null
+  if (rrule && /(^|;)COUNT=/i.test(rrule)) {
+    const total = Number(/(?:^|;)COUNT=(\d+)/i.exec(rrule)?.[1] ?? 0)
+    const before = await calendar.events.instances({
+      calendarId, eventId: masterId, timeMax: instanceStart.toISOString(), maxResults: 2500,
+      fields: 'items(id)',
+    })
+    remainingCount = Math.max(1, total - (before.data.items?.length ?? 0))
+  }
+
+  if (rrule) {
+    const truncated = [...recurrence]
+    truncated[rruleIndex] = ruleEndingAt(rrule, new Date(instanceStart.getTime() - 1000))
+    await calendar.events.patch({ calendarId, eventId: masterId, requestBody: { recurrence: truncated } })
+  }
+
+  const newStart = event.start ?? instanceStart
+  const masterStartRaw = master.start?.dateTime ?? master.start?.date
+  const masterEndRaw = master.end?.dateTime ?? master.end?.date
+  const defaultDuration = masterStartRaw && masterEndRaw
+    ? new Date(masterEndRaw).getTime() - new Date(masterStartRaw).getTime()
+    : 60 * 60 * 1000
+  const newEnd = event.end ?? new Date(newStart.getTime() + defaultDuration)
+  const allDay = event.allDay ?? !master.start?.dateTime
+
+  await calendar.events.insert({
+    calendarId,
+    requestBody: {
+      summary: event.title ?? master.summary ?? undefined,
+      description: event.description ?? master.description ?? undefined,
+      location: master.location ?? undefined,
+      start: allDay ? { date: toDateStr(newStart) } : { dateTime: newStart.toISOString() },
+      end: allDay ? { date: toDateStr(newEnd) } : { dateTime: newEnd.toISOString() },
+      recurrence: rrule
+        ? [...recurrence.slice(0, rruleIndex), ruleWithoutEnd(rrule, remainingCount), ...recurrence.slice(rruleIndex + 1)]
+        : recurrence,
     },
   })
   await flush()

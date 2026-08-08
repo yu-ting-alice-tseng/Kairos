@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse, after } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma, isUniqueConstraintError } from '@/lib/prisma'
-import { deleteTasksWithChains, deleteTasksForEvents } from '@/lib/tasks'
-import { listGoogleEvents, createGoogleEvent, updateGoogleEvent, deleteGoogleEvent, moveGoogleEvent } from '@/lib/calendar/google'
+import { deleteTasksAndRehead, deleteTasksForEvents } from '@/lib/tasks'
+import { listGoogleEvents, createGoogleEvent, updateGoogleEvent, updateGoogleSeries, deleteGoogleEvent, moveGoogleEvent } from '@/lib/calendar/google'
 import { listOutlookEvents } from '@/lib/calendar/outlook'
 import { listNotionEvents } from '@/lib/calendar/notion'
 import { CalendarEvent } from '@/types'
@@ -29,6 +29,13 @@ const eventPatchSchema = z.object({
   start: z.string().optional(),
   end: z.string().optional(),
   allDay: z.boolean().optional(),
+  // Which occurrences of a repeating event the edit applies to. Ignored for
+  // one-off events; `recurringEventId` names the series the instance belongs to.
+  scope: z.enum(['single', 'following', 'all']).optional(),
+  recurringEventId: z.string().optional(),
+  // Where the edited instance sits in the series — the cut point for
+  // "this and following". Needed even when the edit does not move the event.
+  instanceStart: z.string().optional(),
 })
 const eventDeleteSchema = z.object({
   eventId: z.string().min(1),
@@ -314,10 +321,8 @@ async function cleanupTasks(
       const orphanIds = linkedInWindow
         .filter((t) => t.calendarEventId && !fetchedEventIds.has(t.calendarEventId))
         .map((t) => t.id)
-      // Take the retro chain with the task, rather than detaching its stages
-      // and leaving them behind as planning steps for a deadline that no
-      // longer exists.
-      await deleteTasksWithChains(userId, orphanIds)
+      // The chain survives its head: re-headed onto the latest remaining stage.
+      await deleteTasksAndRehead(userId, orphanIds)
     }
   } catch (err) {
     console.error('[calendar/events] task sync failed:', err)
@@ -366,7 +371,7 @@ export async function PATCH(req: NextRequest) {
   const parsed = eventPatchSchema.safeParse(await req.json())
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 })
 
-  const { eventId, calendarAccountId, calendarId, title, description, start, end, allDay, action, destinationCalendarId } = parsed.data
+  const { eventId, calendarAccountId, calendarId, title, description, start, end, allDay, action, destinationCalendarId, scope, recurringEventId, instanceStart } = parsed.data
 
   const account = await prisma.calendarAccount.findFirst({
     where: { id: calendarAccountId, userId },
@@ -392,22 +397,41 @@ export async function PATCH(req: NextRequest) {
   }
 
   if (account.provider === 'GOOGLE') {
+    const edits = {
+      title,
+      description,
+      start: start ? new Date(start) : undefined,
+      end: end ? new Date(end) : undefined,
+      allDay: !!allDay,
+    }
+
+    // A repeating event only spreads an edit when the user asked for it; the
+    // default stays on the single instance they were looking at.
+    if (recurringEventId && (scope === 'all' || scope === 'following')) {
+      await updateGoogleSeries(
+        account.id,
+        account.accessToken,
+        calendarId ?? 'primary',
+        recurringEventId,
+        new Date(instanceStart ?? start ?? Date.now()),
+        scope,
+        edits,
+        account.refreshToken,
+        account.expiresAt
+      )
+      return NextResponse.json({ ok: true, scope })
+    }
+
     await updateGoogleEvent(
       account.id,
       account.accessToken,
       calendarId ?? 'primary',
       eventId,
-      {
-        title,
-        description,
-        start: start ? new Date(start) : undefined,
-        end: end ? new Date(end) : undefined,
-        allDay: !!allDay,
-      },
+      edits,
       account.refreshToken,
       account.expiresAt
     )
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, scope: 'single' })
   }
 
   return NextResponse.json({ error: 'Provider does not support editing' }, { status: 400 })
@@ -445,11 +469,10 @@ export async function DELETE(req: NextRequest) {
       account.refreshToken,
       account.expiresAt
     )
-    // The event is gone, so what it stood for goes with it: the task the sync
-    // keeps for it and, when a retro chain hangs off that task, the chain's
-    // stages. Waiting for the next sync's orphan pass would leave them on the
-    // board in the meantime — and that pass only sees events inside the window
-    // the user happens to be looking at.
+    // The event is gone, so its task goes too — and only its task. If a chain
+    // hung off it, the chain is re-headed onto its latest remaining stage.
+    // Waiting for the next sync's orphan pass would leave the task on the board
+    // in the meantime, and that pass only sees the window the user has open.
     const deletedTaskIds = await deleteTasksForEvents(userId, [eventId])
     return NextResponse.json({ ok: true, deletedTasks: deletedTaskIds.length })
   }

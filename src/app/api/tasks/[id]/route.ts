@@ -21,7 +21,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // Build update explicitly — avoid spreading unknown body fields into Prisma
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateData: Record<string, any> = { importance, urgency, priority }
-  const strFields = ['title', 'description', 'notes', 'tags', 'status', 'calendarAccountId', 'calendarEventId', 'parentTaskId']
+  const strFields = ['title', 'description', 'notes', 'tags', 'status', 'calendarAccountId', 'calendarEventId', 'parentTaskId', 'chainName']
   const numFields = ['estimatedMinutes', 'actualMinutes']
   const boolFields = ['isRecurring', 'aiSuggested']
   for (const f of strFields) if (f in body) updateData[f] = body[f] ?? null

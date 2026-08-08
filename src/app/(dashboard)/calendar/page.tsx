@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { useAppStore } from '@/stores/useAppStore'
-import { Task, CalendarEvent, Habit, RetroTemplate } from '@/types'
+import { Task, CalendarEvent, Habit, RetroTemplate, RecurrenceScope } from '@/types'
 import { t } from '@/lib/i18n'
 import { TaskForm } from '@/components/tasks/TaskForm'
 import { InkLoader } from '@/components/ui/InkLoader'
@@ -835,6 +835,7 @@ export default function CalendarPage() {
     start: string,
     end: string,
     allDay?: boolean,
+    scope: RecurrenceScope = 'single',
   ) => {
     setEventSaving(true)
     // Compare dates by local calendar day for all-day events, by ISO string for timed events.
@@ -860,6 +861,7 @@ export default function CalendarPage() {
       ...(startChanged ? { start } : {}),
       ...(endChanged ? { end } : {}),
       allDay: allDay ?? ev.allDay,
+      ...(ev.recurringEventId ? { recurringEventId: ev.recurringEventId, scope, instanceStart: new Date(ev.start).toISOString() } : {}),
     }
     if (allDay !== undefined) body.allDay = allDay
 
@@ -885,7 +887,11 @@ export default function CalendarPage() {
         setUndoCount(undoStackRef.current.length)
       }
       toast({ title: language === 'fr' ? 'Événement mis à jour' : language === 'zh' ? '活動已更新' : 'Event updated', variant: 'success' })
-      setEditingEvent(null)
+      // The panel stays open — an edit is not a reason to lose your place. Keep
+      // the copy on screen in step with what was just saved.
+      setEditingEvent((prev) => prev?.id === ev.id ? newEventData : prev)
+      // A series edit rewrites occurrences we are not holding; re-read them.
+      if (scope !== 'single') loadExternalEvents()
     } else {
       // Revert optimistic update on failure
       setExternalEvents((prev) => prev.map((e) => e.id === ev.id ? ev : e))
@@ -893,7 +899,7 @@ export default function CalendarPage() {
     }
     setEventSaving(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [language])
+  }, [language, loadExternalEvents])
 
   const handleSaveEventRef = useRef(handleSaveEvent)
   handleSaveEventRef.current = handleSaveEvent
@@ -1564,8 +1570,11 @@ export default function CalendarPage() {
                     {isOverdue && <AlertTriangle className="h-2.5 w-2.5 text-red-500 shrink-0 mt-0.5" />}
                     {allDone && <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500 shrink-0 mt-0.5" />}
                     {!isOverdue && !allDone && <GitBranch className="h-2.5 w-2.5 text-[#c4b48a] shrink-0 mt-0.5" />}
-                    <span className={cn('text-[11px] font-medium leading-snug truncate flex-1', allDone ? 'line-through text-[#a99873]' : isOverdue ? 'text-red-700' : 'text-[#3a3326]')} title={displayHead.title}>
-                      {displayHead.title}
+                    <span
+                      className={cn('text-[11px] font-medium leading-snug truncate flex-1', allDone ? 'line-through text-[#a99873]' : isOverdue ? 'text-red-700' : 'text-[#3a3326]')}
+                      title={parent.chainName ? `${parent.chainName} — ${displayHead.title}` : displayHead.title}
+                    >
+                      {parent.chainName || displayHead.title}
                     </span>
                   </div>
                   {headDeadline && (
@@ -2719,7 +2728,7 @@ function EventDetailPanel({
   tasks: Task[]
   calendarAccounts?: { id: string; name: string; color?: string; subCalendars?: { externalId: string; name: string; color?: string; isActive?: boolean }[] }[]
   currentWeekEvents: CalendarEvent[]
-  onSave: (ev: CalendarEvent, title: string, start: string, end: string) => void
+  onSave: (ev: CalendarEvent, title: string, start: string, end: string, allDay?: boolean, scope?: RecurrenceScope) => void
   onDelete: (ev: CalendarEvent) => void
   onToggleDone: (ev: CalendarEvent) => Promise<void>
   onClose: () => void
@@ -2733,8 +2742,15 @@ function EventDetailPanel({
     const offset = dt.getTimezoneOffset() * 60000
     return new Date(dt.getTime() - offset).toISOString().slice(0, 16)
   }
-  const [editing, setEditing] = React.useState(false)
   const [confirmingDelete, setConfirmingDelete] = React.useState(false)
+  const [editingTitle, setEditingTitle] = React.useState(false)
+  const [editingChainName, setEditingChainName] = React.useState(false)
+  const [chainNameDraft, setChainNameDraft] = React.useState('')
+  // A repeating event asks which occurrences an edit applies to; the edit waits
+  // here until it is answered.
+  const [pendingEdit, setPendingEdit] = React.useState<
+    { title: string; start: string; end: string; allDay: boolean } | null
+  >(null)
   const [title, setTitle] = React.useState(event.title)
   const [start, setStart] = React.useState(toLocal(event.start))
   const [end, setEnd] = React.useState(toLocal(event.end))
@@ -2773,8 +2789,43 @@ function EventDetailPanel({
     else updateTask(taskId, { title: originalTitle })
   }, [renameDraft, updateTask])
 
+  /**
+   * Saves whatever the panel currently shows. Called when a field is left, the
+   * way Notion Calendar does it, so there is no Save button to forget. An edit
+   * to a repeating event stops here and waits for the scope answer instead.
+   */
+  const commit = React.useCallback((next: Partial<{ title: string; start: string; end: string; allDay: boolean }>) => {
+    if (!event.editable) return
+    const merged = {
+      title: (next.title ?? title).trim() || event.title,
+      start: next.start ?? start,
+      end: next.end ?? end,
+      allDay: next.allDay ?? isAllDay,
+    }
+    const unchanged =
+      merged.title === event.title &&
+      merged.start === toLocal(event.start) &&
+      merged.end === toLocal(event.end) &&
+      merged.allDay === !!event.allDay
+    if (unchanged) return
+    if (event.recurringEventId) { setPendingEdit(merged); return }
+    onSave(event, merged.title, new Date(merged.start).toISOString(), new Date(merged.end).toISOString(), merged.allDay, 'single')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event, title, start, end, isAllDay, onSave])
+
+  /** Puts the panel back to what the server holds — used when a scope prompt is dismissed. */
+  const resetDraft = React.useCallback(() => {
+    setTitle(event.title)
+    setStart(toLocal(event.start))
+    setEnd(toLocal(event.end))
+    setIsAllDay(!!event.allDay)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event])
+
   React.useEffect(() => {
-    setEditing(false)
+    setEditingTitle(false)
+    setEditingChainName(false)
+    setPendingEdit(null)
     setTitle(event.title)
     setStart(toLocal(event.start))
     setEnd(toLocal(event.end))
@@ -2824,6 +2875,22 @@ function EventDetailPanel({
       return b.title.localeCompare(a.title)
     })
   }, [chainParent, chainSiblings])
+
+  /** Saves the chain's name onto its head task; blank clears it. */
+  const commitChainName = React.useCallback(async () => {
+    setEditingChainName(false)
+    if (!chainParent) return
+    const next = chainNameDraft.trim()
+    if (next === (chainParent.chainName ?? '')) return
+    updateTask(chainParent.id, { chainName: next || null })
+    const res = await fetch(`/api/tasks/${chainParent.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chainName: next || null }),
+    })
+    if (res.ok) updateTask(chainParent.id, await res.json())
+    else updateTask(chainParent.id, { chainName: chainParent.chainName ?? null })
+  }, [chainParent, chainNameDraft, updateTask])
 
   // Fallback: fuzzy title match for old tasks not linked via calendarEventId
   const relatedChains = React.useMemo(() => {
@@ -3085,16 +3152,31 @@ function EventDetailPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pb-4 flex flex-col gap-4">
-        {/* Title */}
-        {editing ? (
+        {/* Title — click to edit, leaving the field saves it */}
+        {editingTitle && event.editable ? (
           <input
             autoFocus
-            className="w-full border border-[#e2d6bc] rounded-xl px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-red-300 bg-white text-[#2a2420]"
+            className="w-full border border-[#cba968] rounded-xl px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#ab3326]/30 bg-white text-[#2a2420]"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            onBlur={() => { setEditingTitle(false); commit({ title }) }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() }
+              if (e.key === 'Escape') { setTitle(event.title); setEditingTitle(false) }
+            }}
           />
         ) : (
-          <h2 className={cn('text-sm font-semibold leading-snug', eventDone ? 'line-through text-[#8a7a5e]' : 'text-[#2a2420]')}>{event.title}</h2>
+          <h2
+            onClick={() => event.editable && setEditingTitle(true)}
+            title={event.editable ? (lang === 'fr' ? 'Cliquer pour modifier' : lang === 'zh' ? '點擊即可編輯' : 'Click to edit') : undefined}
+            className={cn(
+              'text-sm font-semibold leading-snug rounded-xl -mx-1 px-1 py-0.5 transition-colors',
+              event.editable && 'cursor-text hover:bg-[#f3ecdd]',
+              eventDone ? 'line-through text-[#8a7a5e]' : 'text-[#2a2420]'
+            )}
+          >
+            {event.title}
+          </h2>
         )}
 
         {/* Done toggle — writes to the task the sync keeps for this event */}
@@ -3132,6 +3214,7 @@ function EventDetailPanel({
               type="date"
               value={start.slice(0, 10)}
               onChange={(e) => setStart(e.target.value + (isAllDay ? 'T00:00' : 'T' + (start.slice(11) || '09:00')))}
+              onBlur={() => commit({})}
               disabled={!event.editable}
               className="flex-1 min-w-0 text-xs bg-[#f3ecdd]/60 border border-[#e2d6bc] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#ab3326]/30 text-[#3a3326] cursor-pointer disabled:opacity-60 disabled:cursor-default"
             />
@@ -3140,6 +3223,7 @@ function EventDetailPanel({
               type="date"
               value={end.slice(0, 10)}
               onChange={(e) => setEnd(e.target.value + (isAllDay ? 'T00:00' : 'T' + (end.slice(11) || '10:00')))}
+              onBlur={() => commit({})}
               disabled={!event.editable}
               className="flex-1 min-w-0 text-xs bg-[#f3ecdd]/60 border border-[#e2d6bc] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#ab3326]/30 text-[#3a3326] cursor-pointer disabled:opacity-60 disabled:cursor-default"
             />
@@ -3151,6 +3235,7 @@ function EventDetailPanel({
                 type="time"
                 value={start.slice(11) || ''}
                 onChange={(e) => setStart(start.slice(0, 10) + 'T' + e.target.value)}
+                onBlur={() => commit({})}
                 disabled={!event.editable}
                 className="flex-1 min-w-0 text-xs bg-[#f3ecdd]/60 border border-[#e2d6bc] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#ab3326]/30 text-[#3a3326] disabled:opacity-60 disabled:cursor-default"
               />
@@ -3159,6 +3244,7 @@ function EventDetailPanel({
                 type="time"
                 value={end.slice(11) || ''}
                 onChange={(e) => setEnd(end.slice(0, 10) + 'T' + e.target.value)}
+                onBlur={() => commit({})}
                 disabled={!event.editable}
                 className="flex-1 min-w-0 text-xs bg-[#f3ecdd]/60 border border-[#e2d6bc] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#ab3326]/30 text-[#3a3326] disabled:opacity-60 disabled:cursor-default"
               />
@@ -3166,7 +3252,7 @@ function EventDetailPanel({
           )}
           {/* All-day toggle */}
           <button
-            onClick={() => event.editable && setIsAllDay((v) => !v)}
+            onClick={() => { if (!event.editable) return; const next = !isAllDay; setIsAllDay(next); commit({ allDay: next }) }}
             disabled={!event.editable}
             className="flex items-center gap-2 text-xs text-[#8a7a5e] hover:text-[#3a3326] mt-0.5 w-fit transition-colors disabled:opacity-60 disabled:cursor-default"
           >
@@ -3334,6 +3420,34 @@ function EventDetailPanel({
             <GitBranch className="h-3 w-3" />
             {lang === 'fr' ? 'Chaîne de tâches' : lang === 'zh' ? '任務鏈' : 'Task chain'}
           </p>
+
+          {/* The chain can carry its own name — click to give it one. It is kept
+              on the head task, so replacing the head does not lose it. */}
+          {chainParent && (
+            editingChainName ? (
+              <input
+                autoFocus
+                value={chainNameDraft}
+                onChange={(e) => setChainNameDraft(e.target.value)}
+                onBlur={() => commitChainName()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() }
+                  if (e.key === 'Escape') { setChainNameDraft(chainParent.chainName ?? ''); setEditingChainName(false) }
+                }}
+                placeholder={lang === 'fr' ? 'Nom de la chaîne' : lang === 'zh' ? '任務鏈名稱' : 'Chain name'}
+                className="w-full border border-[#cba968] rounded-lg px-2 py-1 text-xs bg-white text-[#2a2420] focus:outline-none focus:ring-2 focus:ring-[#ab3326]/30"
+              />
+            ) : (
+              <button
+                onClick={() => { setChainNameDraft(chainParent.chainName ?? ''); setEditingChainName(true) }}
+                className="text-left text-xs rounded-lg -mx-1 px-1 py-0.5 hover:bg-[#f3ecdd] transition-colors w-fit max-w-full truncate"
+              >
+                {chainParent.chainName
+                  ? <span className="font-medium text-[#3a3326]">{chainParent.chainName}</span>
+                  : <span className="text-[#c4b48a]">{lang === 'fr' ? '+ Nommer la chaîne' : lang === 'zh' ? '＋ 為任務鏈命名' : '+ Name this chain'}</span>}
+              </button>
+            )
+          )}
 
           {/* Show chain when there's any linked task or related chain */}
           {(chainParent || relatedChains.length > 0) && (
@@ -3796,48 +3910,64 @@ function EventDetailPanel({
         )}
       </div>
 
-      {/* Footer actions */}
+      {/* Which occurrences? Asked only for a repeating event, the way a calendar
+          app asks — the edit is held until it is answered. */}
+      {pendingEdit && (
+        <div className="shrink-0 border-t border-[#e2d6bc] bg-[#fbeacb]/60 px-4 py-3 flex flex-col gap-2">
+          <p className="text-[11px] font-semibold text-[#8a6b3e]">
+            {lang === 'fr' ? 'Événement récurrent — appliquer à :' : lang === 'zh' ? '這是重複活動 — 要套用到：' : 'Repeating event — apply to:'}
+          </p>
+          {([
+            ['single', lang === 'fr' ? 'Cet événement' : lang === 'zh' ? '僅此活動' : 'This event'],
+            ['following', lang === 'fr' ? 'Celui-ci et les suivants' : lang === 'zh' ? '此活動及之後' : 'This and following'],
+            ['all', lang === 'fr' ? 'Tous les événements' : lang === 'zh' ? '所有活動' : 'All events'],
+          ] as [RecurrenceScope, string][]).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => {
+                onSave(event, pendingEdit.title, new Date(pendingEdit.start).toISOString(), new Date(pendingEdit.end).toISOString(), pendingEdit.allDay, value)
+                setPendingEdit(null)
+              }}
+              className="w-full rounded-xl border border-[#e2d6bc] bg-white px-3 py-2 text-xs text-[#3a3326] text-left hover:border-[#cba968] hover:bg-[#f3ecdd] transition-colors"
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            onClick={() => { setPendingEdit(null); resetDraft() }}
+            className="text-[11px] text-[#8a7a5e] hover:text-[#3a3326] w-fit"
+          >
+            {lang === 'fr' ? 'Annuler' : lang === 'zh' ? '取消' : 'Cancel'}
+          </button>
+        </div>
+      )}
+
+      {/* Footer — no Save button: fields save themselves when you leave them. */}
       {event.editable && (
-        <div className="shrink-0 border-t border-[#e2d6bc] px-4 py-3 flex gap-2">
-          {editing ? (
-            <>
-              <button onClick={() => setEditing(false)} className="flex-1 rounded-xl border border-[#e2d6bc] text-[#5c5347] text-xs py-2 hover:bg-[#ece2cb] transition-colors">
+        <div className="shrink-0 border-t border-[#e2d6bc] px-4 py-3 flex items-center gap-2">
+          {confirmingDelete ? (
+            <div className="flex-1 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2">
+              <span className="flex-1 text-xs text-red-700 truncate">
+                {lang === 'fr' ? `Supprimer « ${event.title} » ?` : lang === 'zh' ? `確定刪除「${event.title}」？` : `Delete "${event.title}"?`}
+              </span>
+              <button onClick={() => setConfirmingDelete(false)} className="text-[11px] text-[#8a7a5e] hover:text-[#3a3326] shrink-0">
                 {lang === 'fr' ? 'Annuler' : lang === 'zh' ? '取消' : 'Cancel'}
               </button>
-              <button
-                onClick={() => { onSave(event, title, new Date(start).toISOString(), new Date(end).toISOString()); setEditing(false) }}
-                disabled={saving}
-                className="flex-1 rounded-xl bg-[#ab3326] text-white text-xs py-2 hover:bg-[#861f17] transition-colors disabled:opacity-60 flex items-center justify-center gap-1"
-              >
-                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : (lang === 'fr' ? 'Enregistrer' : lang === 'zh' ? '儲存' : 'Save')}
+              <button onClick={() => { setConfirmingDelete(false); onDelete(event) }} className="text-[11px] font-medium text-red-600 hover:text-red-800 shrink-0">
+                {lang === 'fr' ? 'Supprimer' : lang === 'zh' ? '刪除' : 'Delete'}
               </button>
-            </>
+            </div>
           ) : (
             <>
-              {confirmingDelete ? (
-                <div className="flex-1 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2">
-                  <span className="flex-1 text-xs text-red-700 truncate">
-                    {lang === 'fr' ? `Supprimer « ${event.title} » ?` : lang === 'zh' ? `確定刪除「${event.title}」？` : `Delete "${event.title}"?`}
-                  </span>
-                  <button onClick={() => setConfirmingDelete(false)} className="text-[11px] text-[#8a7a5e] hover:text-[#3a3326] shrink-0">
-                    {lang === 'fr' ? 'Annuler' : lang === 'zh' ? '取消' : 'Cancel'}
-                  </button>
-                  <button onClick={() => { setConfirmingDelete(false); onDelete(event) }} className="text-[11px] font-medium text-red-600 hover:text-red-800 shrink-0">
-                    {lang === 'fr' ? 'Supprimer' : lang === 'zh' ? '刪除' : 'Delete'}
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <button onClick={() => setConfirmingDelete(true)} className="flex items-center gap-1 rounded-xl border border-red-200 text-red-600 text-xs px-3 py-2 hover:bg-red-50 transition-colors">
-                    <Trash2 className="h-3 w-3" />
-                    {lang === 'fr' ? 'Suppr.' : lang === 'zh' ? '刪除' : 'Delete'}
-                  </button>
-                  <button onClick={() => setEditing(true)} className="flex-1 flex items-center justify-center gap-1 rounded-xl bg-[#ab3326] text-white text-xs py-2 hover:bg-[#861f17] transition-colors">
-                    <Pencil className="h-3 w-3" />
-                    {lang === 'fr' ? 'Modifier' : lang === 'zh' ? '編輯' : 'Edit'}
-                  </button>
-                </>
-              )}
+              <button onClick={() => setConfirmingDelete(true)} className="flex items-center gap-1 rounded-xl border border-red-200 text-red-600 text-xs px-3 py-2 hover:bg-red-50 transition-colors">
+                <Trash2 className="h-3 w-3" />
+                {lang === 'fr' ? 'Suppr.' : lang === 'zh' ? '刪除' : 'Delete'}
+              </button>
+              <span className="ml-auto flex items-center gap-1.5 text-[11px] text-[#a99873]">
+                {saving
+                  ? <><Loader2 className="h-3 w-3 animate-spin" />{lang === 'fr' ? 'Enregistrement…' : lang === 'zh' ? '儲存中…' : 'Saving…'}</>
+                  : (lang === 'fr' ? 'Enregistré automatiquement' : lang === 'zh' ? '自動儲存' : 'Saves automatically')}
+              </span>
             </>
           )}
         </div>

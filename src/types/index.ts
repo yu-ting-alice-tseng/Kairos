@@ -21,6 +21,7 @@ export interface Task {
   completedAt?: Date | string | null
   isRecurring: boolean
   parentTaskId?: string | null
+  chainName?: string | null
   calendarEventId?: string | null
   calendarId?: string | null
   tags?: string | null
@@ -209,7 +210,12 @@ export interface CalendarEvent {
   location?: string
   htmlLink?: string
   editable?: boolean    // false for read-only calendars
+  /** Set on an instance of a repeating event; points at the series it belongs to. */
+  recurringEventId?: string
 }
+
+/** Which occurrences an edit to a repeating event applies to. */
+export type RecurrenceScope = 'single' | 'following' | 'all'
 
 export interface TimeSlotSuggestion {
   start: Date

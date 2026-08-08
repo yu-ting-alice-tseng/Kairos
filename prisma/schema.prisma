@@ -120,6 +120,9 @@ model Task {
   completedAt       DateTime?
   isRecurring       Boolean    @default(false)
   parentTaskId      String?
+  // Name the user gave the chain this task heads. Lives on the head so it
+  // survives the head being replaced.
+  chainName         String?
   calendarEventId   String?
   // Sub-calendar the event lives on (Google calendar id). Recorded by the sync
   // so the monthly review can be filtered down to one calendar of an account.
