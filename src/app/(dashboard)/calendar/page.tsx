@@ -936,9 +936,18 @@ export default function CalendarPage() {
       body: JSON.stringify({ eventId: ev.id, calendarAccountId: ev.calendarAccountId, calendarId: ev.calendarId }),
     })
     if (res.ok) {
+      const { deletedTasks = 0 } = await res.json().catch(() => ({ deletedTasks: 0 }))
       invalidateEventCache()
       setExternalEvents((prev) => prev.filter((e) => e.id !== ev.id))
-      toast({ title: language === 'fr' ? 'Événement supprimé' : language === 'zh' ? '活動已刪除' : 'Event deleted', variant: 'success' })
+      // The server took the linked task and its chain with the event; re-read so
+      // the chain sidebar and the deadline blocks drop them too.
+      if (deletedTasks > 0) await loadTasks()
+      toast({
+        title: deletedTasks > 1
+          ? (language === 'fr' ? `Événement et ${deletedTasks} tâches supprimés` : language === 'zh' ? `已刪除活動與 ${deletedTasks} 項任務` : `Event and ${deletedTasks} tasks deleted`)
+          : (language === 'fr' ? 'Événement supprimé' : language === 'zh' ? '活動已刪除' : 'Event deleted'),
+        variant: 'success',
+      })
       setEditingEvent(null)
     } else {
       toast({ title: language === 'fr' ? 'Erreur lors de la suppression' : language === 'zh' ? '刪除失敗' : 'Failed to delete', variant: 'error' })

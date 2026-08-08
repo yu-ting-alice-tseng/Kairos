@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse, after } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma, isUniqueConstraintError } from '@/lib/prisma'
+import { deleteTasksWithChains, deleteTasksForEvents } from '@/lib/tasks'
 import { listGoogleEvents, createGoogleEvent, updateGoogleEvent, deleteGoogleEvent, moveGoogleEvent } from '@/lib/calendar/google'
 import { listOutlookEvents } from '@/lib/calendar/outlook'
 import { listNotionEvents } from '@/lib/calendar/notion'
@@ -313,10 +314,10 @@ async function cleanupTasks(
       const orphanIds = linkedInWindow
         .filter((t) => t.calendarEventId && !fetchedEventIds.has(t.calendarEventId))
         .map((t) => t.id)
-      if (orphanIds.length > 0) {
-        await prisma.task.updateMany({ where: { parentTaskId: { in: orphanIds }, userId }, data: { parentTaskId: null } })
-        await prisma.task.deleteMany({ where: { id: { in: orphanIds }, userId } })
-      }
+      // Take the retro chain with the task, rather than detaching its stages
+      // and leaving them behind as planning steps for a deadline that no
+      // longer exists.
+      await deleteTasksWithChains(userId, orphanIds)
     }
   } catch (err) {
     console.error('[calendar/events] task sync failed:', err)
@@ -444,7 +445,13 @@ export async function DELETE(req: NextRequest) {
       account.refreshToken,
       account.expiresAt
     )
-    return NextResponse.json({ ok: true })
+    // The event is gone, so what it stood for goes with it: the task the sync
+    // keeps for it and, when a retro chain hangs off that task, the chain's
+    // stages. Waiting for the next sync's orphan pass would leave them on the
+    // board in the meantime — and that pass only sees events inside the window
+    // the user happens to be looking at.
+    const deletedTaskIds = await deleteTasksForEvents(userId, [eventId])
+    return NextResponse.json({ ok: true, deletedTasks: deletedTaskIds.length })
   }
 
   return NextResponse.json({ error: 'Provider does not support deletion' }, { status: 400 })
