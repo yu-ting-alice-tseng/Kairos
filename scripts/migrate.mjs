@@ -4,8 +4,15 @@
  * Tracks applied migrations in a _migrations table on the database itself.
  */
 import { createClient } from '@libsql/client'
+import { config as loadEnv } from 'dotenv'
 import { readFileSync, readdirSync, statSync } from 'fs'
 import { join } from 'path'
+
+// Read the same env files Next.js does, so running this by hand locally finds
+// the database instead of silently skipping. Neither call overrides a variable
+// that is already set, so a real deployment environment still wins.
+loadEnv({ path: '.env.local' })
+loadEnv()
 
 const url = process.env.DATABASE_URL
 const authToken = process.env.TURSO_AUTH_TOKEN
