@@ -503,6 +503,27 @@ export default function CalendarPage() {
   const hourColClass = secondaryTz ? 'grid-cols-[96px_repeat(7,1fr)]' : 'grid-cols-[48px_repeat(7,1fr)]'
   const [chainPanelOpen, setChainPanelOpen] = useState(true)
   const [expandedChainIds, setExpandedChainIds] = useState<Set<string>>(new Set())
+  const [renamingChainId, setRenamingChainId] = useState<string | null>(null)
+  const [chainNameDraft, setChainNameDraft] = useState('')
+
+  /**
+   * A chain shows its latest member's title until it is given a name of its
+   * own. The name lives on the head task, so it survives the head being
+   * replaced; clearing it falls back to the automatic title.
+   */
+  const saveChainName = async (headId: string, previous: string | null) => {
+    setRenamingChainId(null)
+    const next = chainNameDraft.trim()
+    if (next === (previous ?? '')) return
+    updateTask(headId, { chainName: next || null })
+    const res = await fetch(`/api/tasks/${headId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chainName: next || null }),
+    })
+    if (res.ok) updateTask(headId, await res.json())
+    else updateTask(headId, { chainName: previous ?? null })
+  }
   const toggleChainExpanded = (id: string) =>
     setExpandedChainIds((prev) => {
       const next = new Set(prev)
@@ -1603,38 +1624,68 @@ export default function CalendarPage() {
                     allDone ? 'opacity-50 border-[#e2d6bc] bg-[#f9f5ec]' : isOverdue ? 'border-red-200 bg-red-50/40' : 'border-[#ece2cb] bg-white'
                   )}
                 >
-                  <button
-                    onClick={() => toggleChainExpanded(parent.id)}
-                    aria-expanded={expanded}
-                    className={cn(
-                      'flex flex-col gap-1 px-2.5 py-2 text-left w-full cursor-pointer transition-colors',
-                      isOverdue ? 'hover:bg-red-50' : 'hover:bg-[#f3ecdd]'
-                    )}
-                  >
+                  <div className={cn('px-2.5 py-2 transition-colors', isOverdue ? 'hover:bg-red-50/60' : 'hover:bg-[#f3ecdd]/60')}>
                     <div className="flex items-start gap-1.5 w-full min-w-0">
-                      {isOverdue && <AlertTriangle className="h-2.5 w-2.5 text-red-500 shrink-0 mt-0.5" />}
-                      {allDone && <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500 shrink-0 mt-0.5" />}
-                      {!isOverdue && !allDone && <GitBranch className="h-2.5 w-2.5 text-[#c4b48a] shrink-0 mt-0.5" />}
-                      <span
-                        className={cn('text-[11px] font-medium leading-snug truncate flex-1', allDone ? 'line-through text-[#a99873]' : isOverdue ? 'text-red-700' : 'text-[#3a3326]')}
-                        title={parent.chainName ? `${parent.chainName} — ${displayHead.title}` : displayHead.title}
+                      {isOverdue && <AlertTriangle className="h-2.5 w-2.5 text-red-500 shrink-0 mt-1" />}
+                      {allDone && <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500 shrink-0 mt-1" />}
+                      {!isOverdue && !allDone && <GitBranch className="h-2.5 w-2.5 text-[#c4b48a] shrink-0 mt-1" />}
+
+                      {/* The name is the latest member's title until you click
+                          it and type your own; leaving the field saves it. */}
+                      {renamingChainId === parent.id ? (
+                        <input
+                          autoFocus
+                          value={chainNameDraft}
+                          onChange={(e) => setChainNameDraft(e.target.value)}
+                          onBlur={() => saveChainName(parent.id, parent.chainName ?? null)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() }
+                            if (e.key === 'Escape') { setRenamingChainId(null) }
+                          }}
+                          placeholder={displayHead.title}
+                          className="flex-1 min-w-0 text-[11px] font-medium rounded border border-[#cba968] bg-white px-1 py-0.5 text-[#2a2420] focus:outline-none focus:ring-1 focus:ring-[#ab3326]/30"
+                        />
+                      ) : (
+                        <button
+                          onClick={() => { setChainNameDraft(parent.chainName ?? ''); setRenamingChainId(parent.id) }}
+                          title={language === 'zh' ? '點擊以重新命名' : language === 'fr' ? 'Cliquer pour renommer' : 'Click to rename'}
+                          className={cn(
+                            'text-[11px] font-medium leading-snug truncate flex-1 text-left rounded px-0.5 -mx-0.5 cursor-text hover:bg-[#ece2cb]/70 transition-colors',
+                            allDone ? 'line-through text-[#a99873]' : isOverdue ? 'text-red-700' : 'text-[#3a3326]'
+                          )}
+                        >
+                          {parent.chainName || displayHead.title}
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => toggleChainExpanded(parent.id)}
+                        aria-expanded={expanded}
+                        aria-label={language === 'zh' ? '展開任務鏈' : language === 'fr' ? 'Développer la chaîne' : 'Expand chain'}
+                        className="shrink-0 mt-0.5 rounded hover:bg-[#ece2cb]/70 transition-colors"
                       >
-                        {parent.chainName || displayHead.title}
-                      </span>
-                      <ChevronDown className={cn('h-3 w-3 text-[#c4b48a] shrink-0 mt-0.5 transition-transform', expanded && 'rotate-180')} />
+                        <ChevronDown className={cn('h-3 w-3 text-[#c4b48a] transition-transform', expanded && 'rotate-180')} />
+                      </button>
                     </div>
-                    {headDeadline && (
-                      <span className={cn('text-[10px] pl-4', isOverdue ? 'text-red-400' : 'text-[#a99873]')}>
-                        {fmtDate(headDeadline, language)}
+
+                    <button
+                      onClick={() => toggleChainExpanded(parent.id)}
+                      aria-expanded={expanded}
+                      className="w-full text-left cursor-pointer"
+                    >
+                      {headDeadline && (
+                        <span className={cn('block text-[10px] pl-4 mt-1', isOverdue ? 'text-red-400' : 'text-[#a99873]')}>
+                          {fmtDate(headDeadline, language)}
+                        </span>
+                      )}
+                      <span className="pl-4 mt-1 flex items-center gap-1.5 w-full">
+                        <span className="flex-1 h-1 rounded-full bg-[#ece2cb] overflow-hidden">
+                          <span className={cn('block h-full rounded-full', allDone ? 'bg-emerald-400' : 'bg-red-400')} style={{ width: `${donePct}%` }} />
+                        </span>
+                        <span className="text-[9px] text-[#c4b48a] font-mono shrink-0">{donePct}%</span>
                       </span>
-                    )}
-                    <div className="pl-4 flex items-center gap-1.5 w-full">
-                      <div className="flex-1 h-1 rounded-full bg-[#ece2cb] overflow-hidden">
-                        <div className={cn('h-full rounded-full', allDone ? 'bg-emerald-400' : 'bg-red-400')} style={{ width: `${donePct}%` }} />
-                      </div>
-                      <span className="text-[9px] text-[#c4b48a] font-mono shrink-0">{donePct}%</span>
-                    </div>
-                  </button>
+                    </button>
+                  </div>
 
                   {expanded && (
                     <div className="border-t border-[#ece2cb] px-1.5 py-1 flex flex-col gap-0.5">
