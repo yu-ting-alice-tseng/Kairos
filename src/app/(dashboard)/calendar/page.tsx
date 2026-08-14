@@ -502,6 +502,13 @@ export default function CalendarPage() {
   const HOUR_COL_PX = secondaryTz ? 96 : 48
   const hourColClass = secondaryTz ? 'grid-cols-[96px_repeat(7,1fr)]' : 'grid-cols-[48px_repeat(7,1fr)]'
   const [chainPanelOpen, setChainPanelOpen] = useState(true)
+  const [expandedChainIds, setExpandedChainIds] = useState<Set<string>>(new Set())
+  const toggleChainExpanded = (id: string) =>
+    setExpandedChainIds((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
 
   const toggleAccount = (id: string) =>
     setHiddenAccountIds((prev) => {
@@ -1116,6 +1123,41 @@ export default function CalendarPage() {
     setShowTaskForm(true)
   }
 
+  /**
+   * Opens a chain member. A task backed by a calendar event jumps the grid to
+   * its week and opens the event panel — fetching that week when it is not the
+   * one on screen, which is why clicking a chain used to do nothing at all for
+   * anything outside the current week. A stage with no event of its own opens
+   * in the task editor instead.
+   */
+  const openChainTask = async (task: Task) => {
+    if (!task.calendarEventId) {
+      handleTaskClick(task)
+      return
+    }
+    const loaded = externalEvents.find((e) => e.id === task.calendarEventId)
+    if (loaded) {
+      setViewingScheduledTask(null)
+      setEditingEvent(loaded)
+      return
+    }
+    const when = task.deadline ? new Date(String(task.deadline)) : new Date()
+    const weekStart = mondayOf(when)
+    setStartDate(weekStart)
+    const data = await fetchWeekEvents(weekStart, addDays(weekStart, 7), true).catch(() => null)
+    const ev = data?.find((e) => e.id === task.calendarEventId)
+    if (ev) {
+      setViewingScheduledTask(null)
+      setEditingEvent(ev)
+    } else {
+      // The task still points at an event Google no longer returns.
+      toast({
+        title: language === 'fr' ? 'Événement introuvable' : language === 'zh' ? '找不到對應的活動' : 'Event not found',
+        variant: 'error',
+      })
+    }
+  }
+
   const handleTaskClick = (task: Task) => {
     if (task.scheduledStart) {
       setEditingEvent(null)
@@ -1543,52 +1585,89 @@ export default function CalendarPage() {
               const allDone = parent.status === 'COMPLETED' && children.every((c) => c.status === 'COMPLETED')
               const headDeadline = displayHead.deadline ? new Date(String(displayHead.deadline)) : null
               const isOverdue = !allDone && !!headDeadline && headDeadline < new Date()
-              const donePct = Math.round(([parent, ...children].filter((t) => t.status === 'COMPLETED').length / (1 + children.length)) * 100)
-              const linkedEventId = displayHead.calendarEventId
-              const isLinked = !!linkedEventId
+              const members = [parent, ...children]
+              const donePct = Math.round((members.filter((t) => t.status === 'COMPLETED').length / members.length) * 100)
+              const expanded = expandedChainIds.has(parent.id)
+              // Read back from the deadline: the last thing due sits at the top.
+              const ordered = [...members].sort((a, b) => {
+                const da = a.deadline ? new Date(String(a.deadline)).getTime() : 0
+                const db = b.deadline ? new Date(String(b.deadline)).getTime() : 0
+                if (da !== db) return db - da
+                return a.title.localeCompare(b.title)
+              })
               return (
-                <button
+                <div
                   key={parent.id}
-                  onClick={() => {
-                    if (isLinked) {
-                      const ev = externalEvents.find((e) => e.id === linkedEventId)
-                      if (ev) {
-                        // Navigate calendar to the week containing this event then open panel
-                        if (headDeadline) setStartDate(mondayOf(headDeadline))
-                        setViewingScheduledTask(null)
-                        setEditingEvent(ev)
-                      }
-                    }
-                  }}
                   className={cn(
-                    'flex flex-col gap-1 rounded-xl border px-2.5 py-2 text-left transition-all w-full',
-                    allDone ? 'opacity-50 border-[#e2d6bc] bg-[#f9f5ec]' : isOverdue ? 'border-red-200 bg-red-50/40 hover:bg-red-50' : 'border-[#ece2cb] bg-white hover:border-[#d4c8aa] hover:bg-[#f3ecdd]',
-                    isLinked && !allDone ? 'cursor-pointer' : 'cursor-default'
+                    'rounded-xl border overflow-hidden transition-all w-full',
+                    allDone ? 'opacity-50 border-[#e2d6bc] bg-[#f9f5ec]' : isOverdue ? 'border-red-200 bg-red-50/40' : 'border-[#ece2cb] bg-white'
                   )}
                 >
-                  <div className="flex items-start gap-1.5 w-full min-w-0">
-                    {isOverdue && <AlertTriangle className="h-2.5 w-2.5 text-red-500 shrink-0 mt-0.5" />}
-                    {allDone && <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500 shrink-0 mt-0.5" />}
-                    {!isOverdue && !allDone && <GitBranch className="h-2.5 w-2.5 text-[#c4b48a] shrink-0 mt-0.5" />}
-                    <span
-                      className={cn('text-[11px] font-medium leading-snug truncate flex-1', allDone ? 'line-through text-[#a99873]' : isOverdue ? 'text-red-700' : 'text-[#3a3326]')}
-                      title={parent.chainName ? `${parent.chainName} — ${displayHead.title}` : displayHead.title}
-                    >
-                      {parent.chainName || displayHead.title}
-                    </span>
-                  </div>
-                  {headDeadline && (
-                    <span className={cn('text-[10px] pl-4', isOverdue ? 'text-red-400' : 'text-[#a99873]')}>
-                      {fmtDate(headDeadline, language)}
-                    </span>
-                  )}
-                  <div className="pl-4 flex items-center gap-1.5 w-full">
-                    <div className="flex-1 h-1 rounded-full bg-[#ece2cb] overflow-hidden">
-                      <div className={cn('h-full rounded-full', allDone ? 'bg-emerald-400' : 'bg-red-400')} style={{ width: `${donePct}%` }} />
+                  <button
+                    onClick={() => toggleChainExpanded(parent.id)}
+                    aria-expanded={expanded}
+                    className={cn(
+                      'flex flex-col gap-1 px-2.5 py-2 text-left w-full cursor-pointer transition-colors',
+                      isOverdue ? 'hover:bg-red-50' : 'hover:bg-[#f3ecdd]'
+                    )}
+                  >
+                    <div className="flex items-start gap-1.5 w-full min-w-0">
+                      {isOverdue && <AlertTriangle className="h-2.5 w-2.5 text-red-500 shrink-0 mt-0.5" />}
+                      {allDone && <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500 shrink-0 mt-0.5" />}
+                      {!isOverdue && !allDone && <GitBranch className="h-2.5 w-2.5 text-[#c4b48a] shrink-0 mt-0.5" />}
+                      <span
+                        className={cn('text-[11px] font-medium leading-snug truncate flex-1', allDone ? 'line-through text-[#a99873]' : isOverdue ? 'text-red-700' : 'text-[#3a3326]')}
+                        title={parent.chainName ? `${parent.chainName} — ${displayHead.title}` : displayHead.title}
+                      >
+                        {parent.chainName || displayHead.title}
+                      </span>
+                      <ChevronDown className={cn('h-3 w-3 text-[#c4b48a] shrink-0 mt-0.5 transition-transform', expanded && 'rotate-180')} />
                     </div>
-                    <span className="text-[9px] text-[#c4b48a] font-mono shrink-0">{donePct}%</span>
-                  </div>
-                </button>
+                    {headDeadline && (
+                      <span className={cn('text-[10px] pl-4', isOverdue ? 'text-red-400' : 'text-[#a99873]')}>
+                        {fmtDate(headDeadline, language)}
+                      </span>
+                    )}
+                    <div className="pl-4 flex items-center gap-1.5 w-full">
+                      <div className="flex-1 h-1 rounded-full bg-[#ece2cb] overflow-hidden">
+                        <div className={cn('h-full rounded-full', allDone ? 'bg-emerald-400' : 'bg-red-400')} style={{ width: `${donePct}%` }} />
+                      </div>
+                      <span className="text-[9px] text-[#c4b48a] font-mono shrink-0">{donePct}%</span>
+                    </div>
+                  </button>
+
+                  {expanded && (
+                    <div className="border-t border-[#ece2cb] px-1.5 py-1 flex flex-col gap-0.5">
+                      {ordered.map((t) => {
+                        const done = t.status === 'COMPLETED'
+                        const dl = t.deadline ? new Date(String(t.deadline)) : null
+                        const late = !done && !!dl && dl < new Date()
+                        const isHead = t.id === parent.id
+                        return (
+                          <button
+                            key={t.id}
+                            onClick={() => openChainTask(t)}
+                            title={t.title}
+                            className="flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-left w-full hover:bg-[#f3ecdd] transition-colors"
+                          >
+                            {done
+                              ? <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500 shrink-0" />
+                              : <Circle className={cn('h-2.5 w-2.5 shrink-0', late ? 'text-red-400' : 'text-[#c4b48a]')} />}
+                            <span className={cn('text-[10px] truncate flex-1', done ? 'line-through text-[#a99873]' : isHead ? 'text-[#3a3326] font-medium' : 'text-[#5c5347]')}>
+                              {t.title}
+                            </span>
+                            {dl && (
+                              <span className={cn('text-[9px] shrink-0', late ? 'text-red-400' : 'text-[#c4b48a]')}>
+                                {fmtDate(dl, language)}
+                              </span>
+                            )}
+                            {t.calendarEventId && <ChevronRight className="h-2.5 w-2.5 text-[#d4c8aa] shrink-0" />}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               )
             })}
           </div>
