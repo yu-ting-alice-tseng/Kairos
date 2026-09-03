@@ -3975,7 +3975,14 @@ function EventDetailPanel({
                 {!linkEventsLoading && linkCalEvents
                   .filter((ev) => !tasks.some((t) => t.calendarEventId === ev.id))
                   .filter((ev) => !linkSearch || ev.title.toLowerCase().includes(linkSearch.toLowerCase()))
-                  .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
+                  .sort((a, b) => {
+                    // Selected items float to the top so a bulk selection (e.g. the
+                    // "prefix" select-all) is immediately visible without scrolling
+                    const aSel = selectedLinkIds.has(a.id)
+                    const bSel = selectedLinkIds.has(b.id)
+                    if (aSel !== bSel) return aSel ? -1 : 1
+                    return new Date(a.start).getTime() - new Date(b.start).getTime()
+                  })
                   .map((calEv) => {
                     const selected = selectedLinkIds.has(calEv.id)
                     return (
