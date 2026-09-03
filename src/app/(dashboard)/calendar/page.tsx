@@ -3854,6 +3854,11 @@ function EventDetailPanel({
                     const aChain = a.id === chainParent?.id || chainSiblings.some((s) => s.id === a.id)
                     const bChain = b.id === chainParent?.id || chainSiblings.some((s) => s.id === b.id)
                     if (aChain !== bChain) return aChain ? -1 : 1
+                    // Selected items float to the top so a bulk selection (e.g. the
+                    // "prefix" select-all) is immediately visible without scrolling
+                    const aSel = selectedLinkIds.has(a.id)
+                    const bSel = selectedLinkIds.has(b.id)
+                    if (aSel !== bSel) return aSel ? -1 : 1
                     // Most recent deadline first; tasks without deadline go to bottom
                     const da = a.deadline ? new Date(String(a.deadline)).getTime() : Infinity
                     const db = b.deadline ? new Date(String(b.deadline)).getTime() : Infinity
