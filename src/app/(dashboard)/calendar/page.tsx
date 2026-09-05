@@ -4011,10 +4011,18 @@ function EventDetailPanel({
                     const aSel = selectedLinkIds.has(a.id)
                     const bSel = selectedLinkIds.has(b.id)
                     if (aSel !== bSel) return aSel ? -1 : 1
+                    // While the prefix hint is hovered/focused, pull its (not yet
+                    // selected) matches to the top too, as a selection-free preview
+                    if (prefixHintPreview && eventPrefixMatch) {
+                      const aPreview = eventPrefixMatch.ids.has(a.id)
+                      const bPreview = eventPrefixMatch.ids.has(b.id)
+                      if (aPreview !== bPreview) return aPreview ? -1 : 1
+                    }
                     return new Date(a.start).getTime() - new Date(b.start).getTime()
                   })
                   .map((calEv) => {
                     const selected = selectedLinkIds.has(calEv.id)
+                    const isPrefixPreview = prefixHintPreview && !selected && (eventPrefixMatch?.ids.has(calEv.id) ?? false)
                     return (
                       <button
                         key={calEv.id}
@@ -4025,7 +4033,11 @@ function EventDetailPanel({
                         })}
                         className={cn(
                           'flex items-center gap-2 text-xs rounded-lg px-2.5 py-2 text-left transition-colors border',
-                          selected ? 'bg-red-50 border-red-200' : 'hover:bg-[#f3ecdd] border-transparent',
+                          selected
+                            ? 'bg-red-50 border-red-200'
+                            : isPrefixPreview
+                              ? 'bg-amber-50 border-amber-300 ring-1 ring-amber-200'
+                              : 'hover:bg-[#f3ecdd] border-transparent',
                         )}
                       >
                         <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-red-600 border-red-600' : 'border-[#c4b48a]'}`}>
