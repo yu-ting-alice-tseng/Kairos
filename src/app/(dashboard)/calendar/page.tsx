@@ -3879,6 +3879,13 @@ function EventDetailPanel({
                     const aSel = selectedLinkIds.has(a.id)
                     const bSel = selectedLinkIds.has(b.id)
                     if (aSel !== bSel) return aSel ? -1 : 1
+                    // While the prefix hint is hovered/focused, pull its (not yet
+                    // selected) matches to the top too, as a selection-free preview
+                    if (prefixHintPreview && eventPrefixMatch) {
+                      const aPreview = eventPrefixMatch.ids.has(a.id)
+                      const bPreview = eventPrefixMatch.ids.has(b.id)
+                      if (aPreview !== bPreview) return aPreview ? -1 : 1
+                    }
                     // Most recent deadline first; tasks without deadline go to bottom
                     const da = a.deadline ? new Date(String(a.deadline)).getTime() : Infinity
                     const db = b.deadline ? new Date(String(b.deadline)).getTime() : Infinity
@@ -3890,6 +3897,7 @@ function EventDetailPanel({
                     const isCurrentChainMember = t.id === chainParent?.id || chainSiblings.some((s) => s.id === t.id)
                     const inOtherChain = chainedTaskIds.has(t.id) && !isCurrentChainMember
                     const isConflictPending = chainConflictPending?.id === t.id
+                    const isPrefixPreview = prefixHintPreview && !selected && (eventPrefixMatch?.ids.has(t.id) ?? false)
                     return (
                       <div key={t.id} className="flex flex-col gap-0.5">
                         <button
@@ -3914,7 +3922,9 @@ function EventDetailPanel({
                                   : 'hover:bg-[#f3ecdd] border-transparent'
                               : selected
                                 ? 'bg-red-50 border-red-200'
-                                : 'hover:bg-[#f3ecdd] border-transparent',
+                                : isPrefixPreview
+                                  ? 'bg-amber-50 border-amber-300 ring-1 ring-amber-200'
+                                  : 'hover:bg-[#f3ecdd] border-transparent',
                           )}
                         >
                           <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-red-600 border-red-600' : joinOther ? 'bg-blue-500 border-blue-500' : 'border-[#c4b48a]'}`}>
