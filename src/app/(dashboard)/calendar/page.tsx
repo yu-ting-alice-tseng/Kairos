@@ -3777,13 +3777,13 @@ function EventDetailPanel({
 
         {/* Link task dialog */}
         {linkingChain && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => { setLinkingChain(false); setSelectedLinkIds(new Set()); setJoinOtherChainIds(new Set()); setChainConflictPending(null) }}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => { setLinkingChain(false); setSelectedLinkIds(new Set()); setJoinOtherChainIds(new Set()); setChainConflictPending(null); setPrefixHintPreview(false) }}>
             <div className="bg-[#fbf7ee] rounded-2xl border border-[#e2d6bc] shadow-xl w-80 max-h-[70vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
               <div className="px-4 py-3 border-b border-[#ece2cb] flex items-center justify-between">
                 <p className="text-sm font-semibold text-[#2a2420]">
                   {lang === 'zh' ? '連結任務' : lang === 'fr' ? 'Lier une tâche' : 'Link a task'}
                 </p>
-                <button onClick={() => { setLinkingChain(false); setSelectedLinkIds(new Set()); setJoinOtherChainIds(new Set()); setChainConflictPending(null) }} className="p-1 rounded-lg hover:bg-[#ece2cb] text-[#a99873]">
+                <button onClick={() => { setLinkingChain(false); setSelectedLinkIds(new Set()); setJoinOtherChainIds(new Set()); setChainConflictPending(null); setPrefixHintPreview(false) }} className="p-1 rounded-lg hover:bg-[#ece2cb] text-[#a99873]">
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
