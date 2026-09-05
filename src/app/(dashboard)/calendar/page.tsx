@@ -3043,6 +3043,35 @@ function EventDetailPanel({
   const [chainConflictPending, setChainConflictPending] = React.useState<Task | null>(null)
   // Tasks where user chose "join their chain" (current event joins that chain instead)
   const [joinOtherChainIds, setJoinOtherChainIds] = React.useState<Set<string>>(new Set())
+  // Whether the "N event(s) share prefix" hint is being hovered/focused — while true,
+  // the matching (not-yet-selected) rows are highlighted and pulled to the top so the
+  // user can preview them before committing to "Select all".
+  const [prefixHintPreview, setPrefixHintPreview] = React.useState(false)
+
+  // Tasks/events sharing the same "prefix | rest" title prefix as this event — used
+  // both by the "Select all with this prefix" hint and its hover preview.
+  const eventPrefixMatch = React.useMemo(() => {
+    const sep = event.title.includes('｜') ? '｜' : event.title.includes('|') ? '|' : null
+    const eventPrefix = sep ? event.title.split(sep)[0].trim() : null
+    if (!eventPrefix || eventPrefix.length < 2) return null
+    const prefixLower = eventPrefix.toLowerCase()
+    const matchingTaskIds = tasks
+      .filter((t) => {
+        if (t.id === chainParent?.id || chainSiblings.some((s) => s.id === t.id)) return false
+        return t.title.toLowerCase().startsWith(prefixLower)
+      })
+      .map((t) => t.id)
+    const matchingCalEventIds = linkCalEvents
+      .filter((ev) => {
+        if (ev.id === event.id) return false
+        if (tasks.some((t) => t.calendarEventId === ev.id)) return false
+        return ev.title.toLowerCase().startsWith(prefixLower)
+      })
+      .map((ev) => ev.id)
+    const ids = new Set([...matchingTaskIds, ...matchingCalEventIds])
+    if (ids.size === 0) return null
+    return { eventPrefix, matchingTaskIds, matchingCalEventIds, ids }
+  }, [event.title, event.id, tasks, linkCalEvents, chainParent, chainSiblings])
 
   // Relevance: count event-title chars found in task title (higher = more relevant)
   const relevanceScore = React.useCallback((taskTitle: string): number => {
