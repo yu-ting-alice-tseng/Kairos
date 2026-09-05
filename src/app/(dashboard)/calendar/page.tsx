@@ -3801,30 +3801,21 @@ function EventDetailPanel({
                   onChange={(e) => setLinkSearch(e.target.value)}
                 />
               </div>
-              {/* Prefix suggestion: tasks/events sharing the same prefix as this event */}
-              {(() => {
-                const sep = event.title.includes('｜') ? '｜' : event.title.includes('|') ? '|' : null
-                const eventPrefix = sep ? event.title.split(sep)[0].trim() : null
-                if (!eventPrefix || eventPrefix.length < 2) return null
-                const prefixLower = eventPrefix.toLowerCase()
-                const matchingTaskIds = tasks
-                  .filter((t) => {
-                    if (t.id === chainParent?.id || chainSiblings.some((s) => s.id === t.id)) return false
-                    return t.title.toLowerCase().startsWith(prefixLower)
-                  })
-                  .map((t) => t.id)
-                const matchingCalEventIds = linkCalEvents
-                  .filter((ev) => {
-                    if (ev.id === event.id) return false
-                    if (tasks.some((t) => t.calendarEventId === ev.id)) return false
-                    return ev.title.toLowerCase().startsWith(prefixLower)
-                  })
-                  .map((ev) => ev.id)
-                const total = matchingTaskIds.length + matchingCalEventIds.length
-                if (total === 0) return null
-                const allSelected = [...matchingTaskIds, ...matchingCalEventIds].every((id) => selectedLinkIds.has(id))
+              {/* Prefix suggestion: tasks/events sharing the same prefix as this event.
+                  Hovering/focusing it previews the matches (highlighted + pulled to
+                  the top of the list below) without changing the selection. */}
+              {eventPrefixMatch && (() => {
+                const { eventPrefix, matchingTaskIds, matchingCalEventIds, ids } = eventPrefixMatch
+                const total = ids.size
+                const allSelected = [...ids].every((id) => selectedLinkIds.has(id))
                 return (
-                  <div className="mx-2 mt-1 mb-0.5 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2">
+                  <div
+                    className="mx-2 mt-1 mb-0.5 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2"
+                    onMouseEnter={() => setPrefixHintPreview(true)}
+                    onMouseLeave={() => setPrefixHintPreview(false)}
+                    onFocus={() => setPrefixHintPreview(true)}
+                    onBlur={() => setPrefixHintPreview(false)}
+                  >
                     <GitBranch className="h-3.5 w-3.5 text-amber-600 shrink-0" />
                     <span className="flex-1 text-[11px] text-amber-800">
                       {lang === 'zh'
