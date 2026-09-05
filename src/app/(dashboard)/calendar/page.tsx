@@ -4073,7 +4073,7 @@ function EventDetailPanel({
                 })()}
               </div>
               <div className="px-4 py-3 border-t border-[#ece2cb] flex gap-2">
-                <button onClick={() => { setLinkingChain(false); setSelectedLinkIds(new Set()); setJoinOtherChainIds(new Set()); setChainConflictPending(null) }} className="flex-1 rounded-xl border border-[#e2d6bc] text-[#5c5347] text-xs py-2 hover:bg-[#ece2cb] transition-colors">
+                <button onClick={() => { setLinkingChain(false); setSelectedLinkIds(new Set()); setJoinOtherChainIds(new Set()); setChainConflictPending(null); setPrefixHintPreview(false) }} className="flex-1 rounded-xl border border-[#e2d6bc] text-[#5c5347] text-xs py-2 hover:bg-[#ece2cb] transition-colors">
                   {lang === 'zh' ? '取消' : lang === 'fr' ? 'Annuler' : 'Cancel'}
                 </button>
                 <button
