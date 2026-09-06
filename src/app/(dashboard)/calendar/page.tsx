@@ -3537,19 +3537,22 @@ function EventDetailPanel({
 
         {/* Location */}
         {event.location && (
-          <div className="flex items-start gap-2 text-[#5c5347]">
+          <div className="flex items-start gap-2 text-[#5c5347] min-w-0">
             <MapPin className="h-3.5 w-3.5 text-[#a99873] shrink-0 mt-0.5" />
-            <span className="text-xs break-words">{event.location}</span>
+            {/* min-w-0: without it, a flex row item's minimum width defaults to its
+                unbroken content (e.g. a long URL some imports put in the location),
+                so it overflows the panel instead of wrapping */}
+            <span className="text-xs min-w-0 break-words [overflow-wrap:anywhere]">{event.location}</span>
           </div>
         )}
 
         {/* Description */}
         {event.description && (
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5 min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-[#a99873]">
               {lang === 'fr' ? 'Description' : lang === 'zh' ? '說明' : 'Description'}
             </p>
-            <p className="text-xs text-[#5c5347] leading-relaxed whitespace-pre-wrap break-words">{event.description}</p>
+            <p className="text-xs text-[#5c5347] leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{event.description}</p>
           </div>
         )}
 
