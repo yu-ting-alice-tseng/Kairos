@@ -4133,8 +4133,11 @@ function EventDetailPanel({
       {event.editable && (
         <div className="shrink-0 border-t border-[#e2d6bc] px-4 py-3 flex items-center gap-2">
           {confirmingDelete ? (
-            <div className="flex-1 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2">
-              <span className="flex-1 text-xs text-red-700 truncate">
+            <div className="flex-1 min-w-0 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2">
+              {/* min-w-0 on both this row and the span below: a flex item's default
+                  min-width is its unclipped content width, so `truncate` never gets
+                  a chance to kick in without it — the title just overflows the panel */}
+              <span className="flex-1 min-w-0 text-xs text-red-700 truncate">
                 {lang === 'fr' ? `Supprimer « ${event.title} » ?` : lang === 'zh' ? `確定刪除「${event.title}」？` : `Delete "${event.title}"?`}
               </span>
               <button onClick={() => setConfirmingDelete(false)} className="text-[11px] text-[#8a7a5e] hover:text-[#3a3326] shrink-0">
