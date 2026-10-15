@@ -114,9 +114,9 @@ function assignColumns<T extends { id: string; start: number; end: number }>(
 }
 
 type DayBlock =
-  | { id: string; kind: 'event'; start: number; end: number; col: number; cols: number; data: CalendarEvent }
-  | { id: string; kind: 'task'; start: number; end: number; col: number; cols: number; data: Task }
-  | { id: string; kind: 'habit'; start: number; end: number; col: number; cols: number; data: Habit }
+  | { id: string; kind: 'event'; start: number; end: number; height: number; col: number; cols: number; data: CalendarEvent }
+  | { id: string; kind: 'task'; start: number; end: number; height: number; col: number; cols: number; data: Task }
+  | { id: string; kind: 'habit'; start: number; end: number; height: number; col: number; cols: number; data: Habit }
 
 const toGridMinutes = (d: Date) => d.getHours() * 60 + d.getMinutes() - GRID_START_HOUR * 60
 
@@ -852,7 +852,16 @@ export default function CalendarPage() {
     })
 
     const cols = assignColumns(deduped)
-    return deduped.map((it) => ({ ...it, ...(cols.get(it.id) ?? { col: 0, cols: 1 }) })) as DayBlock[]
+    return deduped.map((it) => {
+      // Short blocks get a minimum visual height, but never let that padding
+      // spill into a block that starts right after this one ends.
+      const nextStart = deduped.reduce(
+        (min, o) => (o.id !== it.id && o.start >= it.end && o.start < min ? o.start : min),
+        Infinity
+      )
+      const height = Math.max(it.end - it.start, Math.min(MIN_BLOCK_HEIGHT, nextStart - it.start))
+      return { ...it, height, ...(cols.get(it.id) ?? { col: 0, cols: 1 }) }
+    }) as DayBlock[]
   }
 
   // ─── Event handlers ─────────────────────────────────────────────────────────
@@ -1940,7 +1949,7 @@ export default function CalendarPage() {
                   <div key={day.toISOString()} className="relative px-1">
                     {blocks.map((block) => {
                       const top = block.start
-                      const height = Math.max(block.end - block.start, MIN_BLOCK_HEIGHT)
+                      const height = block.height
                       const cols = Math.max(1, block.cols)
                       const widthPct = 100 / cols
                       const leftPct = block.col * widthPct
