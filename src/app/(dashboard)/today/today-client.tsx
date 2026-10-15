@@ -25,7 +25,9 @@ import {
   useDraggable, useDroppable,
 } from '@dnd-kit/core'
 
-const SCHEDULE_HOURS = Array.from({ length: 16 }, (_, i) => i + 7) // 07–22
+const SCHEDULE_HOURS = Array.from({ length: 24 }, (_, i) => i) // 00–23
+// Hour the schedule scrolls to on first load
+const SCHEDULE_INITIAL_HOUR = 7
 
 /**
  * Does an event belong to `day`? The fetch covers today *and* tomorrow, so the
@@ -231,6 +233,15 @@ export default function TodayClient({ initialTasks, initialHabits }: {
   const [todayEvents, setTodayEvents] = useState<CalendarEvent[]>([])
   const [selectedDate, setSelectedDate] = useState<Date>(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d })
   const dateInputRef = React.useRef<HTMLInputElement>(null)
+  // The schedule covers the whole day; open it at the start of a typical day.
+  const didInitialScheduleScrollRef = React.useRef(false)
+  const scheduleScrollRef = React.useCallback((el: HTMLDivElement | null) => {
+    if (!el || didInitialScheduleScrollRef.current) return
+    const slot = el.children[SCHEDULE_HOURS.indexOf(SCHEDULE_INITIAL_HOUR)] as HTMLElement | undefined
+    if (!slot) return
+    didInitialScheduleScrollRef.current = true
+    el.scrollTop = slot.offsetTop - el.offsetTop - 8
+  }, [])
 
   const dateFnsLocale = language === 'fr' ? fr : language === 'zh' ? zhTW : enUS
   const today = format(selectedDate, 'PPPP', { locale: dateFnsLocale })
@@ -835,7 +846,7 @@ export default function TodayClient({ initialTasks, initialHabits }: {
                     {language === 'fr' ? 'Déposer pour planifier' : language === 'zh' ? '拖入以排程' : 'Drop to schedule'}
                   </span>
                 </div>
-                <div className="overflow-y-auto p-2 flex flex-col gap-0.5">
+                <div ref={scheduleScrollRef} className="overflow-y-auto p-2 flex flex-col gap-0.5">
                   {SCHEDULE_HOURS.map((hour) => {
                     const nowHour = new Date().getHours()
                     const eventsAtHour = todayEvents
