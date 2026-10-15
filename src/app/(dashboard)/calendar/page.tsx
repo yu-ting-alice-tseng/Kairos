@@ -28,7 +28,9 @@ function fmtDate(d: Date, lang: 'fr' | 'en' | 'zh'): string {
   return d.toLocaleDateString(loc, { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) })
 }
 
-const HOURS = Array.from({ length: 14 }, (_, i) => i + 7)
+const HOURS = Array.from({ length: 24 }, (_, i) => i)
+// Hour the grid scrolls to on first load
+const INITIAL_SCROLL_HOUR = 7
 const GRID_START_HOUR = HOURS[0]
 const GRID_TOTAL_MIN = HOURS.length * 60
 const MIN_BLOCK_HEIGHT = 20
@@ -554,6 +556,14 @@ export default function CalendarPage() {
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null)
   const [dragPreview, setDragPreview] = useState<{ dayIdx: number; hour: number; minute?: number } | null>(null)
   const gridRef = useRef<HTMLDivElement>(null)
+  // The grid covers the whole day; open it at the start of a typical day.
+  // Callback ref because the grid only mounts after the loading screen.
+  const didInitialScrollRef = useRef(false)
+  const gridScrollRef = useCallback((el: HTMLDivElement | null) => {
+    if (!el || didInitialScrollRef.current) return
+    didInitialScrollRef.current = true
+    el.scrollTop = INITIAL_SCROLL_HOUR * 60
+  }, [])
 
   // Undo stack for drag moves
   const undoStackRef = useRef<UndoItem[]>([])
@@ -824,14 +834,14 @@ export default function CalendarPage() {
       const s = new Date(ev.start)
       if (!isSameDay(s, day)) return
       const e = ev.end ? new Date(ev.end) : new Date(s.getTime() + 30 * 60000)
-      raw.push({ id: `ev-${ev.id}`, kind: 'event', start: toGridMinutes(s), end: toGridMinutes(e), data: ev })
+      raw.push({ id: `ev-${ev.id}`, kind: 'event', start: toGridMinutes(s), end: toGridMinutes(s) + (e.getTime() - s.getTime()) / 60000, data: ev })
     })
 
     scheduledTasks.forEach((task) => {
       const s = new Date(task.scheduledStart!)
       if (!isSameDay(s, day)) return
       const e = new Date(task.scheduledEnd!)
-      raw.push({ id: `task-${task.id}`, kind: 'task', start: toGridMinutes(s), end: toGridMinutes(e), data: task })
+      raw.push({ id: `task-${task.id}`, kind: 'task', start: toGridMinutes(s), end: toGridMinutes(s) + (e.getTime() - s.getTime()) / 60000, data: task })
     })
 
     habits.forEach((h) => {
@@ -846,8 +856,8 @@ export default function CalendarPage() {
       .map((it) => ({
         ...it,
         start: Math.max(0, it.start),
-        // Events ending past midnight have negative gridMinutes — extend them to grid bottom
-        end: it.end < 0 && it.start >= 0 ? GRID_TOTAL_MIN : Math.min(GRID_TOTAL_MIN, Math.max(0, it.end)),
+        // Ends are start + duration, so events running past midnight clip to grid bottom
+        end: Math.min(GRID_TOTAL_MIN, Math.max(0, it.end)),
       }))
       .filter((it) => it.end > 0 && it.end > it.start)
 
@@ -1745,6 +1755,7 @@ export default function CalendarPage() {
 
       {/* Calendar grid — swipe / pointer-drag anywhere to change week */}
       <div
+        ref={gridScrollRef}
         className={cn('flex-1 overflow-auto min-w-0', isDragging && 'cursor-grabbing select-none')}
         style={{ touchAction: 'pan-y' }}
         onTouchStart={(e) => { touchStartXRef.current = e.touches[0].clientX }}
