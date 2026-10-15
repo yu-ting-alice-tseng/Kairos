@@ -121,6 +121,7 @@ export async function createGoogleEvent(
   event: {
     title: string
     description?: string
+    location?: string
     start: Date
     end: Date
     colorId?: string
@@ -142,6 +143,7 @@ export async function createGoogleEvent(
     requestBody: {
       summary: event.title,
       description: event.description,
+      location: event.location,
       start: event.allDay ? { date: toDateStr(event.start) } : { dateTime: event.start.toISOString() },
       end: event.allDay ? { date: toDateStr(event.end) } : { dateTime: event.end.toISOString() },
       colorId: event.colorId,

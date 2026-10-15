@@ -14,6 +14,7 @@ const eventPostSchema = z.object({
   calendarId: z.string().optional(),
   title: z.string().min(1).max(1000),
   description: z.string().max(10000).optional(),
+  location: z.string().max(1000).optional(),
   start: z.string().min(1),
   end: z.string().optional(),
   allDay: z.boolean().optional(),
@@ -338,7 +339,7 @@ export async function POST(req: NextRequest) {
   const parsed = eventPostSchema.safeParse(await req.json())
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 })
 
-  const { calendarAccountId, calendarId, title, description, start, end, allDay } = parsed.data
+  const { calendarAccountId, calendarId, title, description, location, start, end, allDay } = parsed.data
 
   const account = await prisma.calendarAccount.findFirst({
     where: { id: calendarAccountId, userId },
@@ -352,7 +353,7 @@ export async function POST(req: NextRequest) {
       account.id,
       account.accessToken,
       calendarId ?? 'primary',
-      { title, description, start: startDate, end: endDate, allDay: !!allDay },
+      { title, description, location, start: startDate, end: endDate, allDay: !!allDay },
       account.refreshToken,
       account.expiresAt
     )

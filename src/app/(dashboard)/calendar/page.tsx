@@ -14,7 +14,7 @@ import { cn, formatTime, getQuadrant, EISENHOWER_QUADRANTS } from '@/lib/utils'
 import {
   ChevronLeft, ChevronRight, ChevronDown, Calendar, Plus, Clock, Loader2, Pencil, Trash2, X,
   MapPin, ExternalLink, GitBranch, AlignLeft, CheckCircle2, Circle, Check, Sparkles, Undo2, AlertTriangle, RefreshCw,
-  Search,
+  Search, Copy, Keyboard,
 } from 'lucide-react'
 import {
   format, addDays, isSameDay, isToday,
@@ -34,6 +34,13 @@ const INITIAL_SCROLL_HOUR = 7
 const GRID_START_HOUR = HOURS[0]
 const GRID_TOTAL_MIN = HOURS.length * 60
 const MIN_BLOCK_HEIGHT = 20
+
+/** True when a key press is meant for a text field, not a calendar shortcut. */
+function isTypingTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null
+  if (!el) return false
+  return el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)
+}
 
 // Which lines of a timed block fit without being clipped mid-line
 // (text-xs line = 16px, py-1 = 8px, border = 2px).
@@ -319,7 +326,7 @@ function EventSearchBox({ lang, calendarAccounts, onPick }: {
       setOpen(false)
     }
     const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') || (e.key === '/' && !isTypingTarget(e.target))) {
         e.preventDefault()
         inputRef.current?.focus()
       }
@@ -487,6 +494,9 @@ export default function CalendarPage() {
   const [externalEvents, setExternalEvents] = useState<CalendarEvent[]>([])
   const [eventsLoading, setEventsLoading] = useState(false)
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
+  // Bumped by the Delete key; the event panel answers by asking to confirm.
+  const [deleteRequest, setDeleteRequest] = useState(0)
+  const [showShortcuts, setShowShortcuts] = useState(false)
   const [eventSaving, setEventSaving] = useState(false)
   const [viewingHabit, setViewingHabit] = useState<Habit | null>(null)
   const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null)
@@ -1016,6 +1026,96 @@ export default function CalendarPage() {
     }
   }
 
+  /**
+   * Copy an event into the same calendar at the same time and open the copy,
+   * so the next step (moving it to another day or hour) is right there.
+   */
+  const handleDuplicateEvent = async (ev: CalendarEvent) => {
+    if (!ev.calendarAccountId || ev.editable === false) return
+    const res = await fetch('/api/calendar/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        calendarAccountId: ev.calendarAccountId,
+        calendarId: ev.calendarId ?? 'primary',
+        title: ev.title,
+        ...(ev.description ? { description: ev.description } : {}),
+        ...(ev.location ? { location: ev.location } : {}),
+        start: new Date(ev.start).toISOString(),
+        end: new Date(ev.end).toISOString(),
+        allDay: !!ev.allDay,
+      }),
+    })
+    const data = res.ok ? await res.json().catch(() => null) : null
+    if (!data?.eventId) {
+      toast({ title: language === 'fr' ? 'Échec de la duplication' : language === 'zh' ? '複製失敗' : 'Failed to duplicate', variant: 'error' })
+      return
+    }
+    invalidateEventCache()
+    // The copy is a standalone event: no series, link or habit of the original.
+    const copy: CalendarEvent = {
+      ...ev, id: data.eventId, recurringEventId: undefined, htmlLink: undefined, taskId: undefined, habitId: undefined,
+    }
+    setExternalEvents((prev) => [...prev, copy])
+    setViewingScheduledTask(null)
+    setEditingEvent(copy)
+    toast({ title: language === 'fr' ? 'Événement dupliqué' : language === 'zh' ? '已複製活動' : 'Event duplicated', variant: 'success' })
+  }
+
+  // Calendar keyboard shortcuts (Ctrl+Z undo has its own handler below).
+  // Read through a ref so the listener always sees the current state.
+  const shortcutRef = useRef<(e: KeyboardEvent) => void>(() => {})
+  const handleShortcut = (e: KeyboardEvent) => {
+    if (isTypingTarget(e.target) || showTaskForm || e.altKey) return
+    // An open dialog (this help, settings, …) owns the keyboard.
+    if (document.querySelector('[role="dialog"]')) return
+    const mod = e.ctrlKey || e.metaKey
+    const key = e.key.toLowerCase()
+    const selected = editingEvent && editingEvent.editable !== false ? editingEvent : null
+
+    if (mod && key === 'd') {
+      // Without a selected event, leave Ctrl+D to the browser (bookmark).
+      if (!selected) return
+      e.preventDefault()
+      handleDuplicateEvent(selected)
+      return
+    }
+    if (mod) return
+
+    switch (e.key) {
+      case 'Delete':
+      case 'Backspace':
+        if (!selected) return
+        e.preventDefault()
+        setDeleteRequest((n) => n + 1)
+        return
+      case 'Escape':
+        setEditingEvent(null); setViewingScheduledTask(null); setViewingHabit(null)
+        return
+      case '?':
+        e.preventDefault()
+        setShowShortcuts((v) => !v)
+        return
+      case 'ArrowLeft':
+        e.preventDefault(); setStartDate((d) => addDays(d, -7)); return
+      case 'ArrowRight':
+        e.preventDefault(); setStartDate((d) => addDays(d, 7)); return
+    }
+    switch (key) {
+      case 'k': case 'p': setStartDate((d) => addDays(d, -7)); return
+      case 'j': case 'n': setStartDate((d) => addDays(d, 7)); return
+      case 't': setStartDate(mondayOf(new Date())); return
+      case 'c': e.preventDefault(); setSelectedDate(new Date()); setShowTaskForm(true); return
+      case 'r': loadTasks(); loadExternalEvents(); return
+    }
+  }
+  useEffect(() => { shortcutRef.current = handleShortcut })
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => shortcutRef.current(e)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const handleCompleteTask = useCallback(async (task: Task) => {
     const isCompleted = task.status === 'COMPLETED'
     const newStatus = isCompleted ? 'PENDING' : 'COMPLETED'
@@ -1517,6 +1617,15 @@ export default function CalendarPage() {
               onClick={() => { loadTasks(); loadExternalEvents() }}
             >
               <RefreshCw className={cn('h-4 w-4', eventsLoading && 'animate-spin')} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={language === 'fr' ? 'Raccourcis clavier (?)' : language === 'zh' ? '鍵盤快捷鍵（?）' : 'Keyboard shortcuts (?)'}
+              title={language === 'fr' ? 'Raccourcis clavier (?)' : language === 'zh' ? '鍵盤快捷鍵（?）' : 'Keyboard shortcuts (?)'}
+              onClick={() => setShowShortcuts(true)}
+            >
+              <Keyboard className="h-4 w-4" />
             </Button>
           </div>
         </div>
@@ -2149,6 +2258,8 @@ export default function CalendarPage() {
         </div>
       </div>
 
+      <ShortcutsDialog open={showShortcuts} lang={language} onClose={() => setShowShortcuts(false)} />
+
       {/* Right detail panel */}
       {editingEvent ? (
         <EventDetailPanel
@@ -2160,6 +2271,8 @@ export default function CalendarPage() {
           currentWeekEvents={externalEvents}
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
+          onDuplicate={handleDuplicateEvent}
+          deleteRequest={deleteRequest}
           onToggleDone={toggleEventDone}
           onClose={() => setEditingEvent(null)}
           onTasksRefresh={async () => {
@@ -2887,8 +3000,54 @@ function ScheduledTaskPanel({
 
 // ─── Event Detail Panel ───────────────────────────────────────────────────────
 
+// ─── Keyboard shortcuts help ─────────────────────────────────────────────────
+
+const SHORTCUTS: { keys: string[]; zh: string; fr: string; en: string }[] = [
+  { keys: ['Ctrl', 'D'], zh: '複製選取的活動', fr: "Dupliquer l'événement sélectionné", en: 'Duplicate selected event' },
+  { keys: ['Delete'], zh: '刪除選取的活動', fr: "Supprimer l'événement sélectionné", en: 'Delete selected event' },
+  { keys: ['Ctrl', 'Z'], zh: '復原移動', fr: 'Annuler le déplacement', en: 'Undo move' },
+  { keys: ['Esc'], zh: '關閉詳情面板', fr: 'Fermer le panneau', en: 'Close panel' },
+  { keys: ['C'], zh: '新增任務', fr: 'Nouvelle tâche', en: 'New task' },
+  { keys: ['T'], zh: '回到本週', fr: "Aller à aujourd'hui", en: 'Go to today' },
+  { keys: ['J', 'N', '→'], zh: '下一週', fr: 'Semaine suivante', en: 'Next week' },
+  { keys: ['K', 'P', '←'], zh: '上一週', fr: 'Semaine précédente', en: 'Previous week' },
+  { keys: ['R'], zh: '重新整理', fr: 'Actualiser', en: 'Refresh' },
+  { keys: ['/'], zh: '搜尋活動（也可用 Ctrl+K）', fr: 'Rechercher (ou Ctrl+K)', en: 'Search events (or Ctrl+K)' },
+  { keys: ['?'], zh: '顯示這份清單', fr: 'Afficher cette liste', en: 'Show this list' },
+]
+
+function ShortcutsDialog({ open, lang, onClose }: { open: boolean; lang: 'fr' | 'en' | 'zh'; onClose: () => void }) {
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{lang === 'fr' ? 'Raccourcis clavier' : lang === 'zh' ? '鍵盤快捷鍵' : 'Keyboard shortcuts'}</DialogTitle>
+        </DialogHeader>
+        <ul className="flex flex-col gap-1.5">
+          {SHORTCUTS.map((sc) => (
+            <li key={sc.en} className="flex items-center justify-between gap-3 text-sm text-[#3a3326]">
+              <span>{sc[lang]}</span>
+              <span className="flex items-center gap-1 shrink-0">
+                {sc.keys.map((k, i) => (
+                  <React.Fragment key={k}>
+                    {i > 0 && <span className="text-[10px] text-[#a99873]">{sc.keys[0] === 'Ctrl' ? '+' : '/'}</span>}
+                    <kbd className="rounded-md border border-[#e2d6bc] bg-[#f3ecdd] px-1.5 py-0.5 text-[11px] font-mono text-[#5c5347]">{k}</kbd>
+                  </React.Fragment>
+                ))}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="text-[11px] text-[#a99873]">
+          {lang === 'fr' ? 'Sur Mac, Cmd remplace Ctrl.' : lang === 'zh' ? 'Mac 上用 Cmd 取代 Ctrl。' : 'On Mac, use Cmd instead of Ctrl.'}
+        </p>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function EventDetailPanel({
-  event, lang, saving, tasks, calendarAccounts, currentWeekEvents, onSave, onDelete, onClose, onTasksRefresh, onNavigateToDate, onMoveEvent, onToggleDone,
+  event, lang, saving, tasks, calendarAccounts, currentWeekEvents, onSave, onDelete, onDuplicate, deleteRequest = 0, onClose, onTasksRefresh, onNavigateToDate, onMoveEvent, onToggleDone,
 }: {
   event: CalendarEvent
   lang: 'fr' | 'en' | 'zh'
@@ -2898,6 +3057,9 @@ function EventDetailPanel({
   currentWeekEvents: CalendarEvent[]
   onSave: (ev: CalendarEvent, title: string, start: string, end: string, allDay?: boolean, scope?: RecurrenceScope) => void
   onDelete: (ev: CalendarEvent) => void
+  onDuplicate?: (ev: CalendarEvent) => Promise<void>
+  /** Changes each time the Delete key is pressed on this event. */
+  deleteRequest?: number
   onToggleDone: (ev: CalendarEvent) => Promise<void>
   onClose: () => void
   onTasksRefresh: () => void | Promise<void>
@@ -2911,6 +3073,14 @@ function EventDetailPanel({
     return new Date(dt.getTime() - offset).toISOString().slice(0, 16)
   }
   const [confirmingDelete, setConfirmingDelete] = React.useState(false)
+  const [duplicating, setDuplicating] = React.useState(false)
+  // Only a Delete press made while this panel is open asks to confirm.
+  const seenDeleteRequestRef = React.useRef(deleteRequest)
+  React.useEffect(() => {
+    if (deleteRequest === seenDeleteRequestRef.current) return
+    seenDeleteRequestRef.current = deleteRequest
+    setConfirmingDelete(true)
+  }, [deleteRequest])
   const [editingTitle, setEditingTitle] = React.useState(false)
   const [editingChainName, setEditingChainName] = React.useState(false)
   const [chainNameDraft, setChainNameDraft] = React.useState('')
@@ -4131,6 +4301,17 @@ function EventDetailPanel({
                 <Trash2 className="h-3 w-3" />
                 {lang === 'fr' ? 'Suppr.' : lang === 'zh' ? '刪除' : 'Delete'}
               </button>
+              {onDuplicate && (
+                <button
+                  disabled={duplicating}
+                  onClick={async () => { setDuplicating(true); try { await onDuplicate(event) } finally { setDuplicating(false) } }}
+                  title="Ctrl+D"
+                  className="flex items-center gap-1 rounded-xl border border-[#e2d6bc] text-[#5c5347] text-xs px-3 py-2 hover:bg-[#f3ecdd] transition-colors disabled:opacity-50"
+                >
+                  {duplicating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Copy className="h-3 w-3" />}
+                  {lang === 'fr' ? 'Dupliquer' : lang === 'zh' ? '複製' : 'Duplicate'}
+                </button>
+              )}
               <span className="ml-auto flex items-center gap-1.5 text-[11px] text-[#a99873]">
                 {saving
                   ? <><Loader2 className="h-3 w-3 animate-spin" />{lang === 'fr' ? 'Enregistrement…' : lang === 'zh' ? '儲存中…' : 'Saving…'}</>
