@@ -33,6 +33,15 @@ const GRID_START_HOUR = HOURS[0]
 const GRID_TOTAL_MIN = HOURS.length * 60
 const MIN_BLOCK_HEIGHT = 20
 
+// Which lines of a timed block fit without being clipped mid-line
+// (text-xs line = 16px, py-1 = 8px, border = 2px).
+function blockFit(height: number): 'none' | 'compact' | 'title' | 'full' {
+  if (height < 12) return 'none'
+  if (height < 26) return 'compact'
+  if (height < 42) return 'title'
+  return 'full'
+}
+
 // ─── Built-in templates for auto-detection ────────────────────────────────────
 
 const RETRO_BUILTIN = [
@@ -1961,6 +1970,13 @@ export default function CalendarPage() {
                         width: `calc(${widthPct}% - 4px)`,
                         zIndex: block.col,
                       }
+                      // Only render lines that fit whole: overflow-hidden would otherwise
+                      // slice text in half on short or narrow blocks.
+                      const fit = blockFit(height)
+                      const boxPad = fit === 'compact' ? 'py-0 flex items-center' : fit === 'none' ? 'py-0' : 'py-1'
+                      const titleCls = fit === 'compact' ? 'text-[10px] leading-none' : ''
+                      const showTime = fit === 'full'
+                      const btnPos = fit === 'compact' || fit === 'none' ? 'top-1/2 -translate-y-1/2' : 'bottom-1'
 
                       if (block.kind === 'event') {
                         const ev = block.data
@@ -1973,7 +1989,7 @@ export default function CalendarPage() {
                             onClick={(e) => { e.stopPropagation(); if (!isDragging) { setViewingScheduledTask(null); setEditingEvent(ev) } }}
                             onMouseDown={(e) => { if (ev.editable) startDrag(e, ev) }}
                             className={cn(
-                              'rounded-lg px-2 py-1 text-xs border border-dashed overflow-hidden group',
+                              'rounded-lg px-2 text-xs border border-dashed overflow-hidden group', boxPad,
                               isDragging ? 'pointer-events-none' : 'pointer-events-auto',
                               ev.editable ? 'cursor-grab hover:brightness-95' : 'select-none',
                               isDraggingThis && 'opacity-40',
@@ -1981,17 +1997,17 @@ export default function CalendarPage() {
                             )}
                             style={{ ...boxStyle, backgroundColor: evColor + '22', borderColor: evColor }}
                           >
-                            <p className={cn('font-medium truncate text-[#2a2420]', evDone && 'line-through text-[#6e6147]')} title={ev.title}>{ev.title}</p>
-                            {ev.start && ev.end && (
-                              <p className="flex items-center gap-1 text-[#5c5347]">
-                                <Clock className="h-2.5 w-2.5" />
+                            {fit !== 'none' && <p className={cn('font-medium truncate text-[#2a2420] min-w-0', titleCls, evDone && 'line-through text-[#6e6147]')} title={ev.title}>{ev.title}</p>}
+                            {showTime && ev.start && ev.end && (
+                              <p className="truncate text-[#5c5347]">
+                                <Clock className="inline h-2.5 w-2.5 mr-1 -mt-px" />
                                 {formatTime(ev.start)} – {formatTime(ev.end)}
                               </p>
                             )}
                             {!ev.habitId && (
                               <button
                                 className={cn(
-                                  'absolute bottom-1 right-1 h-4 w-4 rounded-full flex items-center justify-center bg-white/80 hover:bg-emerald-50 transition-all',
+                                  'absolute right-1 h-4 w-4 rounded-full flex items-center justify-center bg-white/80 hover:bg-emerald-50 transition-all', btnPos,
                                   evDone ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                                 )}
                                 onMouseDown={(e) => e.stopPropagation()}
@@ -2019,7 +2035,7 @@ export default function CalendarPage() {
                             onMouseDown={(e) => { if (!isDragging) startTaskDrag(e, task) }}
                             onClick={(e) => { e.stopPropagation(); if (!isDragging) handleTaskClick(task) }}
                             className={cn(
-                              'rounded-lg px-2 py-1 text-xs border transition-all hover:shadow-sm overflow-hidden group relative',
+                              'rounded-lg px-2 text-xs border transition-all hover:shadow-sm overflow-hidden group relative', boxPad,
                               isDragging ? 'pointer-events-none' : 'cursor-grab pointer-events-auto',
                               isDraggingThisTask && 'opacity-40',
                               done
@@ -2030,17 +2046,17 @@ export default function CalendarPage() {
                             )}
                             style={{ ...boxStyle, ...(!done && !isRetro && acc ? { borderLeftColor: acc.color, borderLeftWidth: 3 } : {}) }}
                           >
-                            {isRetro && <GitBranch className="h-2.5 w-2.5 absolute top-1 right-1 opacity-50" />}
-                            <p className={cn('font-medium truncate', done && 'line-through')} title={task.title}>{task.title}</p>
-                            {task.scheduledStart && task.scheduledEnd && (
-                              <p className="opacity-70 flex items-center gap-1">
-                                <Clock className="h-2.5 w-2.5" />
+                            {isRetro && fit !== 'compact' && fit !== 'none' && <GitBranch className="h-2.5 w-2.5 absolute top-1 right-1 opacity-50" />}
+                            {fit !== 'none' && <p className={cn('font-medium truncate min-w-0', titleCls, done && 'line-through')} title={task.title}>{task.title}</p>}
+                            {showTime && task.scheduledStart && task.scheduledEnd && (
+                              <p className="opacity-70 truncate">
+                                <Clock className="inline h-2.5 w-2.5 mr-1 -mt-px" />
                                 {formatTime(task.scheduledStart)} – {formatTime(task.scheduledEnd)}
                               </p>
                             )}
                             {/* Completion toggle */}
                             <button
-                              className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 h-4 w-4 rounded-full flex items-center justify-center bg-white/80 hover:bg-emerald-50 transition-all"
+                              className={cn('absolute right-1 opacity-0 group-hover:opacity-100 h-4 w-4 rounded-full flex items-center justify-center bg-white/80 hover:bg-emerald-50 transition-all', btnPos)}
                               onClick={(e) => { e.stopPropagation(); handleCompleteTask(task) }}
                               title={done ? (language === 'zh' ? '標為未完成' : 'Mark pending') : (language === 'zh' ? '標為完成' : 'Mark done')}
                             >
@@ -2058,22 +2074,24 @@ export default function CalendarPage() {
                           key={block.id}
                           title={habit.title}
                           className={cn(
-                            'rounded-lg px-2 py-1 text-xs border overflow-hidden group relative',
+                            'rounded-lg px-2 text-xs border overflow-hidden group relative', boxPad,
                             isDragging ? 'pointer-events-none' : 'pointer-events-auto',
                             doneToday ? 'border-emerald-200 opacity-60' : 'border-dashed cursor-pointer hover:brightness-95'
                           )}
                           style={{ ...boxStyle, backgroundColor: habit.color + '18', borderColor: habit.color, color: habit.color }}
                           onClick={(e) => { e.stopPropagation(); setViewingHabit(habit) }}
                         >
-                          <p className={cn('font-medium truncate', doneToday && 'line-through')} title={`${habit.icon ?? '🔁'} ${habit.title}`}>
-                            {habit.icon ?? '🔁'} {habit.title}
-                          </p>
-                          {habit.durationMinutes && (
-                            <p className="opacity-70 text-[10px]">{habit.durationMinutes} min</p>
+                          {fit !== 'none' && (
+                            <p className={cn('font-medium truncate min-w-0', titleCls, doneToday && 'line-through')} title={`${habit.icon ?? '🔁'} ${habit.title}`}>
+                              {habit.icon ?? '🔁'} {habit.title}
+                            </p>
+                          )}
+                          {showTime && habit.durationMinutes && (
+                            <p className="opacity-70 text-[10px] truncate">{habit.durationMinutes} min</p>
                           )}
                           {!doneToday && (
                             <button
-                              className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 h-4 w-4 rounded-full flex items-center justify-center bg-white/80 hover:bg-emerald-50 transition-all"
+                              className={cn('absolute right-1 opacity-0 group-hover:opacity-100 h-4 w-4 rounded-full flex items-center justify-center bg-white/80 hover:bg-emerald-50 transition-all', btnPos)}
                               onClick={(e) => { e.stopPropagation(); handleCompleteHabit(habit) }}
                               title={language === 'zh' ? '完成習慣' : language === 'fr' ? 'Valider' : 'Complete'}
                             >
