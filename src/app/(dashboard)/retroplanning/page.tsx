@@ -1,5 +1,6 @@
 'use client'
 
+import { Shortcut, usePageShortcuts } from '@/components/ui/ShortcutsDialog'
 import React, { useEffect, useState, useCallback } from 'react'
 import { useAppStore } from '@/stores/useAppStore'
 import { Task, RetroTemplate, RetroStage, CalendarAccount } from '@/types'
@@ -474,6 +475,11 @@ function TemplateEditor({
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
+const RETRO_SHORTCUTS: Shortcut[] = [
+  { keys: ['C'], zh: '新增範本', fr: 'Nouveau modèle', en: 'New template' },
+  { keys: ['Esc'], zh: '關閉任務鏈詳情', fr: 'Fermer la chaîne', en: 'Close chain details' },
+]
+
 export default function RetroplanningPage() {
   const { language, tasks, setTasks, updateTask, removeTask, calendarAccounts } = useAppStore()
   const { toast } = useGlobalToast()
@@ -489,6 +495,12 @@ export default function RetroplanningPage() {
   const [deleteChainDialog, setDeleteChainDialog] = useState<{ parentId: string; parentTitle: string; childIds: string[] } | null>(null)
   const [deleteChainLoading, setDeleteChainLoading] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+
+  usePageShortcuts(RETRO_SHORTCUTS, (key) => {
+    if (key === 'c') { setEditingTemplate('new'); return true }
+    if (key === 'Escape' && selectedChainId) { setSelectedChainId(null); return true }
+    return false
+  })
   const [historySearch, setHistorySearch] = useState('')
   const [linkDialog, setLinkDialog] = useState<{ parentId: string; parentTitle: string } | null>(null)
   const [linkSearch, setLinkSearch] = useState('')

@@ -1,5 +1,6 @@
 'use client'
 
+import { Shortcut, usePageShortcuts } from '@/components/ui/ShortcutsDialog'
 import React, { useState, useRef } from 'react'
 import { useAppStore } from '@/stores/useAppStore'
 import { t } from '@/lib/i18n'
@@ -80,6 +81,12 @@ function shiftMonth(key: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
+const REVIEW_SHORTCUTS: Shortcut[] = [
+  { keys: ['T'], zh: '回到本月', fr: 'Revenir au mois en cours', en: 'Go to this month' },
+  { keys: ['J', 'N', '→'], zh: '下個月', fr: 'Mois suivant', en: 'Next month' },
+  { keys: ['K', 'P', '←'], zh: '上個月', fr: 'Mois précédent', en: 'Previous month' },
+]
+
 const currentMonthKey = () => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -126,6 +133,20 @@ export default function ReviewClient({ initialStats, accounts }: {
       if (seq === reqSeq.current) setLoading(false)
     }
   }
+
+  usePageShortcuts(REVIEW_SHORTCUTS, (key) => {
+    switch (key) {
+      case 'ArrowLeft': case 'k': case 'p': load({ month: shiftMonth(month, -1) }); return true
+      case 'ArrowRight': case 'j': case 'n':
+        // Same limit as the next-month button: no future months.
+        if (month >= currentMonthKey()) return false
+        load({ month: shiftMonth(month, 1) }); return true
+      case 't':
+        if (month === currentMonthKey()) return false
+        load({ month: currentMonthKey() }); return true
+    }
+    return false
+  })
 
   const months = stats?.months ?? []
   const maxCompleted = Math.max(1, ...months.map((m) => m.completed))

@@ -1,5 +1,6 @@
 'use client'
 
+import { Shortcut, usePageShortcuts } from '@/components/ui/ShortcutsDialog'
 import React, { useEffect, useState, useCallback } from 'react'
 import { useAppStore, AppState, KeywordRule } from '@/stores/useAppStore'
 import { Task, Habit, CalendarEvent } from '@/types'
@@ -17,6 +18,14 @@ import { useGlobalToast } from '@/components/providers/ToastProvider'
 import { cn } from '@/lib/utils'
 
 const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === 'true'
+
+const MATRIX_SHORTCUTS: Shortcut[] = [
+  { keys: ['C'], zh: '新增任務', fr: 'Nouvelle tâche', en: 'New task' },
+  { keys: ['T'], zh: '回到今天', fr: "Aller à aujourd'hui", en: 'Go to today' },
+  { keys: ['J', 'N', '→'], zh: '下一天', fr: 'Jour suivant', en: 'Next day' },
+  { keys: ['K', 'P', '←'], zh: '前一天', fr: 'Jour précédent', en: 'Previous day' },
+  { keys: ['F'], zh: '開關規則面板', fr: 'Afficher/masquer les règles', en: 'Toggle rules panel' },
+]
 
 export default function MatrixPage() {
   const { language, tasks, setTasks, updateTask, removeTask, addTask, habits, setHabits, calendarAccounts, matrixExcludePatterns, setMatrixExcludePatterns, keywordRules, setKeywordRules, hideHabitsViews, toggleHabitsView } = useAppStore()
@@ -234,6 +243,18 @@ export default function MatrixPage() {
   const prevDay = () => setSelectedDate((d) => { const n = new Date(d); n.setDate(n.getDate() - 1); return n })
   const nextDay = () => setSelectedDate((d) => { const n = new Date(d); n.setDate(n.getDate() + 1); return n })
   const goToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); setSelectedDate(d) }
+
+  usePageShortcuts(MATRIX_SHORTCUTS, (key) => {
+    if (showTaskForm) return false
+    switch (key) {
+      case 'ArrowLeft': case 'k': case 'p': prevDay(); return true
+      case 'ArrowRight': case 'j': case 'n': nextDay(); return true
+      case 't': goToday(); return true
+      case 'c': setShowTaskForm(true); return true
+      case 'f': setSettingsPanelOpen((o) => !o); return true
+    }
+    return false
+  })
 
   if (loading) return <InkLoader size="page" />
 

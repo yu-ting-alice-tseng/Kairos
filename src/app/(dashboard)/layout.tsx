@@ -2,6 +2,7 @@ import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { OnboardingTour } from '@/components/onboarding/OnboardingTour'
+import { GlobalShortcuts } from '@/components/ui/ShortcutsDialog'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth()
@@ -14,6 +15,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         {children}
       </main>
       <OnboardingTour />
+      <GlobalShortcuts />
     </div>
   )
 }

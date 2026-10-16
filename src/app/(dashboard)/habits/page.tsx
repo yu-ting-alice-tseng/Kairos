@@ -1,5 +1,6 @@
 'use client'
 
+import { Shortcut, usePageShortcuts } from '@/components/ui/ShortcutsDialog'
 import React, { useEffect, useState, useCallback } from 'react'
 import { useAppStore } from '@/stores/useAppStore'
 import { Habit } from '@/types'
@@ -181,12 +182,21 @@ function HabitForm({ open, onClose, onSave, habit, lang }: {
   )
 }
 
+const HABITS_SHORTCUTS: Shortcut[] = [
+  { keys: ['C'], zh: '新增習慣', fr: 'Nouvelle habitude', en: 'New habit' },
+]
+
 export default function HabitsPage() {
   const { language, habits, setHabits } = useAppStore()
   const { toast } = useGlobalToast()
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null)
+
+  usePageShortcuts(HABITS_SHORTCUTS, (key) => {
+    if (key !== 'c' || showForm) return false
+    setEditingHabit(null); setShowForm(true); return true
+  })
 
   const loadHabits = useCallback(async () => {
     setLoading(true)

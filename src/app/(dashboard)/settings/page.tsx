@@ -1,5 +1,6 @@
 'use client'
 
+import { Shortcut, usePageShortcuts } from '@/components/ui/ShortcutsDialog'
 import React, { useEffect, useState, useCallback } from 'react'
 import { useAppStore } from '@/stores/useAppStore'
 import { CalendarAccount, CalendarProvider } from '@/types'
@@ -587,6 +588,10 @@ function TagChip({ label, onRemove }: { label: string; onRemove: () => void }) {
 
 // ── Settings page ─────────────────────────────────────────────────────────────
 
+const SETTINGS_SHORTCUTS: Shortcut[] = [
+  { keys: ['C'], zh: '新增日曆帳號', fr: 'Ajouter un calendrier', en: 'Add calendar' },
+]
+
 export default function SettingsPage() {
   const {
     language, setLanguage,
@@ -599,6 +604,11 @@ export default function SettingsPage() {
   const [showAddCalendar, setShowAddCalendar] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [editAccount, setEditAccount] = useState<CalendarAccount | null>(null)
+
+  usePageShortcuts(SETTINGS_SHORTCUTS, (key) => {
+    if (key !== 'c') return false
+    setShowAddCalendar(true); return true
+  })
   const [feedbackRating, setFeedbackRating] = useState(0)
 
   // Surface OAuth result toasts

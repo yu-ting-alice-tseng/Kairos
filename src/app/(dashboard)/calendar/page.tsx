@@ -8,7 +8,7 @@ import { Task, CalendarEvent, Habit, RetroTemplate, RecurrenceScope } from '@/ty
 import { t } from '@/lib/i18n'
 import { TaskForm } from '@/components/tasks/TaskForm'
 import { InkLoader } from '@/components/ui/InkLoader'
-import { ShortcutsDialog, Shortcut, isTypingTarget, shortcutsBlocked } from '@/components/ui/ShortcutsDialog'
+import { Shortcut, isTypingTarget, shortcutsBlocked, usePageShortcuts, openShortcutsHelp } from '@/components/ui/ShortcutsDialog'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn, formatTime, getQuadrant, EISENHOWER_QUADRANTS } from '@/lib/utils'
@@ -490,7 +490,6 @@ export default function CalendarPage() {
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
   // Bumped by the Delete key; the event panel answers by asking to confirm.
   const [deleteRequest, setDeleteRequest] = useState(0)
-  const [showShortcuts, setShowShortcuts] = useState(false)
   const [eventSaving, setEventSaving] = useState(false)
   const [viewingHabit, setViewingHabit] = useState<Habit | null>(null)
   const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null)
@@ -1057,53 +1056,36 @@ export default function CalendarPage() {
   }
 
   // Calendar keyboard shortcuts (Ctrl+Z undo has its own handler below).
-  // Read through a ref so the listener always sees the current state.
-  const shortcutRef = useRef<(e: KeyboardEvent) => void>(() => {})
-  const handleShortcut = (e: KeyboardEvent) => {
-    if (shortcutsBlocked(e) || showTaskForm) return
-    const mod = e.ctrlKey || e.metaKey
-    const key = e.key.toLowerCase()
-    const selected = editingEvent && editingEvent.editable !== false ? editingEvent : null
-
-    if (mod && key === 'd') {
-      // Without a selected event, leave Ctrl+D to the browser (bookmark).
-      if (!selected) return
-      e.preventDefault()
-      handleDuplicateEvent(selected)
-      return
-    }
-    if (mod) return
-
-    switch (e.key) {
-      case 'Delete':
-      case 'Backspace':
-        if (!selected) return
-        e.preventDefault()
-        setDeleteRequest((n) => n + 1)
-        return
-      case 'Escape':
-        setEditingEvent(null); setViewingScheduledTask(null); setViewingHabit(null)
-        return
-      case '?':
-        e.preventDefault()
-        setShowShortcuts((v) => !v)
-        return
-      case 'ArrowLeft':
-        e.preventDefault(); setStartDate((d) => addDays(d, -7)); return
-      case 'ArrowRight':
-        e.preventDefault(); setStartDate((d) => addDays(d, 7)); return
-    }
+  const selectedEvent = editingEvent && editingEvent.editable !== false ? editingEvent : null
+  usePageShortcuts(SHORTCUTS, (key) => {
+    if (showTaskForm) return false
     switch (key) {
-      case 'k': case 'p': setStartDate((d) => addDays(d, -7)); return
-      case 'j': case 'n': setStartDate((d) => addDays(d, 7)); return
-      case 't': setStartDate(mondayOf(new Date())); return
-      case 'c': e.preventDefault(); setSelectedDate(new Date()); setShowTaskForm(true); return
-      case 'r': loadTasks(); loadExternalEvents(); return
+      case 'Delete': case 'Backspace':
+        if (!selectedEvent) return false
+        setDeleteRequest((n) => n + 1); return true
+      case 'Escape':
+        setEditingEvent(null); setViewingScheduledTask(null); setViewingHabit(null); return false
+      case 'ArrowLeft': case 'k': case 'p': setStartDate((d) => addDays(d, -7)); return true
+      case 'ArrowRight': case 'j': case 'n': setStartDate((d) => addDays(d, 7)); return true
+      case 't': setStartDate(mondayOf(new Date())); return true
+      case 'c': setSelectedDate(new Date()); setShowTaskForm(true); return true
+      case 'r': loadTasks(); loadExternalEvents(); return true
     }
-  }
-  useEffect(() => { shortcutRef.current = handleShortcut })
+    return false
+  })
+  // Ctrl/Cmd+D duplicates the selected event; with none selected it stays the
+  // browser's bookmark shortcut. Read through a ref for the current selection.
+  const duplicateShortcutRef = useRef<(e: KeyboardEvent) => void>(() => {})
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => shortcutRef.current(e)
+    duplicateShortcutRef.current = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'd' || !selectedEvent) return
+      if (shortcutsBlocked(e) || showTaskForm) return
+      e.preventDefault()
+      handleDuplicateEvent(selectedEvent)
+    }
+  })
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => duplicateShortcutRef.current(e)
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
@@ -1615,7 +1597,7 @@ export default function CalendarPage() {
               size="icon-sm"
               aria-label={language === 'fr' ? 'Raccourcis clavier (?)' : language === 'zh' ? '鍵盤快捷鍵（?）' : 'Keyboard shortcuts (?)'}
               title={language === 'fr' ? 'Raccourcis clavier (?)' : language === 'zh' ? '鍵盤快捷鍵（?）' : 'Keyboard shortcuts (?)'}
-              onClick={() => setShowShortcuts(true)}
+              onClick={openShortcutsHelp}
             >
               <Keyboard className="h-4 w-4" />
             </Button>
@@ -2249,8 +2231,6 @@ export default function CalendarPage() {
           </div>
         </div>
       </div>
-
-      <ShortcutsDialog open={showShortcuts} lang={language} shortcuts={SHORTCUTS} onClose={() => setShowShortcuts(false)} />
 
       {/* Right detail panel */}
       {editingEvent ? (
@@ -3005,7 +2985,6 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ['K', 'P', '←'], zh: '上一週', fr: 'Semaine précédente', en: 'Previous week' },
   { keys: ['R'], zh: '重新整理', fr: 'Actualiser', en: 'Refresh' },
   { keys: ['/'], zh: '搜尋活動（也可用 Ctrl+K）', fr: 'Rechercher (ou Ctrl+K)', en: 'Search events (or Ctrl+K)' },
-  { keys: ['?'], zh: '顯示這份清單', fr: 'Afficher cette liste', en: 'Show this list' },
 ]
 
 function EventDetailPanel({
