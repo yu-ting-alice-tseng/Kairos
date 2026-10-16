@@ -100,7 +100,7 @@ export function TaskCard({
           )}
 
           <div className="flex items-center gap-2 mt-2 flex-wrap">
-            {quadrant && (
+            {quadrant && !isCompleted && (
               <span className={`text-xs font-medium rounded-full px-2 py-0.5 ${quadrant.bgColor} ${quadrant.color}`}>
                 {lang === 'fr' ? quadrant.labelFr : lang === 'zh' ? QUADRANT_LABEL_ZH[quadrant.id] : quadrant.label}
               </span>
@@ -117,7 +117,12 @@ export function TaskCard({
                 {formatDate(task.scheduledStart, lang)}
               </span>
             )}
-            {task.deadline && !(selectedDate && isSameDay(new Date(String(task.deadline)), selectedDate)) && (
+            {task.deadline && isCompleted && !(selectedDate && isSameDay(new Date(String(task.deadline)), selectedDate)) && (
+              <span className="text-xs text-[#a99873]">
+                {lang === 'fr' ? `prévue le ${formatDate(task.deadline, lang)}` : lang === 'zh' ? `原定 ${formatDate(task.deadline, lang)}` : `was due ${formatDate(task.deadline, lang)}`}
+              </span>
+            )}
+            {task.deadline && !isCompleted && !(selectedDate && isSameDay(new Date(String(task.deadline)), selectedDate)) && (
               <Badge
                 variant={overdue ? 'destructive' : 'warning'}
                 className="text-xs py-0"
@@ -152,8 +157,10 @@ export function TaskCard({
             <div className="mt-2 ml-4 flex flex-col gap-1.5 border-l-2 border-red-100 pl-3">
               {task.subTasks.map((sub) => (
                 <div key={sub.id} className="flex items-center gap-2">
-                  <Circle className="h-3 w-3 text-[#cbb98e] shrink-0" />
-                  <p className="text-xs text-[#6e6147]">{sub.title}</p>
+                  {sub.status === 'COMPLETED'
+                    ? <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
+                    : <Circle className="h-3 w-3 text-[#cbb98e] shrink-0" />}
+                  <p className={`text-xs ${sub.status === 'COMPLETED' ? 'line-through text-[#a99873]' : 'text-[#6e6147]'}`}>{sub.title}</p>
                   {sub.estimatedMinutes && (
                     <span className="text-xs text-[#a99873]">({formatDuration(sub.estimatedMinutes, lang)})</span>
                   )}

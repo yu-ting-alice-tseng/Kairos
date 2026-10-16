@@ -17,7 +17,7 @@ import { Candle } from '@/components/ui/Candle'
 import { generatePriorityList, formatDate, formatDeadlineLabel, deadlineTooltip, formatTime, cn } from '@/lib/utils'
 import {
   Plus, Sparkles, Sun, Flame, RefreshCw, MessageSquare, ChevronRight, ChevronLeft,
-  CheckCircle2, Clock, Loader2, X, AlarmCheck, Zap, CalendarDays, SlidersHorizontal, Keyboard, Bell,
+  CheckCircle2, Clock, Loader2, X, AlarmCheck, ChevronDown, Zap, CalendarDays, SlidersHorizontal, Keyboard, Bell,
 } from 'lucide-react'
 import { format, isSameDay } from 'date-fns'
 import { fr, enUS, zhTW } from 'date-fns/locale'
@@ -327,6 +327,7 @@ export default function TodayClient({ initialTasks, initialHabits }: {
   const [rescheduleSuggestion, setRescheduleSuggestion] = useState<{ start: string; end: string; reason: string } | null>(null)
   const [rescheduleLoading, setRescheduleLoading] = useState(false)
   const [todayEvents, setTodayEvents] = useState<CalendarEvent[]>([])
+  const [showCatchUp, setShowCatchUp] = useState(false)
   const [selectedDate, setSelectedDate] = useState<Date>(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d })
   const dateInputRef = React.useRef<HTMLInputElement>(null)
   // The schedule covers the whole day; open it at the start of a typical day.
@@ -452,13 +453,19 @@ export default function TodayClient({ initialTasks, initialHabits }: {
     return { ...task, importance: match.importance, urgency: match.urgence }
   }
 
+  const selectedDayStart = new Date(selectedDate); selectedDayStart.setHours(0, 0, 0, 0)
+  // A slot booked on an earlier day and never done is overdue work again: it
+  // goes back to the list instead of haunting every later day's timeline.
+  const isStaleSchedule = (t: Task) =>
+    !!t.scheduledStart && new Date(String(t.scheduledStart)) < selectedDayStart && t.status !== 'COMPLETED'
+
   const prioritizedTasks = dedupeCalendarTasks(generatePriorityList(
     tasks.filter((t) =>
       t.status !== 'COMPLETED' &&
       t.status !== 'CANCELLED' &&
       t.parentTaskId === null &&
       (!t.calendarEventId || allDayLinkedTaskIds.has(t.id)) &&
-      !t.scheduledStart &&
+      (!t.scheduledStart || isStaleSchedule(t)) &&
       isDueOnDate(t.deadline, selectedDate) &&
       !isExcludedFromToday(t.title) &&
       !isReminder(t.title)
@@ -471,10 +478,10 @@ export default function TodayClient({ initialTasks, initialHabits }: {
     .filter((ev) => !linkedCalendarEventIds.has(ev.id) && !isExcludedFromToday(ev.title) && !isReminder(ev.title))
     .sort((a, b) => a.title.localeCompare(b.title))
 
+  // Only the slots booked on the day being shown; done ones stay, struck through.
   const scheduledTasks = tasks.filter(
     (t) => t.status !== 'CANCELLED' && !!t.scheduledStart && !isReminder(t.title) &&
-      // Done ones stay on the timeline (struck through) on the day they ran
-      (t.status !== 'COMPLETED' || isSameDay(new Date(String(t.scheduledStart)), selectedDate))
+      isSameDay(new Date(String(t.scheduledStart)), selectedDate)
   )
 
   const reminderTasks = dedupeCalendarTasks(tasks.filter((t) => {
@@ -497,7 +504,12 @@ export default function TodayClient({ initialTasks, initialHabits }: {
     if (t.status !== 'COMPLETED' || t.parentTaskId !== null) return false
     if (t.completedAt && isSameDay(new Date(String(t.completedAt)), selectedDate)) return true
     return !!t.deadline && isSameDay(new Date(String(t.deadline)), selectedDate)
-  }))
+  })).sort((a, b) => String(b.completedAt ?? '').localeCompare(String(a.completedAt ?? '')))
+  // Overdue tasks from earlier days that were cleared on this day. They count,
+  // but sit in their own folded group so the day's own work reads first.
+  const isCatchUp = (t: Task) => !!t.deadline && new Date(String(t.deadline)) < selectedDayStart
+  const completedOwn = completedToday.filter((t) => !isCatchUp(t))
+  const completedCatchUp = completedToday.filter(isCatchUp)
 
   const handleComplete = async (id: string) => {
     const task = tasks.find((t) => t.id === id)
@@ -615,9 +627,20 @@ export default function TodayClient({ initialTasks, initialHabits }: {
   }
 
   const handleDelete = async (id: string) => {
-    await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
-    const fresh = await fetch('/api/tasks')
-    if (fresh.ok) setTasks(await fresh.json())
+    const before = tasks
+    removeTask(id)
+    const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE' }).catch(() => null)
+    if (!res?.ok) {
+      setTasks(before)
+      toast({ title: language === 'fr' ? 'Suppression impossible' : language === 'zh' ? '刪除失敗' : 'Delete failed', variant: 'error' })
+      return
+    }
+    // Mirror the server: children of a deleted task are detached, and a deleted
+    // subtask leaves its parent's list.
+    for (const t of before) {
+      if (t.parentTaskId === id) updateTask(t.id, { parentTaskId: null })
+      if (t.subTasks?.some((sub) => sub.id === id)) updateTask(t.id, { subTasks: t.subTasks.filter((sub) => sub.id !== id) })
+    }
   }
 
   const handleBreakdownAccept = async (task: Task, subTasks: { title: string; description: string; estimatedMinutes: number; importance: number; urgency: number }[]) => {
@@ -728,8 +751,6 @@ export default function TodayClient({ initialTasks, initialHabits }: {
       if (res.ok) {
         const updated = await res.json()
         updateTask(taskId, updated)
-        setEditingTask(updated)
-        setShowTaskForm(true)
         toast({ title: language === 'fr' ? 'Retiré du planning' : language === 'zh' ? '已移出行程' : 'Removed from schedule', variant: 'success' })
       }
       return
@@ -738,8 +759,7 @@ export default function TodayClient({ initialTasks, initialHabits }: {
     // Schedule: drag from right panel to hour slot
     if (!overId.startsWith('hour-') || activeId.startsWith('scheduled-')) return
     const hour = parseInt(overId.replace('hour-', ''), 10)
-    const now = new Date()
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, 0, 0)
+    const start = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), hour, 0, 0)
     const task = tasks.find((t) => t.id === activeId)
     const durationMs = (task?.estimatedMinutes ?? 60) * 60 * 1000
     const end = new Date(start.getTime() + durationMs)
@@ -971,17 +991,22 @@ export default function TodayClient({ initialTasks, initialHabits }: {
               </h2>
               {!habitsHidden && <div className="flex flex-wrap gap-2">
                 {todayHabits.map((habit) => {
-                  const doneToday = (habit as Habit & { completions?: { id: string }[] }).completions?.length ?? 0
+                  const doneToday = isSelectedToday ? ((habit as Habit & { completions?: { id: string }[] }).completions?.length ?? 0) : 0
                   return (
                     <button
                       key={habit.id}
                       onClick={() => doneToday > 0 ? handleUncompleteHabit(habit.id) : handleCompleteHabit(habit.id)}
-                      className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm border transition-all ${
+                      // Check-ins are recorded for the actual today; on any other
+                      // day the chips only show the habit, they don't log anything.
+                      disabled={!isSelectedToday}
+                      className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm border transition-all disabled:cursor-default disabled:opacity-70 ${
                         doneToday > 0
                           ? 'bg-[#4f6f5e]/10 border-[#4f6f5e]/30 text-[#3d5a4b] hover:bg-[#ab3326]/10 hover:border-[#ab3326]/30 hover:text-[#861f17]'
                           : 'bg-[#fbf7ee] border-[#e2d6bc] text-[#5c5347] hover:border-[#cba968] hover:bg-[#f3ecdd]'
                       }`}
-                      title={doneToday > 0 ? (language === 'fr' ? 'Annuler' : language === 'zh' ? '取消' : 'Undo') : undefined}
+                      title={!isSelectedToday
+                        ? (language === 'fr' ? "Pointage possible seulement aujourd'hui" : language === 'zh' ? '只能在今天打卡' : 'Check-ins only for today')
+                        : doneToday > 0 ? (language === 'fr' ? 'Annuler' : language === 'zh' ? '取消' : 'Undo') : undefined}
                     >
                       <span className="h-2 w-2 rounded-full" style={{ backgroundColor: habit.color }} />
                       {habit.title}
@@ -1154,7 +1179,7 @@ export default function TodayClient({ initialTasks, initialHabits }: {
                       <div className="flex-1 h-px bg-[#e7c894]/50" />
                     </div>
                     <div className="flex flex-col gap-2">
-                      {completedToday.map((task) => (
+                      {completedOwn.map((task) => (
                         <TaskCard
                           key={task.id}
                           task={task}
@@ -1164,10 +1189,44 @@ export default function TodayClient({ initialTasks, initialHabits }: {
                           onBreakdown={setBreakdownTask}
                           onReschedule={handleReschedule}
                           lang={language}
+                          selectedDate={selectedDate}
                           compact
                         />
                       ))}
                     </div>
+                    {completedCatchUp.length > 0 && (
+                      <div className="mt-2">
+                        <button
+                          onClick={() => setShowCatchUp((v) => !v)}
+                          className="flex items-center gap-1 text-xs text-[#8a7a5e] hover:text-[#5c5347] py-1"
+                        >
+                          {showCatchUp ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                          {language === 'fr'
+                            ? `${completedCatchUp.length} tâche(s) en retard rattrapée(s) ce jour`
+                            : language === 'zh'
+                              ? `這天補完的逾期任務（${completedCatchUp.length}）`
+                              : `${completedCatchUp.length} overdue task(s) caught up this day`}
+                        </button>
+                        {showCatchUp && (
+                          <div className="flex flex-col gap-2 mt-1">
+                            {completedCatchUp.map((task) => (
+                              <TaskCard
+                                key={task.id}
+                                task={task}
+                                onComplete={handleComplete}
+                                onEdit={(t) => { setEditingTask(t); setShowTaskForm(true) }}
+                                onDelete={handleDelete}
+                                onBreakdown={setBreakdownTask}
+                                onReschedule={handleReschedule}
+                                lang={language}
+                                selectedDate={selectedDate}
+                                compact
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </DroppableTasksPanel>

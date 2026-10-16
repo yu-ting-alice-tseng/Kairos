@@ -30,7 +30,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if ('deadline' in body) updateData.deadline = body.deadline ? new Date(body.deadline) : null
   if ('scheduledStart' in body) updateData.scheduledStart = body.scheduledStart ? new Date(body.scheduledStart) : null
   if ('scheduledEnd' in body) updateData.scheduledEnd = body.scheduledEnd ? new Date(body.scheduledEnd) : null
-  if (body.status === 'COMPLETED') updateData.completedAt = new Date()
+  // Only a real transition stamps the time; re-sending COMPLETED must not move
+  // an old completion onto today.
+  if (body.status === 'COMPLETED' && existing.status !== 'COMPLETED') updateData.completedAt = new Date()
   else if (body.status === 'PENDING') updateData.completedAt = null
 
   const task = await prisma.task.update({
