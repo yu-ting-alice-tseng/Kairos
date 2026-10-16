@@ -172,14 +172,57 @@ body {
 .animate-sundial { animation: sundial-sweep 8s ease-in-out infinite; transform-origin: bottom center; }
 .animate-ink-bloom { animation: ink-bloom 16s ease-in-out infinite; }
 
-/* ── Ink Loading (主加載圖示.png — transparent enso, rotates) ── */
+/* ── Ink Loading (主加載圖示.png — transparent enso) ── */
 @keyframes ink-spin {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
 }
 
-/* img-based spinner used by InkLoader component */
-.ink-loader-enso-img { animation: ink-spin 2.5s linear infinite; }
+/* InkLoader: a drop of ink lands on the enso, bleeds along it both ways, then dries away */
+@keyframes ink-drop {
+  0%       { transform: scale(0); }
+  12%      { transform: scale(1); }
+  100%     { transform: scale(1); }
+}
+@keyframes ink-drop-halo {
+  0%       { transform: scale(0); }
+  9%       { transform: scale(1); }
+  100%     { transform: scale(1); }
+}
+@keyframes ink-trail {
+  0%, 6%   { stroke-dashoffset: 100; }
+  68%      { stroke-dashoffset: 0; }
+  100%     { stroke-dashoffset: 0; }
+}
+@keyframes ink-trail-halo {
+  0%, 3%   { stroke-dashoffset: 100; }
+  62%      { stroke-dashoffset: 0; }
+  100%     { stroke-dashoffset: 0; }
+}
+@keyframes ink-dry {
+  0%, 80%  { opacity: 1; }
+  97%      { opacity: 0; }
+  100%     { opacity: 0; }
+}
+.ink-loader .ink-loader-drop,
+.ink-loader .ink-loader-drop-halo {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ink-drop var(--ink-dur, 2.8s) cubic-bezier(.2,.7,.3,1) infinite;
+}
+.ink-loader .ink-loader-drop-halo { animation-name: ink-drop-halo; }
+.ink-loader .ink-loader-trail,
+.ink-loader .ink-loader-trail-halo {
+  stroke-dasharray: 100 101;
+  animation: ink-trail var(--ink-dur, 2.8s) cubic-bezier(.3,.45,.35,1) infinite;
+}
+.ink-loader .ink-loader-trail-halo { animation-name: ink-trail-halo; }
+.ink-loader .ink-loader-body { animation: ink-dry var(--ink-dur, 2.8s) ease-in infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .ink-loader .ink-loader-drop, .ink-loader .ink-loader-drop-halo,
+  .ink-loader .ink-loader-trail, .ink-loader .ink-loader-trail-halo,
+  .ink-loader .ink-loader-body { animation: none; }
+}
 
 /* legacy div-based classes kept for compatibility */
 .ink-loader-enso    { width: 72px;  height: 72px;  background-image: url('/logo_v5/主加載圖示_去背.png'); background-size: contain; background-repeat: no-repeat; background-position: center; animation: ink-spin 2.5s linear infinite; }
