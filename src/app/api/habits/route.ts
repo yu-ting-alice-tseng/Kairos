@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { loadUserHabits } from '@/lib/queries'
+import { getRequestTimeZone } from '@/lib/timezone-server'
 import { z } from 'zod'
 
 const createHabitSchema = z.object({
@@ -21,7 +22,7 @@ export async function GET() {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  return NextResponse.json(await loadUserHabits(session.user.id))
+  return NextResponse.json(await loadUserHabits(session.user.id, await getRequestTimeZone()))
 }
 
 export async function POST(req: NextRequest) {

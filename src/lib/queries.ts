@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { isDemoUser, getDemoTasks, getDemoHabits } from '@/lib/demo-data'
+import { zonedDayRange } from '@/lib/timezones'
 
 /**
  * Task and habit reads shared by the API routes and the server-rendered Today
@@ -33,10 +34,10 @@ export async function loadUserTasks(
   return tasks.map((t) => ({ ...t, subTasks: byParent.get(t.id) ?? [] }))
 }
 
-export async function loadUserHabits(userId: string) {
+/** Habits with today's completions, "today" being the local day in `timeZone`. */
+export async function loadUserHabits(userId: string, timeZone: string) {
   if (isDemoUser(userId)) return getDemoHabits()
-  const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0)
-  const dayEnd = new Date(); dayEnd.setHours(23, 59, 59, 999)
+  const { start: dayStart, end: dayEnd } = zonedDayRange(timeZone)
   return prisma.habit.findMany({
     where: { userId, isActive: true },
     include: { completions: { where: { completedAt: { gte: dayStart, lte: dayEnd } } } },

@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState, useCallback } from 'react'
 import { useAppStore } from '@/stores/useAppStore'
+import { useUserTimeZone } from '@/components/providers/TimezoneSync'
+import { zonedYmd } from '@/lib/timezones'
 import { syncCalendarTasks } from '@/lib/calendar-sync'
 import { Task, Habit, CalendarEvent } from '@/types'
 import { t } from '@/lib/i18n'
@@ -328,7 +330,13 @@ export default function TodayClient({ initialTasks, initialHabits }: {
   const [rescheduleLoading, setRescheduleLoading] = useState(false)
   const [todayEvents, setTodayEvents] = useState<CalendarEvent[]>([])
   const [showCatchUp, setShowCatchUp] = useState(false)
-  const [selectedDate, setSelectedDate] = useState<Date>(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d })
+  const [showOverdue, setShowOverdue] = useState(true)
+  const [confirmDismissAll, setConfirmDismissAll] = useState(false)
+  // "Today" is the date in the person's timezone (device or Settings), held
+  // as a local-midnight Date like every other day this page handles.
+  const timeZone = useUserTimeZone()
+  const todayDate = () => { const { year, month, day } = zonedYmd(timeZone); return new Date(year, month - 1, day) }
+  const [selectedDate, setSelectedDate] = useState<Date>(todayDate)
   const dateInputRef = React.useRef<HTMLInputElement>(null)
   // The schedule covers the whole day; open it at the start of a typical day.
   const didInitialScheduleScrollRef = React.useRef(false)
@@ -342,10 +350,10 @@ export default function TodayClient({ initialTasks, initialHabits }: {
 
   const dateFnsLocale = language === 'fr' ? fr : language === 'zh' ? zhTW : enUS
   const today = format(selectedDate, 'PPPP', { locale: dateFnsLocale })
-  const isSelectedToday = isSameDay(selectedDate, new Date())
+  const isSelectedToday = isSameDay(selectedDate, todayDate())
   const prevDay = () => setSelectedDate((d) => { const n = new Date(d); n.setDate(n.getDate() - 1); return n })
   const nextDay = () => setSelectedDate((d) => { const n = new Date(d); n.setDate(n.getDate() + 1); return n })
-  const goToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); setSelectedDate(d) }
+  const goToday = () => setSelectedDate(todayDate())
 
   usePageShortcuts(TODAY_PAGE_SHORTCUTS, (key) => {
     if (showTaskForm) return false
@@ -456,6 +464,7 @@ export default function TodayClient({ initialTasks, initialHabits }: {
   const selectedDayStart = new Date(selectedDate); selectedDayStart.setHours(0, 0, 0, 0)
   // A slot booked on an earlier day and never done is overdue work again: it
   // goes back to the list instead of haunting every later day's timeline.
+  const isBeforeSelectedDay = (d: string | Date) => new Date(String(d)) < selectedDayStart
   const isStaleSchedule = (t: Task) =>
     !!t.scheduledStart && new Date(String(t.scheduledStart)) < selectedDayStart && t.status !== 'COMPLETED'
 
@@ -465,7 +474,8 @@ export default function TodayClient({ initialTasks, initialHabits }: {
       t.status !== 'CANCELLED' &&
       t.parentTaskId === null &&
       (!t.calendarEventId || allDayLinkedTaskIds.has(t.id)) &&
-      (!t.scheduledStart || isStaleSchedule(t)) &&
+      !t.scheduledStart &&
+      (!t.deadline || !isBeforeSelectedDay(t.deadline) || allDayLinkedTaskIds.has(t.id)) &&
       isDueOnDate(t.deadline, selectedDate) &&
       !isExcludedFromToday(t.title) &&
       !isReminder(t.title)
@@ -477,6 +487,22 @@ export default function TodayClient({ initialTasks, initialHabits }: {
   const unmatchedAllDayEvents = todayAllDayEvents
     .filter((ev) => !linkedCalendarEventIds.has(ev.id) && !isExcludedFromToday(ev.title) && !isReminder(ev.title))
     .sort((a, b) => a.title.localeCompare(b.title))
+
+  // Everything whose day has passed without being done: overdue tasks, slots
+  // left undone and calendar events that ended (the last 14 days; older ones
+  // are history, not a to-do). Kept apart so the day's own list stays the day's.
+  const OVERDUE_EVENT_DAYS = 14
+  const overdueEventCutoff = new Date(selectedDayStart.getTime() - OVERDUE_EVENT_DAYS * 86400_000)
+  const overdueTasks = dedupeCalendarTasks(tasks.filter((t) => {
+    if (t.status === 'COMPLETED' || t.status === 'CANCELLED' || t.parentTaskId !== null) return false
+    if (isExcludedFromToday(t.title) || isReminder(t.title)) return false
+    if (isStaleSchedule(t)) return true
+    if (t.scheduledStart || !t.deadline || !isBeforeSelectedDay(t.deadline)) return false
+    if (!t.calendarEventId) return true
+    if (allDayLinkedTaskIds.has(t.id)) return false // multi-day event still running
+    return new Date(String(t.deadline)) >= overdueEventCutoff
+  })).sort((a, b) =>
+    String(b.scheduledStart ?? b.deadline ?? '').localeCompare(String(a.scheduledStart ?? a.deadline ?? '')))
 
   // Only the slots booked on the day being shown; done ones stay, struck through.
   const scheduledTasks = tasks.filter(
@@ -624,6 +650,23 @@ export default function TodayClient({ initialTasks, initialHabits }: {
       }
     }
     setEditingTask(null)
+  }
+
+  // Dismissing an overdue item marks it cancelled: off every list, but kept
+  // (deleting a calendar-linked task would only have the sync recreate it).
+  const handleDismiss = async (ids: string[]) => {
+    const before = tasks
+    ids.forEach((id) => updateTask(id, { status: 'CANCELLED' }))
+    const results = await Promise.all(ids.map((id) =>
+      fetch(`/api/tasks/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'CANCELLED' }),
+      }).then((r) => r.ok).catch(() => false)))
+    if (results.some((ok) => !ok)) {
+      setTasks(before)
+      toast({ title: language === 'fr' ? 'Erreur de mise à jour' : language === 'zh' ? '更新失敗' : 'Update failed', variant: 'error' })
+    }
   }
 
   const handleDelete = async (id: string) => {
@@ -1165,6 +1208,73 @@ export default function TodayClient({ initialTasks, initialHabits }: {
                         )}
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {overdueTasks.length > 0 && (
+                  <div className="mt-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <button
+                        onClick={() => setShowOverdue((v) => !v)}
+                        className="text-xs font-semibold text-[#ab3326] flex items-center gap-1.5 shrink-0"
+                      >
+                        {showOverdue ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                        <AlarmCheck className="h-3.5 w-3.5" />
+                        {language === 'fr' ? `En retard (${overdueTasks.length})` : language === 'zh' ? `過期未完成 (${overdueTasks.length})` : `Overdue (${overdueTasks.length})`}
+                      </button>
+                      <div className="flex-1 h-px bg-[#e7c894]/50" />
+                      {showOverdue && overdueTasks.length > 1 && (
+                        <button
+                          onClick={() => {
+                            if (!confirmDismissAll) { setConfirmDismissAll(true); return }
+                            setConfirmDismissAll(false)
+                            handleDismiss(overdueTasks.map((t) => t.id))
+                          }}
+                          onBlur={() => setConfirmDismissAll(false)}
+                          className={`text-[10px] rounded-full px-2 py-0.5 border transition-colors ${confirmDismissAll ? 'border-red-300 bg-red-50 text-red-700' : 'border-[#d1c9b8] text-[#a99873] hover:text-[#5c5347]'}`}
+                        >
+                          {confirmDismissAll
+                            ? (language === 'fr' ? 'Confirmer ?' : language === 'zh' ? '確定全部略過？' : 'Confirm?')
+                            : (language === 'fr' ? 'Tout ignorer' : language === 'zh' ? '全部略過' : 'Dismiss all')}
+                        </button>
+                      )}
+                    </div>
+                    {showOverdue && (
+                      <div className="flex flex-col gap-1.5">
+                        {overdueTasks.map((task) => {
+                          const when = task.scheduledStart ?? task.deadline
+                          return (
+                            <div
+                              key={task.id}
+                              className="group flex items-center gap-2 rounded-xl border border-red-100 bg-red-50/30 px-3 py-1.5 hover:bg-red-50/60 transition-colors cursor-pointer"
+                              onClick={() => { setEditingTask(task); setShowTaskForm(true) }}
+                            >
+                              <button
+                                onClick={async (e) => { e.stopPropagation(); await handleComplete(task.id) }}
+                                className="shrink-0 hover:scale-110 transition-transform"
+                                title={language === 'fr' ? 'Marquer comme fait' : language === 'zh' ? '標記為已完成' : 'Mark as done'}
+                              >
+                                <span className="h-3.5 w-3.5 rounded-full border-2 border-[#c4b48a] inline-block" />
+                              </button>
+                              {task.calendarEventId && <CalendarDays className="h-3 w-3 text-[#a99873] shrink-0" />}
+                              <span className="flex-1 text-xs text-[#3a3326] truncate">{task.title}</span>
+                              {when && (
+                                <span className="text-[10px] text-red-400 shrink-0">
+                                  {language === 'fr' ? `prévu le ${formatDate(String(when), language)}` : language === 'zh' ? `原定 ${formatDate(String(when), language)}` : `was ${formatDate(String(when), language)}`}
+                                </span>
+                              )}
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDismiss([task.id]) }}
+                                className="shrink-0 text-[10px] text-[#a99873] hover:text-[#5c5347] opacity-0 group-hover:opacity-100 transition-opacity"
+                                title={language === 'fr' ? "Ignorer (ne plus afficher)" : language === 'zh' ? '略過（不再顯示）' : 'Dismiss (hide for good)'}
+                              >
+                                {language === 'fr' ? 'Ignorer' : language === 'zh' ? '略過' : 'Dismiss'}
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
 

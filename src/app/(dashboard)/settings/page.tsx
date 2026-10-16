@@ -17,10 +17,11 @@ import {
   Settings, Plus, Trash2, Globe, Calendar, Check,
   MonitorSmartphone, Loader2, AlertTriangle, ChevronDown, ChevronUp, RefreshCw,
   Pencil, KeyRound, LogOut, User, SlidersHorizontal, Shield, MessageSquare,
-  ExternalLink, Mail, Star,
+  ExternalLink, Mail, Star, Clock,
 } from 'lucide-react'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
 import { cn } from '@/lib/utils'
+import { COMMON_TIMEZONES } from '@/lib/timezones'
 
 // oauthKey  → OAuth via NextAuth signIn() + session-restore so the current session is preserved
 // connectProvider → dedicated /api/calendar/connect flow (Notion only)
@@ -596,7 +597,14 @@ export default function SettingsPage() {
   const {
     language, setLanguage,
     calendarAccounts, setCalendarAccounts,
+    primaryTimezone, setPrimaryTimezone,
   } = useAppStore()
+  // Blank on the server, the device's zone once in the browser
+  const deviceTz = React.useSyncExternalStore(
+    () => () => {},
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+    () => '',
+  )
   const { data: session } = useSession()
   const isDemo = session?.user?.id === DEMO_USER_ID
   const { toast } = useGlobalToast()
@@ -744,6 +752,32 @@ export default function SettingsPage() {
                   </button>
                 ))}
               </div>
+            </section>
+
+            {/* Timezone */}
+            <section className="rounded-2xl border border-[#ece2cb] bg-[#fbf7ee] p-5">
+              <h2 className="text-sm font-semibold text-[#5c5347] mb-2 flex items-center gap-2">
+                <Clock className="h-4 w-4 text-red-500" />
+                {language === 'fr' ? 'Fuseau horaire' : language === 'zh' ? '時區' : 'Timezone'}
+              </h2>
+              <p className="text-xs text-[#8a7a5e] mb-3 leading-relaxed">
+                {language === 'fr'
+                  ? "Décide où commence « aujourd'hui » : la page Aujourd'hui, le pointage des habitudes et les séries. Aussi le fuseau principal du calendrier."
+                  : language === 'zh'
+                    ? '決定「今天」從什麼時候開始：今日頁、習慣打卡與連續天數都依這個時區。也會作為日曆的主時區。'
+                    : 'Sets when "today" starts: the Today page, habit check-ins and streaks. Also the calendar\'s primary timezone.'}
+              </p>
+              <select
+                value={primaryTimezone ?? ''}
+                onChange={(e) => setPrimaryTimezone(e.target.value || null)}
+                className="w-full border border-[#e2d6bc] rounded-xl px-3 py-2 text-sm bg-[#fbf7ee] text-[#3a3326] focus:outline-none focus:ring-1 focus:ring-red-300"
+              >
+                <option value="">
+                  {language === 'fr' ? 'Automatique (appareil)' : language === 'zh' ? '自動（依裝置）' : 'Automatic (device)'}
+                  {deviceTz ? ` · ${deviceTz}` : ''}
+                </option>
+                {COMMON_TIMEZONES.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
+              </select>
             </section>
 
             {/* Privacy & Data */}

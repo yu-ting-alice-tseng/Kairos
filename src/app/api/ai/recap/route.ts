@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
+import { getRequestTimeZone } from '@/lib/timezone-server'
+import { zonedDayRange } from '@/lib/timezones'
 import { generateDailyRecap } from '@/lib/ai'
 import { prisma } from '@/lib/prisma'
 
@@ -9,10 +11,7 @@ export async function POST(req: NextRequest) {
 
   const { lang } = await req.json().catch(() => ({ lang: 'fr' }))
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const todayEnd = new Date()
-  todayEnd.setHours(23, 59, 59, 999)
+  const { start: today, end: todayEnd } = zonedDayRange(await getRequestTimeZone())
 
   const yesterday = new Date(today)
   yesterday.setDate(yesterday.getDate() - 1)

@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { useAppStore } from '@/stores/useAppStore'
+import { COMMON_TIMEZONES } from '@/lib/timezones'
 import { Task, CalendarEvent, Habit, RetroTemplate, RecurrenceScope } from '@/types'
 import { t } from '@/lib/i18n'
 import { TaskForm } from '@/components/tasks/TaskForm'
@@ -2322,18 +2323,6 @@ export default function CalendarPage() {
 
 // ─── Timezone Dialog ──────────────────────────────────────────────────────────
 
-const COMMON_TIMEZONES = [
-  'Africa/Abidjan', 'Africa/Cairo', 'Africa/Johannesburg', 'Africa/Lagos', 'Africa/Nairobi',
-  'America/Anchorage', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
-  'America/Mexico_City', 'America/New_York', 'America/Sao_Paulo', 'America/Toronto',
-  'Asia/Bangkok', 'Asia/Dubai', 'Asia/Hong_Kong', 'Asia/Jakarta', 'Asia/Karachi',
-  'Asia/Kolkata', 'Asia/Seoul', 'Asia/Shanghai', 'Asia/Singapore', 'Asia/Taipei',
-  'Asia/Tehran', 'Asia/Tokyo', 'Australia/Melbourne', 'Australia/Sydney',
-  'Europe/Amsterdam', 'Europe/Berlin', 'Europe/Brussels', 'Europe/Dublin',
-  'Europe/Istanbul', 'Europe/Lisbon', 'Europe/London', 'Europe/Madrid',
-  'Europe/Moscow', 'Europe/Paris', 'Europe/Rome', 'Europe/Stockholm', 'Europe/Warsaw',
-  'Europe/Zurich', 'Pacific/Auckland', 'Pacific/Honolulu', 'UTC',
-]
 
 function TimezoneDialog({
   open, onClose, primaryTimezone, secondaryTimezone, onSetPrimary, onSetSecondary, lang,

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getRequestTimeZone } from '@/lib/timezone-server'
+import { zonedDayRange } from '@/lib/timezones'
 
 // DELETE — remove today's completion for a habit
 export async function DELETE(req: NextRequest) {
@@ -11,8 +13,7 @@ export async function DELETE(req: NextRequest) {
   const habit = await prisma.habit.findFirst({ where: { id: habitId, userId: session.user.id } })
   if (!habit) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
-  const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999)
+  const { start: todayStart, end: todayEnd } = zonedDayRange(await getRequestTimeZone())
   await prisma.habitCompletion.deleteMany({
     where: { habitId, completedAt: { gte: todayStart, lte: todayEnd } },
   })
@@ -41,10 +42,7 @@ export async function POST(req: NextRequest) {
     data: { habitId, notes },
   })
 
-  const yesterday = new Date()
-  yesterday.setDate(yesterday.getDate() - 1)
-  const yesterdayStart = new Date(yesterday.setHours(0, 0, 0, 0))
-  const yesterdayEnd = new Date(yesterday.setHours(23, 59, 59, 999))
+  const { start: yesterdayStart, end: yesterdayEnd } = zonedDayRange(await getRequestTimeZone(), new Date(), -1)
 
   const hadYesterday = habit.completions.some(
     (c) => new Date(c.completedAt) >= yesterdayStart && new Date(c.completedAt) <= yesterdayEnd

@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import { auth } from '@/lib/auth'
 import { loadUserTasks, loadUserHabits, serialize } from '@/lib/queries'
+import { getRequestTimeZone } from '@/lib/timezone-server'
 import { InkLoader } from '@/components/ui/InkLoader'
 import { Task, Habit } from '@/types'
 import TodayClient from './today-client'
@@ -19,7 +20,8 @@ async function TodayData() {
   const userId = session?.user?.id
   if (!userId) return <TodayClient initialTasks={[]} initialHabits={[]} />
 
-  const [tasks, habits] = await Promise.all([loadUserTasks(userId), loadUserHabits(userId)])
+  const timeZone = await getRequestTimeZone()
+  const [tasks, habits] = await Promise.all([loadUserTasks(userId), loadUserHabits(userId, timeZone)])
   return (
     <TodayClient
       initialTasks={serialize<Task[]>(tasks)}

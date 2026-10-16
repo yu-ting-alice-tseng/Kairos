@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { OnboardingTour } from '@/components/onboarding/OnboardingTour'
 import { GlobalShortcuts } from '@/components/ui/ShortcutsDialog'
+import { TimezoneSync } from '@/components/providers/TimezoneSync'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth()
@@ -16,6 +17,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       </main>
       <OnboardingTour />
       <GlobalShortcuts />
+      <TimezoneSync />
     </div>
   )
 }
