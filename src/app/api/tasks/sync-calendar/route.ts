@@ -5,6 +5,9 @@ import { listGoogleEvents } from '@/lib/calendar/google'
 import { CalendarEvent } from '@/types'
 import { calculatePriority } from '@/lib/utils'
 
+const SYNC_DAYS_BEFORE = 14
+const SYNC_DAYS_AFTER = 60
+
 /**
  * POST /api/tasks/sync-calendar
  * Syncs task titles, deadlines and calendarAccountId from Google Calendar
@@ -25,9 +28,15 @@ export async function POST() {
     })
     if (linkedTasks.length === 0) return NextResponse.json({ synced: 0 })
 
+    // Only the stretch of time people actually look at. Spanning from the
+    // earliest to the latest linked deadline grew with history: every page load
+    // re-read months of past events from Google and walked all of them.
+    const now = Date.now()
+    const windowMin = now - SYNC_DAYS_BEFORE * 86400_000
+    const windowMax = now + SYNC_DAYS_AFTER * 86400_000
     const deadlines = linkedTasks
       .map((t) => t.deadline ? new Date(String(t.deadline)).getTime() : null)
-      .filter((d): d is number => d !== null)
+      .filter((d): d is number => d !== null && d >= windowMin && d <= windowMax)
     if (deadlines.length === 0) return NextResponse.json({ synced: 0 })
 
     const timeMin = new Date(Math.min(...deadlines) - 86400_000) // 1 day before earliest
@@ -134,8 +143,8 @@ export async function POST() {
     // Auto-create tasks for events whose tasks don't exist yet (missed events in range)
     const missingEvents = allEvents.filter((e) => !e.habitId && !byEventId.has(e.id))
     for (const e of missingEvents) {
-      const existingCheck = await prisma.task.findFirst({ where: { userId, calendarEventId: e.id }, select: { id: true } })
-      if (existingCheck) continue
+      // No read-before-create: the unique index on (userId, calendarEventId)
+      // already rejects an event that has a task, at half the round trips.
       const deadline = e.allDay ? new Date(e.start) : new Date(e.end)
       try {
         await prisma.task.create({

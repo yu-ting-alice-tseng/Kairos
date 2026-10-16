@@ -3,6 +3,7 @@
 import { Shortcut, usePageShortcuts } from '@/components/ui/ShortcutsDialog'
 import React, { useEffect, useState, useCallback } from 'react'
 import { useAppStore, AppState, KeywordRule } from '@/stores/useAppStore'
+import { syncCalendarTasks } from '@/lib/calendar-sync'
 import { Task, Habit, CalendarEvent } from '@/types'
 import { t } from '@/lib/i18n'
 import { EisenhowerMatrix } from '@/components/matrix/EisenhowerMatrix'
@@ -58,10 +59,7 @@ export default function MatrixPage() {
   useEffect(() => {
     loadTasks()
     // Background calendar sync: update task titles/dates from Google Calendar
-    fetch('/api/tasks/sync-calendar', { method: 'POST' })
-      .then((r) => r.ok ? r.json() : null)
-      .then((result) => { if (result?.synced > 0 || result?.dupes > 0) loadTasks() })
-      .catch(() => {})
+    syncCalendarTasks().then((changed) => { if (changed) loadTasks() })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

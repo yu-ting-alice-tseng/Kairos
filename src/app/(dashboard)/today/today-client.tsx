@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react'
 import { useAppStore } from '@/stores/useAppStore'
+import { syncCalendarTasks } from '@/lib/calendar-sync'
 import { Task, Habit, CalendarEvent } from '@/types'
 import { t } from '@/lib/i18n'
 import { TaskCard } from '@/components/tasks/TaskCard'
@@ -156,7 +157,33 @@ function DraggableTaskRow({ task, index, onComplete, onEdit, onDelete, onBreakdo
   )
 }
 
-function DraggableScheduledTask({ task, onEdit }: { task: Task; onEdit: (t: Task) => void }) {
+/** Small done/not-done toggle used on the schedule timeline. */
+function DoneToggle({ done, onToggle, lang }: { done: boolean; onToggle: () => void; lang: string }) {
+  const label = done
+    ? (lang === 'fr' ? 'Marquer comme non fait' : lang === 'zh' ? '標記為未完成' : 'Mark as not done')
+    : (lang === 'fr' ? 'Marquer comme fait' : lang === 'zh' ? '標記為已完成' : 'Mark as done')
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onToggle() }}
+      onPointerDown={(e) => e.stopPropagation()}
+      aria-label={label}
+      title={label}
+      className="shrink-0 hover:scale-110 transition-transform"
+    >
+      {done
+        ? <CheckCircle2 className="h-3.5 w-3.5 text-[#4f6f5e]" />
+        : <span className="h-3.5 w-3.5 rounded-full border-2 border-[#c4b48a] inline-block align-middle" />}
+    </button>
+  )
+}
+
+function DraggableScheduledTask({ task, onEdit, onToggleDone, lang }: {
+  task: Task
+  onEdit: (t: Task) => void
+  onToggleDone: (t: Task) => void
+  lang: string
+}) {
+  const done = task.status === 'COMPLETED'
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `scheduled-${task.id}` })
   return (
     <div
@@ -172,7 +199,8 @@ function DraggableScheduledTask({ task, onEdit }: { task: Task; onEdit: (t: Task
           <circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/>
         </svg>
       </div>
-      <span className="truncate text-[#3a3326] group-hover:text-red-700 text-[11px]">{task.title}</span>
+      <DoneToggle done={done} onToggle={() => onToggleDone(task)} lang={lang} />
+      <span className={`truncate text-[11px] group-hover:text-red-700 ${done ? 'line-through text-[#a99873]' : 'text-[#3a3326]'}`}>{task.title}</span>
       {task.scheduledStart && task.scheduledEnd && (
         <span className="text-[#a99873] shrink-0 ml-auto text-[10px]">
           {formatTime(String(task.scheduledStart))}–{formatTime(String(task.scheduledEnd))}
@@ -182,13 +210,17 @@ function DraggableScheduledTask({ task, onEdit }: { task: Task; onEdit: (t: Task
   )
 }
 
-function ScheduleHourSlot({ hour, events, scheduledTasks, calendarAccounts, isActive, onEditTask }: {
+function ScheduleHourSlot({ hour, events, scheduledTasks, calendarAccounts, isActive, onEditTask, isEventDone, onToggleEvent, onToggleTask, lang }: {
   hour: number
   events: CalendarEvent[]
   scheduledTasks: Task[]
   calendarAccounts: { id: string; color: string }[]
   isActive: boolean
   onEditTask: (t: Task) => void
+  isEventDone: (ev: CalendarEvent) => boolean
+  onToggleEvent: (ev: CalendarEvent) => void
+  onToggleTask: (t: Task) => void
+  lang: string
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `hour-${hour}` })
   const label = `${String(hour).padStart(2, '0')}:00`
@@ -209,15 +241,20 @@ function ScheduleHourSlot({ hour, events, scheduledTasks, calendarAccounts, isAc
         {events.map((ev) => {
           const acc = calendarAccounts.find((a) => a.id === ev.calendarAccountId)
           const color = ev.color ?? acc?.color ?? '#6366F1'
+          const done = isEventDone(ev)
           return (
             <div key={ev.id} className="flex items-center gap-1.5 leading-tight min-w-0">
               <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-              <span className="truncate text-[#3a3326] text-[11px]">{ev.title}</span>
+              <DoneToggle done={done} onToggle={() => onToggleEvent(ev)} lang={lang} />
+              <span className={`truncate text-[11px] ${done ? 'line-through text-[#a99873]' : 'text-[#3a3326]'}`}>{ev.title}</span>
+              {ev.start && (
+                <span className="text-[#a99873] shrink-0 ml-auto text-[10px]">{formatTime(String(ev.start))}</span>
+              )}
             </div>
           )
         })}
         {scheduledTasks.map((task) => (
-          <DraggableScheduledTask key={task.id} task={task} onEdit={onEditTask} />
+          <DraggableScheduledTask key={task.id} task={task} onEdit={onEditTask} onToggleDone={onToggleTask} lang={lang} />
         ))}
         {isOver && <div className="text-red-400 italic text-[10px]">→ {label}</div>}
       </div>
@@ -338,10 +375,7 @@ export default function TodayClient({ initialTasks, initialHabits }: {
   // the same tick as the events fetch only made both slower.
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetch('/api/tasks/sync-calendar', { method: 'POST' })
-        .then((r) => r.ok ? r.json() : null)
-        .then((result) => { if (result?.synced > 0 || result?.dupes > 0) loadData() })
-        .catch(() => {})
+      syncCalendarTasks().then((changed) => { if (changed) loadData() })
     }, 800)
     return () => clearTimeout(timer)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -438,7 +472,9 @@ export default function TodayClient({ initialTasks, initialHabits }: {
     .sort((a, b) => a.title.localeCompare(b.title))
 
   const scheduledTasks = tasks.filter(
-    (t) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && !!t.scheduledStart && !isReminder(t.title)
+    (t) => t.status !== 'CANCELLED' && !!t.scheduledStart && !isReminder(t.title) &&
+      // Done ones stay on the timeline (struck through) on the day they ran
+      (t.status !== 'COMPLETED' || isSameDay(new Date(String(t.scheduledStart)), selectedDate))
   )
 
   const reminderTasks = dedupeCalendarTasks(tasks.filter((t) => {
@@ -489,6 +525,42 @@ export default function TodayClient({ initialTasks, initialHabits }: {
     } catch {
       updateTask(id, task) // roll back on network error
       toast({ title: language === 'fr' ? 'Erreur réseau' : language === 'zh' ? '網路錯誤' : 'Network error', variant: 'error' })
+    }
+  }
+
+  // A calendar event has no done state of its own: it is tracked through the
+  // task linked to it, created the first time the event is checked off.
+  const taskForEvent = (ev: CalendarEvent) => tasks.find((t) => t.calendarEventId === ev.id)
+  const isEventDone = (ev: CalendarEvent) => taskForEvent(ev)?.status === 'COMPLETED'
+
+  const handleToggleEvent = async (ev: CalendarEvent) => {
+    const linked = taskForEvent(ev)
+    if (linked) return handleComplete(linked.id)
+    try {
+      const deadline = ev.end ?? ev.start
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: ev.title,
+          calendarEventId: ev.id,
+          calendarAccountId: ev.calendarAccountId,
+          deadline: deadline ? new Date(deadline).toISOString() : undefined,
+        }),
+      })
+      if (!res.ok) throw new Error()
+      const created: Task = await res.json()
+      const doneRes = await fetch(`/api/tasks/${created.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'COMPLETED' }),
+      })
+      if (!doneRes.ok) throw new Error()
+      const done: Task = await doneRes.json()
+      if (tasks.some((t) => t.id === done.id)) updateTask(done.id, done)
+      else addTask(done)
+    } catch {
+      toast({ title: language === 'fr' ? 'Erreur de mise à jour' : language === 'zh' ? '更新失敗' : 'Update failed', variant: 'error' })
     }
   }
 
@@ -992,6 +1064,10 @@ export default function TodayClient({ initialTasks, initialHabits }: {
                         calendarAccounts={calendarAccounts}
                         isActive={hour === nowHour}
                         onEditTask={(t) => { setEditingTask(t); setShowTaskForm(true) }}
+                        isEventDone={isEventDone}
+                        onToggleEvent={handleToggleEvent}
+                        onToggleTask={(t) => handleComplete(t.id)}
+                        lang={language}
                       />
                     )
                   })}

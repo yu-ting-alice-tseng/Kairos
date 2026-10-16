@@ -144,6 +144,7 @@ model Task {
   // guards in those routes could all miss each other and insert the same event
   // twice. SQLite treats NULLs as distinct, so plain tasks are unaffected.
   @@unique([userId, calendarEventId])
+  @@index([parentTaskId])
 }
 
 model Habit {
@@ -167,6 +168,8 @@ model Habit {
 
   user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   completions HabitCompletion[]
+
+  @@index([userId])
 }
 
 model HabitCompletion {
@@ -176,6 +179,8 @@ model HabitCompletion {
   notes       String?
 
   habit Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  @@index([habitId, completedAt])
 }
 
 model Goal {

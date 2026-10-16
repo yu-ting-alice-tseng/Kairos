@@ -16,11 +16,21 @@ export async function loadUserTasks(
   extraWhere: Record<string, any> = {}
 ) {
   if (isDemoUser(userId)) return getDemoTasks()
-  return prisma.task.findMany({
-    where: { userId, ...extraWhere },
-    include: { subTasks: true },
-    orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
-  })
+  const orderBy = [{ priority: 'desc' as const }, { createdAt: 'desc' as const }]
+  if (Object.keys(extraWhere).length > 0) {
+    return prisma.task.findMany({ where: { userId, ...extraWhere }, include: { subTasks: true }, orderBy })
+  }
+  // The full list already holds every subtask, so attach them here instead of
+  // letting `include` spend a second round trip re-reading the same rows.
+  const tasks = await prisma.task.findMany({ where: { userId }, orderBy })
+  const byParent = new Map<string, typeof tasks>()
+  for (const t of tasks) {
+    if (!t.parentTaskId) continue
+    const list = byParent.get(t.parentTaskId)
+    if (list) list.push(t)
+    else byParent.set(t.parentTaskId, [t])
+  }
+  return tasks.map((t) => ({ ...t, subTasks: byParent.get(t.id) ?? [] }))
 }
 
 export async function loadUserHabits(userId: string) {
