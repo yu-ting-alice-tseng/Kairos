@@ -21,6 +21,8 @@ export interface AppState {
   activeView: 'today' | 'matrix' | 'calendar' | 'habits' | 'settings'
   matrixExcludePatterns: string[]
   todayExcludePatterns: string[]
+  /** Title keywords that turn a task or all-day event into a reminder on Today (birthdays…) */
+  todayReminderPatterns: string[]
   keywordRules: KeywordRule[]
   hideHabitsViews: string[]
   primaryTimezone: string | null   // null = browser local
@@ -54,6 +56,7 @@ export interface AppState {
   setActiveView: (view: AppState['activeView']) => void
   setMatrixExcludePatterns: (patterns: string[]) => void
   setTodayExcludePatterns: (patterns: string[]) => void
+  setTodayReminderPatterns: (patterns: string[]) => void
   setKeywordRules: (rules: KeywordRule[]) => void
   addKeywordRule: (rule: KeywordRule) => void
   updateKeywordRule: (id: string, updates: Partial<KeywordRule>) => void
@@ -73,6 +76,7 @@ export const useAppStore = create<AppState>()(
       activeView: 'today',
       matrixExcludePatterns: [],
       todayExcludePatterns: [],
+      todayReminderPatterns: ['生日', 'Birthday', 'Anniversaire'],
       keywordRules: [],
       hideHabitsViews: [],
       primaryTimezone: null,
@@ -109,6 +113,7 @@ export const useAppStore = create<AppState>()(
       setActiveView: (view) => set({ activeView: view }),
       setMatrixExcludePatterns: (patterns) => set({ matrixExcludePatterns: patterns }),
       setTodayExcludePatterns: (patterns) => set({ todayExcludePatterns: patterns }),
+      setTodayReminderPatterns: (patterns) => set({ todayReminderPatterns: patterns }),
       setKeywordRules: (rules) => set({ keywordRules: rules }),
       addKeywordRule: (rule) => set((state) => ({ keywordRules: [...state.keywordRules, rule] })),
       updateKeywordRule: (id, updates) =>
@@ -131,6 +136,7 @@ export const useAppStore = create<AppState>()(
         activeView: state.activeView,
         matrixExcludePatterns: state.matrixExcludePatterns,
         todayExcludePatterns: state.todayExcludePatterns,
+        todayReminderPatterns: state.todayReminderPatterns,
         hideHabitsViews: state.hideHabitsViews,
         primaryTimezone: state.primaryTimezone,
         secondaryTimezone: state.secondaryTimezone,

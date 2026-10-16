@@ -16,7 +16,7 @@ import { Candle } from '@/components/ui/Candle'
 import { generatePriorityList, formatDate, formatDeadlineLabel, deadlineTooltip, formatTime, cn } from '@/lib/utils'
 import {
   Plus, Sparkles, Sun, Flame, RefreshCw, MessageSquare, ChevronRight, ChevronLeft,
-  CheckCircle2, Clock, Loader2, X, AlarmCheck, Zap, CalendarDays, SlidersHorizontal, Keyboard,
+  CheckCircle2, Clock, Loader2, X, AlarmCheck, Zap, CalendarDays, SlidersHorizontal, Keyboard, Bell,
 } from 'lucide-react'
 import { format, isSameDay } from 'date-fns'
 import { fr, enUS, zhTW } from 'date-fns/locale'
@@ -69,6 +69,52 @@ function dedupeCalendarTasks(tasks: Task[]): Task[] {
     seen.add(key)
     return true
   })
+}
+
+/** Editable list of title keywords, used by the Today filter panel. */
+function PatternEditor({ icon, label, hint, placeholder, patterns, onChange, className }: {
+  icon: React.ReactNode
+  label: string
+  hint?: string
+  placeholder: string
+  patterns: string[]
+  onChange: (patterns: string[]) => void
+  className?: string
+}) {
+  const [draft, setDraft] = useState('')
+  const add = () => {
+    const value = draft.trim()
+    if (!value) return
+    if (!patterns.includes(value)) onChange([...patterns, value])
+    setDraft('')
+  }
+  return (
+    <div className={className}>
+      <p className="text-xs font-semibold text-[#5c5347] mb-2 flex items-center gap-1.5">
+        {icon}
+        {label}
+      </p>
+      {hint && <p className="text-[11px] text-[#8a7a5e] -mt-1 mb-2">{hint}</p>}
+      <div className="flex flex-wrap gap-2 items-center">
+        {patterns.map((p) => (
+          <span key={p} className="flex items-center gap-1 rounded-lg bg-[#f3ecdd] border border-[#e2d6bc] px-2.5 py-1 text-xs text-[#5c5347]">
+            {p}
+            <button onClick={() => onChange(patterns.filter((x) => x !== p))} className="text-[#a99873] hover:text-red-500 ml-0.5">×</button>
+          </span>
+        ))}
+        <div className="flex items-center gap-1.5">
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') add() }}
+            placeholder={placeholder}
+            className="border border-[#e2d6bc] rounded-lg px-2.5 py-1 text-xs w-32 focus:outline-none focus:ring-1 focus:ring-red-300 bg-[#fbf7ee]"
+          />
+          <button onClick={add} className="text-xs px-2 py-1 rounded-lg bg-[#c44a3a] text-white hover:bg-[#ab3326]">+</button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function DraggableTaskRow({ task, index, onComplete, onEdit, onDelete, onBreakdown, onReschedule, lang, selectedDate }: {
@@ -219,7 +265,7 @@ export default function TodayClient({ initialTasks, initialHabits }: {
   initialTasks: Task[]
   initialHabits: Habit[]
 }) {
-  const { language, tasks: storeTasks, habits: storeHabits, dataSeeded, seedServerData, setTasks, updateTask, removeTask, addTask, setHabits, calendarAccounts, todayExcludePatterns, setTodayExcludePatterns, keywordRules, hideHabitsViews, toggleHabitsView } = useAppStore()
+  const { language, tasks: storeTasks, habits: storeHabits, dataSeeded, seedServerData, setTasks, updateTask, removeTask, addTask, setHabits, calendarAccounts, todayExcludePatterns, setTodayExcludePatterns, todayReminderPatterns, setTodayReminderPatterns, keywordRules, hideHabitsViews, toggleHabitsView } = useAppStore()
   const habitsHidden = hideHabitsViews.includes('today')
   const { toast } = useGlobalToast()
 
@@ -236,7 +282,6 @@ export default function TodayClient({ initialTasks, initialHabits }: {
   const [showTaskForm, setShowTaskForm] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [filterPanelOpen, setFilterPanelOpen] = useState(false)
-  const [newExcludePattern, setNewExcludePattern] = useState('')
   const [breakdownTask, setBreakdownTask] = useState<Task | null>(null)
   const [showChat, setShowChat] = useState(false)
   const [recap, setRecap] = useState<string | null>(null)
@@ -343,6 +388,11 @@ export default function TodayClient({ initialTasks, initialHabits }: {
   const isExcludedFromToday = (title: string) =>
     todayExcludePatterns.some((p) => p && title.toLowerCase().includes(p.toLowerCase()))
 
+  // Reminders (birthdays…) are not work: they leave the to-do list and the
+  // schedule and get their own strip, only on the day they fall on.
+  const isReminder = (title: string) =>
+    todayReminderPatterns.some((p) => p && title.toLowerCase().includes(p.toLowerCase()))
+
   // All-day calendar events for today
   const todayAllDayEvents = todayEvents.filter((ev) => ev.allDay)
   const todayAllDayEventIds = new Set(todayAllDayEvents.map((ev) => ev.id))
@@ -376,28 +426,41 @@ export default function TodayClient({ initialTasks, initialHabits }: {
       (!t.calendarEventId || allDayLinkedTaskIds.has(t.id)) &&
       !t.scheduledStart &&
       isDueOnDate(t.deadline, selectedDate) &&
-      !isExcludedFromToday(t.title)
+      !isExcludedFromToday(t.title) &&
+      !isReminder(t.title)
     ).map(applyKeywordRules)
   ))
 
   // All-day events that aren't linked to any task — shown as calendar entries in the list
   const linkedCalendarEventIds = new Set(tasks.map((t) => t.calendarEventId).filter(Boolean))
   const unmatchedAllDayEvents = todayAllDayEvents
-    .filter((ev) => !linkedCalendarEventIds.has(ev.id) && !isExcludedFromToday(ev.title))
+    .filter((ev) => !linkedCalendarEventIds.has(ev.id) && !isExcludedFromToday(ev.title) && !isReminder(ev.title))
     .sort((a, b) => a.title.localeCompare(b.title))
 
   const scheduledTasks = tasks.filter(
-    (t) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && !!t.scheduledStart
+    (t) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && !!t.scheduledStart && !isReminder(t.title)
   )
+
+  const reminderTasks = dedupeCalendarTasks(tasks.filter((t) => {
+    if (t.status === 'COMPLETED' || t.status === 'CANCELLED' || t.parentTaskId !== null) return false
+    if (isExcludedFromToday(t.title) || !isReminder(t.title)) return false
+    const when = t.scheduledStart ?? t.deadline
+    return !!when && isSameDay(new Date(String(when)), selectedDate)
+  }))
+  const reminderEvents = todayEvents
+    .filter((ev) => !linkedCalendarEventIds.has(ev.id) && !isExcludedFromToday(ev.title) && isReminder(ev.title))
+    .sort((a, b) => a.title.localeCompare(b.title))
 
   const scheduledTasksByHour = (hour: number) =>
     scheduledTasks.filter((t) => t.scheduledStart && new Date(String(t.scheduledStart)).getHours() === hour)
 
-  // Show a completed task in the day whose DEADLINE matches, or (no deadline) in the day it was completed
+  // A completed task shows on the day it was completed, and also on its
+  // deadline day. Going by the deadline alone made overdue or early tasks
+  // vanish the moment they were checked off instead of moving down here.
   const completedToday = dedupeCalendarTasks(tasks.filter((t) => {
-    if (t.status !== 'COMPLETED') return false
-    if (t.deadline) return isSameDay(new Date(String(t.deadline)), selectedDate)
-    return !!(t.completedAt && isSameDay(new Date(t.completedAt), selectedDate))
+    if (t.status !== 'COMPLETED' || t.parentTaskId !== null) return false
+    if (t.completedAt && isSameDay(new Date(String(t.completedAt)), selectedDate)) return true
+    return !!t.deadline && isSameDay(new Date(String(t.deadline)), selectedDate)
   }))
 
   const handleComplete = async (id: string) => {
@@ -708,31 +771,26 @@ export default function TodayClient({ initialTasks, initialHabits }: {
       {/* Today exclude-pattern filter panel */}
       {filterPanelOpen && (
         <div className="border-b border-[#ece2cb] bg-[#f8f4ea] px-6 py-4">
-          <p className="text-xs font-semibold text-[#5c5347] mb-2 flex items-center gap-1.5">
-            <span>🚫</span>
-            {language === 'fr' ? "Masquer de Aujourd'hui" : language === 'zh' ? '從今日頁面隱藏' : "Hide from Today"}
-          </p>
-          <div className="flex flex-wrap gap-2 items-center">
-            {todayExcludePatterns.map((p) => (
-              <span key={p} className="flex items-center gap-1 rounded-lg bg-[#f3ecdd] border border-[#e2d6bc] px-2.5 py-1 text-xs text-[#5c5347]">
-                {p}
-                <button onClick={() => setTodayExcludePatterns(todayExcludePatterns.filter((x) => x !== p))} className="text-[#a99873] hover:text-red-500 ml-0.5">×</button>
-              </span>
-            ))}
-            <div className="flex items-center gap-1.5">
-              <input
-                value={newExcludePattern}
-                onChange={(e) => setNewExcludePattern(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && newExcludePattern.trim()) { setTodayExcludePatterns([...todayExcludePatterns, newExcludePattern.trim()]); setNewExcludePattern('') } }}
-                placeholder={language === 'fr' ? 'ex: Meeting' : language === 'zh' ? '例：會議' : 'e.g. Meeting'}
-                className="border border-[#e2d6bc] rounded-lg px-2.5 py-1 text-xs w-32 focus:outline-none focus:ring-1 focus:ring-red-300 bg-[#fbf7ee]"
-              />
-              <button
-                onClick={() => { if (newExcludePattern.trim()) { setTodayExcludePatterns([...todayExcludePatterns, newExcludePattern.trim()]); setNewExcludePattern('') } }}
-                className="text-xs px-2 py-1 rounded-lg bg-[#c44a3a] text-white hover:bg-[#ab3326]"
-              >+</button>
-            </div>
-          </div>
+          <PatternEditor
+            icon={<span>🚫</span>}
+            label={language === 'fr' ? "Masquer de Aujourd'hui" : language === 'zh' ? '從今日頁面隱藏' : 'Hide from Today'}
+            placeholder={language === 'fr' ? 'ex: Meeting' : language === 'zh' ? '例：會議' : 'e.g. Meeting'}
+            patterns={todayExcludePatterns}
+            onChange={setTodayExcludePatterns}
+          />
+          <PatternEditor
+            className="mt-4"
+            icon={<Bell className="h-3.5 w-3.5 text-[#b08948]" />}
+            label={language === 'fr' ? 'Rappels (anniversaires…)' : language === 'zh' ? '提醒（生日等）' : 'Reminders (birthdays…)'}
+            hint={language === 'fr'
+              ? 'Les tâches et événements dont le titre contient ces mots apparaissent dans « Rappels » et non dans la liste.'
+              : language === 'zh'
+                ? '標題含有這些字的任務與事件會放進「提醒」區，不列入待辦。'
+                : 'Tasks and events whose title contains these words go to Reminders instead of the to-do list.'}
+            placeholder={language === 'fr' ? 'ex: Anniversaire' : language === 'zh' ? '例：生日' : 'e.g. Birthday'}
+            patterns={todayReminderPatterns}
+            onChange={setTodayReminderPatterns}
+          />
         </div>
       )}
 
@@ -869,6 +927,42 @@ export default function TodayClient({ initialTasks, initialHabits }: {
             </div>
           )}
 
+          {(reminderTasks.length > 0 || reminderEvents.length > 0) && (
+            <div>
+              <h2 className="text-sm font-semibold text-[#5c5347] mb-3 flex items-center gap-2">
+                <Bell className="h-4 w-4 text-[#b08948]" />
+                {language === 'fr' ? 'Rappels' : language === 'zh' ? '提醒' : 'Reminders'}
+              </h2>
+              <div className="flex flex-wrap gap-2">
+                {reminderTasks.map((task) => (
+                  <button
+                    key={task.id}
+                    onClick={() => { setEditingTask(task); setShowTaskForm(true) }}
+                    className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm border bg-[#b08948]/[0.08] border-[#cba968]/50 text-[#6e5228] hover:bg-[#b08948]/15 transition-colors"
+                  >
+                    <Bell className="h-3.5 w-3.5 text-[#b08948]" />
+                    {task.title}
+                    {task.scheduledStart && (
+                      <span className="text-xs text-[#a99873]">{formatTime(String(task.scheduledStart))}</span>
+                    )}
+                  </button>
+                ))}
+                {reminderEvents.map((ev) => (
+                  <span
+                    key={ev.id}
+                    className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm border bg-[#b08948]/[0.08] border-[#cba968]/50 text-[#6e5228]"
+                  >
+                    <Bell className="h-3.5 w-3.5 text-[#b08948]" />
+                    {ev.title}
+                    {!ev.allDay && ev.start && (
+                      <span className="text-xs text-[#a99873]">{formatTime(String(ev.start))}</span>
+                    )}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Two-column split: left = today's schedule, right = priority tasks */}
           <DndContext onDragEnd={handleScheduleTask}>
             <div className="flex-1 min-h-0 flex gap-4">
@@ -887,7 +981,7 @@ export default function TodayClient({ initialTasks, initialHabits }: {
                   {SCHEDULE_HOURS.map((hour) => {
                     const nowHour = new Date().getHours()
                     const eventsAtHour = todayEvents
-                      .filter((ev) => !ev.allDay && ev.start)
+                      .filter((ev) => !ev.allDay && ev.start && !isReminder(ev.title))
                       .filter((ev) => new Date(ev.start!).getHours() === hour)
                     return (
                       <ScheduleHourSlot
@@ -984,7 +1078,7 @@ export default function TodayClient({ initialTasks, initialHabits }: {
                       <div className="flex-1 h-px bg-[#e7c894]/50" />
                     </div>
                     <div className="flex flex-col gap-2">
-                      {completedToday.slice(0, 5).map((task) => (
+                      {completedToday.map((task) => (
                         <TaskCard
                           key={task.id}
                           task={task}
