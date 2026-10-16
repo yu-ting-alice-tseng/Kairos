@@ -8,6 +8,7 @@ import { Task, CalendarEvent, Habit, RetroTemplate, RecurrenceScope } from '@/ty
 import { t } from '@/lib/i18n'
 import { TaskForm } from '@/components/tasks/TaskForm'
 import { InkLoader } from '@/components/ui/InkLoader'
+import { ShortcutsDialog, Shortcut, isTypingTarget, shortcutsBlocked } from '@/components/ui/ShortcutsDialog'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn, formatTime, getQuadrant, EISENHOWER_QUADRANTS } from '@/lib/utils'
@@ -34,13 +35,6 @@ const INITIAL_SCROLL_HOUR = 7
 const GRID_START_HOUR = HOURS[0]
 const GRID_TOTAL_MIN = HOURS.length * 60
 const MIN_BLOCK_HEIGHT = 20
-
-/** True when a key press is meant for a text field, not a calendar shortcut. */
-function isTypingTarget(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null
-  if (!el) return false
-  return el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)
-}
 
 // Which lines of a timed block fit without being clipped mid-line
 // (text-xs line = 16px, py-1 = 8px, border = 2px).
@@ -1066,9 +1060,7 @@ export default function CalendarPage() {
   // Read through a ref so the listener always sees the current state.
   const shortcutRef = useRef<(e: KeyboardEvent) => void>(() => {})
   const handleShortcut = (e: KeyboardEvent) => {
-    if (isTypingTarget(e.target) || showTaskForm || e.altKey) return
-    // An open dialog (this help, settings, …) owns the keyboard.
-    if (document.querySelector('[role="dialog"]')) return
+    if (shortcutsBlocked(e) || showTaskForm) return
     const mod = e.ctrlKey || e.metaKey
     const key = e.key.toLowerCase()
     const selected = editingEvent && editingEvent.editable !== false ? editingEvent : null
@@ -2258,7 +2250,7 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      <ShortcutsDialog open={showShortcuts} lang={language} onClose={() => setShowShortcuts(false)} />
+      <ShortcutsDialog open={showShortcuts} lang={language} shortcuts={SHORTCUTS} onClose={() => setShowShortcuts(false)} />
 
       {/* Right detail panel */}
       {editingEvent ? (
@@ -3002,7 +2994,7 @@ function ScheduledTaskPanel({
 
 // ─── Keyboard shortcuts help ─────────────────────────────────────────────────
 
-const SHORTCUTS: { keys: string[]; zh: string; fr: string; en: string }[] = [
+const SHORTCUTS: Shortcut[] = [
   { keys: ['Ctrl', 'D'], zh: '複製選取的活動', fr: "Dupliquer l'événement sélectionné", en: 'Duplicate selected event' },
   { keys: ['Delete'], zh: '刪除選取的活動', fr: "Supprimer l'événement sélectionné", en: 'Delete selected event' },
   { keys: ['Ctrl', 'Z'], zh: '復原移動', fr: 'Annuler le déplacement', en: 'Undo move' },
@@ -3015,36 +3007,6 @@ const SHORTCUTS: { keys: string[]; zh: string; fr: string; en: string }[] = [
   { keys: ['/'], zh: '搜尋活動（也可用 Ctrl+K）', fr: 'Rechercher (ou Ctrl+K)', en: 'Search events (or Ctrl+K)' },
   { keys: ['?'], zh: '顯示這份清單', fr: 'Afficher cette liste', en: 'Show this list' },
 ]
-
-function ShortcutsDialog({ open, lang, onClose }: { open: boolean; lang: 'fr' | 'en' | 'zh'; onClose: () => void }) {
-  return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{lang === 'fr' ? 'Raccourcis clavier' : lang === 'zh' ? '鍵盤快捷鍵' : 'Keyboard shortcuts'}</DialogTitle>
-        </DialogHeader>
-        <ul className="flex flex-col gap-1.5">
-          {SHORTCUTS.map((sc) => (
-            <li key={sc.en} className="flex items-center justify-between gap-3 text-sm text-[#3a3326]">
-              <span>{sc[lang]}</span>
-              <span className="flex items-center gap-1 shrink-0">
-                {sc.keys.map((k, i) => (
-                  <React.Fragment key={k}>
-                    {i > 0 && <span className="text-[10px] text-[#a99873]">{sc.keys[0] === 'Ctrl' ? '+' : '/'}</span>}
-                    <kbd className="rounded-md border border-[#e2d6bc] bg-[#f3ecdd] px-1.5 py-0.5 text-[11px] font-mono text-[#5c5347]">{k}</kbd>
-                  </React.Fragment>
-                ))}
-              </span>
-            </li>
-          ))}
-        </ul>
-        <p className="text-[11px] text-[#a99873]">
-          {lang === 'fr' ? 'Sur Mac, Cmd remplace Ctrl.' : lang === 'zh' ? 'Mac 上用 Cmd 取代 Ctrl。' : 'On Mac, use Cmd instead of Ctrl.'}
-        </p>
-      </DialogContent>
-    </Dialog>
-  )
-}
 
 function EventDetailPanel({
   event, lang, saving, tasks, calendarAccounts, currentWeekEvents, onSave, onDelete, onDuplicate, deleteRequest = 0, onClose, onTasksRefresh, onNavigateToDate, onMoveEvent, onToggleDone,

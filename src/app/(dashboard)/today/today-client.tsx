@@ -11,11 +11,12 @@ import { AIChat } from '@/components/ai/AIChat'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Sundial } from '@/components/ui/Sundial'
+import { ShortcutsDialog, Shortcut, shortcutsBlocked } from '@/components/ui/ShortcutsDialog'
 import { Candle } from '@/components/ui/Candle'
 import { generatePriorityList, formatDate, formatDeadlineLabel, deadlineTooltip, formatTime, cn } from '@/lib/utils'
 import {
   Plus, Sparkles, Sun, Flame, RefreshCw, MessageSquare, ChevronRight, ChevronLeft,
-  CheckCircle2, Clock, Loader2, X, AlarmCheck, Zap, CalendarDays, SlidersHorizontal,
+  CheckCircle2, Clock, Loader2, X, AlarmCheck, Zap, CalendarDays, SlidersHorizontal, Keyboard,
 } from 'lucide-react'
 import { format, isSameDay } from 'date-fns'
 import { fr, enUS, zhTW } from 'date-fns/locale'
@@ -201,6 +202,18 @@ function DroppableTasksPanel({ children, isHighlight }: { children: React.ReactN
 
 const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === 'true'
 
+const TODAY_SHORTCUTS: Shortcut[] = [
+  { keys: ['C'], zh: '新增任務', fr: 'Nouvelle tâche', en: 'New task' },
+  { keys: ['T'], zh: '回到今天', fr: "Aller à aujourd'hui", en: 'Go to today' },
+  { keys: ['J', 'N', '→'], zh: '下一天', fr: 'Jour suivant', en: 'Next day' },
+  { keys: ['K', 'P', '←'], zh: '前一天', fr: 'Jour précédent', en: 'Previous day' },
+  { keys: ['F'], zh: '開關篩選', fr: 'Afficher/masquer les filtres', en: 'Toggle filters' },
+  { keys: ['?'], zh: '顯示這份清單', fr: 'Afficher cette liste', en: 'Show this list' },
+]
+const TODAY_AI_SHORTCUTS: Shortcut[] = [
+  { keys: ['A'], zh: '開關 AI 助理', fr: "Afficher/masquer l'assistant IA", en: 'Toggle AI assistant' },
+]
+
 export default function TodayClient({ initialTasks, initialHabits }: {
   initialTasks: Task[]
   initialHabits: Habit[]
@@ -249,6 +262,32 @@ export default function TodayClient({ initialTasks, initialHabits }: {
   const prevDay = () => setSelectedDate((d) => { const n = new Date(d); n.setDate(n.getDate() - 1); return n })
   const nextDay = () => setSelectedDate((d) => { const n = new Date(d); n.setDate(n.getDate() + 1); return n })
   const goToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); setSelectedDate(d) }
+
+  const [showShortcuts, setShowShortcuts] = useState(false)
+  // Single-key shortcuts; read through a ref so the listener sees current state.
+  const shortcutRef = React.useRef<(e: KeyboardEvent) => void>(() => {})
+  const handleShortcut = (e: KeyboardEvent) => {
+    if (shortcutsBlocked(e) || showTaskForm || e.ctrlKey || e.metaKey) return
+    switch (e.key) {
+      case '?': e.preventDefault(); setShowShortcuts(true); return
+      case 'ArrowLeft': e.preventDefault(); prevDay(); return
+      case 'ArrowRight': e.preventDefault(); nextDay(); return
+    }
+    switch (e.key.toLowerCase()) {
+      case 'k': case 'p': prevDay(); return
+      case 'j': case 'n': nextDay(); return
+      case 't': goToday(); return
+      case 'c': e.preventDefault(); setShowTaskForm(true); return
+      case 'f': setFilterPanelOpen((o) => !o); return
+      case 'a': if (AI_ENABLED) setShowChat((v) => !v); return
+    }
+  }
+  useEffect(() => { shortcutRef.current = handleShortcut })
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => shortcutRef.current(e)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   // Re-read after something changed the data behind our back (a calendar sync,
   // an AI breakdown). The first load needs none of this — it came with the page.
@@ -660,6 +699,22 @@ export default function TodayClient({ initialTasks, initialHabits }: {
             <SlidersHorizontal className="h-3.5 w-3.5" />
             {language === 'fr' ? 'Filtres' : language === 'zh' ? '篩選' : 'Filters'}
           </button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={language === 'fr' ? 'Raccourcis clavier (?)' : language === 'zh' ? '鍵盤快捷鍵（?）' : 'Keyboard shortcuts (?)'}
+            title={language === 'fr' ? 'Raccourcis clavier (?)' : language === 'zh' ? '鍵盤快捷鍵（?）' : 'Keyboard shortcuts (?)'}
+            onClick={() => setShowShortcuts(true)}
+            className="text-[#8a7a5e] hover:text-[#ab3326] hover:bg-[#f3ecdd]"
+          >
+            <Keyboard className="h-4 w-4" />
+          </Button>
+          <ShortcutsDialog
+            open={showShortcuts}
+            lang={language}
+            shortcuts={AI_ENABLED ? [...TODAY_SHORTCUTS.slice(0, -1), ...TODAY_AI_SHORTCUTS, TODAY_SHORTCUTS[TODAY_SHORTCUTS.length - 1]] : TODAY_SHORTCUTS}
+            onClose={() => setShowShortcuts(false)}
+          />
           <Button size="sm" onClick={() => setShowTaskForm(true)} data-tour="add-task"
             className="bg-gradient-to-br from-[#c44a3a] to-[#861f17] hover:from-[#ab3326] hover:to-[#6e190f] text-[#f3ecdd] border-0 shadow-md shadow-[#ab3326]/25 transition-all hover:scale-[1.02] active:scale-[0.98]">
             <Plus className="h-4 w-4" />
