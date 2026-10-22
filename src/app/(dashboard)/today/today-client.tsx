@@ -19,9 +19,9 @@ import { Candle } from '@/components/ui/Candle'
 import { generatePriorityList, formatDate, formatDeadlineLabel, deadlineTooltip, formatTime, cn } from '@/lib/utils'
 import {
   Plus, Sparkles, Sun, Flame, RefreshCw, MessageSquare, ChevronRight, ChevronLeft,
-  CheckCircle2, Clock, Loader2, X, AlarmCheck, ChevronDown, Zap, CalendarDays, SlidersHorizontal, Keyboard, Bell,
+  CheckCircle2, Clock, Loader2, X, AlarmCheck, ChevronDown, Zap, CalendarDays, SlidersHorizontal, Keyboard, Bell, Hourglass,
 } from 'lucide-react'
-import { format, isSameDay } from 'date-fns'
+import { format, isSameDay, differenceInCalendarDays } from 'date-fns'
 import { fr, enUS, zhTW } from 'date-fns/locale'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
 import {
@@ -331,6 +331,7 @@ export default function TodayClient({ initialTasks, initialHabits }: {
   const [todayEvents, setTodayEvents] = useState<CalendarEvent[]>([])
   const [showCatchUp, setShowCatchUp] = useState(false)
   const [showOverdue, setShowOverdue] = useState(true)
+  const [showUpcoming, setShowUpcoming] = useState(true)
   const [confirmDismissAll, setConfirmDismissAll] = useState(false)
   // "Today" is the date in the person's timezone (device or Settings), held
   // as a local-midnight Date like every other day this page handles.
@@ -503,6 +504,25 @@ export default function TodayClient({ initialTasks, initialHabits }: {
     return new Date(String(t.deadline)) >= overdueEventCutoff
   })).sort((a, b) =>
     String(b.scheduledStart ?? b.deadline ?? '').localeCompare(String(a.scheduledStart ?? a.deadline ?? '')))
+
+  // Due in the next few days: the list above only holds what is due by the
+  // day shown, so a big task due on Friday stayed invisible until Friday.
+  // Calendar-linked tasks are left out (they are events, already on the
+  // calendar) and so are tasks already given a slot.
+  const UPCOMING_DAYS = 7
+  const upcomingTasks = tasks.filter((t) => {
+    if (t.status === 'COMPLETED' || t.status === 'CANCELLED' || t.parentTaskId !== null) return false
+    if (!t.deadline || t.scheduledStart || t.calendarEventId) return false
+    if (isExcludedFromToday(t.title) || isReminder(t.title)) return false
+    const days = differenceInCalendarDays(new Date(String(t.deadline)), selectedDate)
+    return days >= 1 && days <= UPCOMING_DAYS
+  }).map(applyKeywordRules).sort((a, b) =>
+    String(a.deadline).localeCompare(String(b.deadline)) || (b.priority ?? 0) - (a.priority ?? 0))
+  const upcomingLabel = (deadline: string | Date) => {
+    const n = differenceInCalendarDays(new Date(String(deadline)), selectedDate)
+    if (n === 1) return language === 'fr' ? 'demain' : language === 'zh' ? '明天' : 'tomorrow'
+    return language === 'fr' ? `dans ${n} j` : language === 'zh' ? `${n} 天後` : `in ${n} days`
+  }
 
   // Only the slots booked on the day being shown; done ones stay, struck through.
   const scheduledTasks = tasks.filter(
@@ -1275,6 +1295,58 @@ export default function TodayClient({ initialTasks, initialHabits }: {
                             </div>
                           )
                         })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {upcomingTasks.length > 0 && (
+                  <div className="mt-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <button
+                        onClick={() => setShowUpcoming((v) => !v)}
+                        className="text-xs font-semibold text-[#8a6b3e] flex items-center gap-1.5 shrink-0"
+                      >
+                        {showUpcoming ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                        <Hourglass className="h-3.5 w-3.5" />
+                        {language === 'fr' ? `Bientôt (${upcomingTasks.length})` : language === 'zh' ? `即將到期 (${upcomingTasks.length})` : `Coming up (${upcomingTasks.length})`}
+                      </button>
+                      <div className="flex-1 h-px bg-[#e7c894]/50" />
+                    </div>
+                    {showUpcoming && (
+                      <div className="flex flex-col gap-1.5">
+                        {upcomingTasks.map((task) => (
+                          <div
+                            key={task.id}
+                            className="flex items-center gap-2 rounded-xl border border-[#ece2cb] bg-[#fbf7ee] px-3 py-1.5 hover:bg-[#f3ecdd] transition-colors cursor-pointer"
+                            onClick={() => { setEditingTask(task); setShowTaskForm(true) }}
+                          >
+                            <button
+                              onClick={async (e) => { e.stopPropagation(); await handleComplete(task.id) }}
+                              className="shrink-0 hover:scale-110 transition-transform"
+                              title={language === 'fr' ? 'Marquer comme fait' : language === 'zh' ? '標記為已完成' : 'Mark as done'}
+                            >
+                              <span className="h-3.5 w-3.5 rounded-full border-2 border-[#c4b48a] inline-block" />
+                            </button>
+                            {/* Important work gets a red mark so it can be started early */}
+                            {task.importance >= 7 && <span className="h-1.5 w-1.5 rounded-full bg-[#ab3326] shrink-0" />}
+                            <span className="flex-1 text-xs text-[#3a3326] truncate">{task.title}</span>
+                            {task.estimatedMinutes ? (
+                              <span className="hidden sm:flex items-center gap-0.5 text-[10px] text-[#a99873] shrink-0">
+                                <Clock className="h-3 w-3" />
+                                {task.estimatedMinutes >= 60
+                                  ? `${Math.floor(task.estimatedMinutes / 60)}h${task.estimatedMinutes % 60 ? String(task.estimatedMinutes % 60).padStart(2, '0') : ''}`
+                                  : `${task.estimatedMinutes} min`}
+                              </span>
+                            ) : null}
+                            <span
+                              className="text-[10px] text-[#8a6b3e] shrink-0"
+                              title={deadlineTooltip(String(task.deadline), language, selectedDate)}
+                            >
+                              {upcomingLabel(task.deadline!)}
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
