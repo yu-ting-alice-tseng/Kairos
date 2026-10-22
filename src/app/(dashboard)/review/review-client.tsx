@@ -175,13 +175,13 @@ export default function ReviewClient({ initialStats, accounts }: {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 h-[72px] shrink-0 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10">
+      <div className="flex items-center justify-between gap-2 px-4 py-3 md:px-6 md:py-0 md:h-[72px] shrink-0 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10">
         <div>
           <div className="flex items-center gap-2.5">
             <Sundial className="h-8 w-8" />
             <h1 className="text-2xl font-serif text-[#2a2420] tracking-tight leading-none">{t('review', language)}</h1>
           </div>
-          <p className="text-[13px] text-[#8a7a5e] mt-1 pl-[42px]">{copy.subtitle}</p>
+          <p className="hidden md:block text-[13px] text-[#8a7a5e] mt-1 pl-[42px]">{copy.subtitle}</p>
         </div>
         <div className="flex items-center gap-1 rounded-xl border border-[#e2d6bc] bg-white/60 px-1 py-1">
           <button
@@ -191,7 +191,7 @@ export default function ReviewClient({ initialStats, accounts }: {
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <span className="px-2 text-sm font-medium text-[#3a3326] min-w-[130px] text-center first-letter:uppercase">{monthLabel}</span>
+          <span className="px-2 text-sm font-medium text-[#3a3326] md:min-w-[130px] text-center first-letter:uppercase">{monthLabel}</span>
           <button
             onClick={() => load({ month: shiftMonth(month, 1) })}
             disabled={month >= currentMonthKey()}
@@ -211,7 +211,7 @@ export default function ReviewClient({ initialStats, accounts }: {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4 animate-fade-in">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 flex flex-col gap-4 animate-fade-in">
         {/* Filters — one row, above everything they scope */}
         <div className="flex items-center gap-2 flex-wrap">
           <label className="flex items-center gap-1.5 text-xs text-[#8a7a5e]">
@@ -245,7 +245,7 @@ export default function ReviewClient({ initialStats, accounts }: {
         </div>
 
         {/* Stat tiles — the hero is the month's completion count */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           <div className="rounded-2xl border border-[#e2d6bc] bg-gradient-to-br from-[#ab3326]/[0.07] to-[#b08948]/[0.05] paper-surface p-5 md:col-span-1">
             <p className="text-xs font-medium text-[#861f17]">{copy.completedTile}</p>
             <p className="text-5xl font-bold text-[#2a2420] leading-none mt-2">{summary?.completed ?? 0}</p>

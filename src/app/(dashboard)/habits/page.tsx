@@ -283,7 +283,7 @@ export default function HabitsPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-6 h-[72px] shrink-0 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10">
+      <div className="flex items-center justify-between px-4 py-3 md:px-6 md:py-0 md:h-[72px] shrink-0 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10">
         <div className="flex items-center gap-2.5">
           <Candle className="h-7 w-7" />
           <h1 className="text-2xl font-serif text-[#2a2420]">{t('habits', language)}</h1>
@@ -291,12 +291,12 @@ export default function HabitsPage() {
         </div>
         <Button size="sm" onClick={() => setShowForm(true)} data-tour="add-habit">
           <Plus className="h-4 w-4" />
-          {t('addHabit', language)}
+          <span className="hidden sm:inline">{t('addHabit', language)}</span>
         </Button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
-        <div className="grid grid-cols-3 gap-4">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 flex flex-col gap-4 md:gap-6">
+        <div className="grid grid-cols-3 gap-2 md:gap-4">
           {[
             { label: language === 'fr' ? 'Total habitudes' : language === 'zh' ? '習慣總數' : 'Total habits', value: habits.length, icon: Repeat2, color: 'text-[#4f6f5e]', bg: 'bg-[#4f6f5e]/10' },
             { label: language === 'fr' ? 'Séries actives' : language === 'zh' ? '進行中連續天數' : 'Active streaks', value: totalStreak, icon: Flame, color: 'text-[#ab3326]', bg: 'bg-[#ab3326]/8' },

@@ -210,7 +210,10 @@ function useTargetRect(selector: string | undefined, active: boolean, pathname: 
 
     const find = () => {
       if (cancelled) return
-      const el = document.querySelector<HTMLElement>(selector)
+      // The same nav target exists in the sidebar and the phone bar; take the
+      // one that is actually on screen.
+      const el = Array.from(document.querySelectorAll<HTMLElement>(selector))
+        .find((e) => e.getClientRects().length > 0)
       if (el) {
         elRef.current = el
         track()

@@ -6,7 +6,8 @@ import {
   DragEndEvent,
   DragOverlay,
   DragStartEvent,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   useDroppable,
@@ -145,7 +146,11 @@ interface EisenhowerMatrixProps {
 
 export function EisenhowerMatrix({ tasks, habits = [], onTaskUpdate, onTaskClick, onComplete, onCompleteHabit, lang = 'fr' }: EisenhowerMatrixProps) {
   const [activeTask, setActiveTask] = useState<Task | null>(null)
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
+  // Touch needs a press-and-hold, otherwise scrolling the page on a phone picks up cards
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+  )
 
   const getTasksForQuadrant = useCallback(
     (quadrantId: string) =>
@@ -199,7 +204,8 @@ export function EisenhowerMatrix({ tasks, habits = [], onTaskUpdate, onTaskClick
   return (
     <div className="w-full">
       {/* X-axis header: urgency increases to the right */}
-      <div className="flex items-center mb-3 pl-10">
+      {/* Axis labels only make sense in the 2×2 grid; phones stack the quadrants */}
+      <div className="hidden md:flex items-center mb-3 pl-10">
         <div className="flex-1 flex">
           <div className="flex-1 text-center text-xs font-semibold text-[#a99873] pb-1">
             ← {lang === 'fr' ? 'Urgence basse' : lang === 'zh' ? '低緊急度' : 'Low urgency'}
@@ -212,7 +218,7 @@ export function EisenhowerMatrix({ tasks, habits = [], onTaskUpdate, onTaskClick
 
       <div className="flex gap-3">
         {/* Y-axis label: two horizontal labels top/bottom */}
-        <div className="w-16 flex flex-col justify-between items-center shrink-0 py-2">
+        <div className="hidden md:flex w-16 flex-col justify-between items-center shrink-0 py-2">
           <span className="text-xs font-semibold text-red-800 text-center leading-tight">
             ↑ {lang === 'fr' ? 'Importance haute' : lang === 'zh' ? '高重要度' : 'High importance'}
           </span>
@@ -222,7 +228,7 @@ export function EisenhowerMatrix({ tasks, habits = [], onTaskUpdate, onTaskClick
         </div>
 
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <div className="flex-1 grid grid-cols-2 gap-4">
+          <div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-2 gap-4">
             {displayQuadrants.map((q) => (
               <QuadrantDroppable
                 key={q.id}

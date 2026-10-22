@@ -692,15 +692,15 @@ export default function SettingsPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 h-[72px] shrink-0 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10">
+      <div className="flex items-center justify-between px-4 py-3 md:px-6 md:py-0 md:h-[72px] shrink-0 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10">
         <div className="flex items-center gap-2.5">
           <Settings className="h-5 w-5 text-red-800" />
           <h1 className="text-2xl font-serif text-[#2a2420]">{t('settings', language)}</h1>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
 
           {/* ── LEFT COLUMN ── */}
           <div className="flex flex-col gap-6">

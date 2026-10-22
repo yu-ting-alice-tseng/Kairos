@@ -338,7 +338,7 @@ export function GoalsSection({ lang }: GoalsSectionProps) {
       </button>
 
       {!collapsed && (
-        <div className="px-4 pb-4 flex gap-6">
+        <div className="px-4 pb-4 flex flex-col md:flex-row gap-4 md:gap-6">
           <GoalColumn
             type="LONG_TERM"
             goals={longTerm}
@@ -348,7 +348,7 @@ export function GoalsSection({ lang }: GoalsSectionProps) {
             onEdit={handleEdit}
             onGoalsCreated={handleGoalsCreated}
           />
-          <div className="w-px bg-[#ece2cb]" />
+          <div className="h-px md:h-auto md:w-px bg-[#ece2cb]" />
           <GoalColumn
             type="SHORT_TERM"
             goals={shortTerm}

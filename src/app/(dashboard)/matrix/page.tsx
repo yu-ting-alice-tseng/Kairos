@@ -258,17 +258,17 @@ export default function MatrixPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-6 h-[72px] shrink-0 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10">
-        <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 md:px-6 md:py-0 md:h-[72px] shrink-0 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10">
+        <div className="flex items-center gap-3 flex-wrap min-w-0">
           <div className="flex items-center gap-2">
             <LayoutGrid className="h-5 w-5 text-red-800" />
             <h1 className="text-2xl font-serif text-[#2a2420]">{t('matrix', language)}</h1>
           </div>
-          <span className="text-sm text-[#8a7a5e]">
+          <span className="hidden lg:inline text-sm text-[#8a7a5e]">
             {language === 'fr' ? 'Glissez les tâches pour les prioriser' : language === 'zh' ? '拖曳任務以排定優先順序' : 'Drag tasks to prioritize'}
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 md:gap-2">
           {/* Day picker */}
           <div className="flex items-center gap-0.5 rounded-xl border border-[#e2d6bc] bg-white/60 px-1 py-1">
             <button onClick={prevDay} className="p-1 rounded-lg hover:bg-[#f3ecdd] text-[#8a7a5e] transition-colors">
@@ -306,18 +306,18 @@ export default function MatrixPage() {
             )}
           >
             <SlidersHorizontal className="h-3.5 w-3.5" />
-            {language === 'fr' ? 'Règles' : language === 'zh' ? '規則' : 'Rules'}
+            <span className="hidden sm:inline">{language === 'fr' ? 'Règles' : language === 'zh' ? '規則' : 'Rules'}</span>
           </button>
           <Button size="sm" onClick={() => setShowTaskForm(true)}>
             <Plus className="h-4 w-4" />
-            {t('addTask', language)}
+            <span className="hidden sm:inline">{t('addTask', language)}</span>
           </Button>
         </div>
       </div>
 
       {/* Settings panel: filters + keyword rules */}
       {settingsPanelOpen && (
-        <div className="border-b border-[#ece2cb] bg-[#f8f4ea] px-6 py-4 flex flex-col gap-5">
+        <div className="border-b border-[#ece2cb] bg-[#f8f4ea] px-4 md:px-6 py-4 flex flex-col gap-5">
           {/* Habits visibility */}
           {habits.length > 0 && (
             <div className="flex items-center gap-3">
@@ -405,7 +405,7 @@ export default function MatrixPage() {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6">
         <GoalsSection lang={language} />
 
         <EisenhowerMatrix

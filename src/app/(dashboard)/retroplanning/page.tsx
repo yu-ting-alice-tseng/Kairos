@@ -959,7 +959,7 @@ export default function RetroplanningPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 h-[72px] shrink-0 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10">
+      <div className="flex items-center justify-between px-4 py-3 md:px-6 md:py-0 md:h-[72px] shrink-0 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10">
         <div className="flex items-center gap-2.5">
           <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-red-500 to-amber-700 flex items-center justify-center shadow-md shadow-red-500/20">
             <GitBranch className="h-4 w-4 text-white" />
@@ -973,9 +973,9 @@ export default function RetroplanningPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden flex gap-0 min-h-0">
-        {/* ── Left: Templates ── */}
-        <div className="w-[280px] shrink-0 flex flex-col border-r border-[#ece2cb] bg-[#fbf7ee] overflow-y-auto">
+      <div className="flex-1 overflow-y-auto md:overflow-hidden flex flex-col md:flex-row gap-0 min-h-0">
+        {/* ── Left: Templates (on top on phones) ── */}
+        <div className="w-full md:w-[280px] shrink-0 flex flex-col border-b md:border-b-0 md:border-r border-[#ece2cb] bg-[#fbf7ee] md:overflow-y-auto">
           <div className="flex items-center justify-between px-4 py-3 border-b border-[#ece2cb]">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-[#8a7a5e]">
               {lang === 'fr' ? 'Modèles' : lang === 'zh' ? '模板' : 'Templates'}
@@ -1084,7 +1084,7 @@ export default function RetroplanningPage() {
         </div>
 
         {/* ── Right: Chains ── */}
-        <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
+        <div className="md:flex-1 md:overflow-y-auto p-4 md:p-6 flex flex-col gap-6">
 
           {/* Calendar scan — actionable list, always visible while matches exist */}
           {scanMatches.length > 0 && (

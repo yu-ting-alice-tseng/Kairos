@@ -381,7 +381,7 @@ function EventSearchBox({ lang, calendarAccounts, onPick }: {
           }}
           placeholder={lang === 'fr' ? 'Rechercher un événement…' : lang === 'zh' ? '搜尋行程…' : 'Search events…'}
           aria-label={lang === 'fr' ? 'Rechercher un événement' : lang === 'zh' ? '搜尋行程' : 'Search events'}
-          className="w-36 focus:w-56 transition-all bg-transparent text-xs text-[#3a3326] placeholder:text-[#c4b48a] focus:outline-none"
+          className="w-24 md:w-36 focus:w-40 md:focus:w-56 transition-all bg-transparent text-xs text-[#3a3326] placeholder:text-[#c4b48a] focus:outline-none"
         />
         {query && (
           <button
@@ -398,7 +398,7 @@ function EventSearchBox({ lang, calendarAccounts, onPick }: {
           stacking context, so a panel rendered inside it can never paint above
           the grid's own sticky day-header row. */}
       {showPanel && createPortal(
-        <div className="fixed top-[72px] right-6 z-50 w-[380px] max-h-[60vh] overflow-y-auto rounded-2xl border border-[#e2d6bc] bg-[#fbf7ee] shadow-xl shadow-black/10" ref={panelRef}>
+        <div className="fixed top-[120px] md:top-[72px] left-4 right-4 md:left-auto md:right-6 z-50 md:w-[380px] max-h-[60vh] overflow-y-auto rounded-2xl border border-[#e2d6bc] bg-[#fbf7ee] shadow-xl shadow-black/10" ref={panelRef}>
           {indexLoading && (
             <p className="flex items-center gap-2 px-4 py-3 text-xs text-[#8a7a5e]">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1565,24 +1565,24 @@ export default function CalendarPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center gap-2 px-6 h-[72px] shrink-0 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10 overflow-hidden">
-        <div className="flex items-center gap-4 shrink-0">
+      <div className="flex flex-wrap md:flex-nowrap items-center gap-2 px-4 py-3 md:px-6 md:py-0 md:h-[72px] shrink-0 border-b border-[#e2d6bc] bg-[#fbf7ee] sticky top-0 z-10 md:overflow-hidden">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 min-w-0 md:shrink-0">
           <div className="flex items-center gap-2">
             <Calendar className="h-5 w-5 text-[#ab3326]" />
             <h1 className="text-2xl font-serif text-[#2a2420]">{t('calendar', language)}</h1>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             <Button variant="ghost" size="icon-sm" aria-label={language === 'fr' ? 'Semaine précédente' : language === 'zh' ? '上一週' : 'Previous week'} onClick={() => setStartDate((d) => addDays(d, -7))}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="text-sm font-medium text-[#5c5347] px-2 min-w-[160px] text-center">
+            <span className="text-sm font-medium text-[#5c5347] px-1 md:px-2 md:min-w-[160px] text-center">
               {format(weekStart, 'dd MMM', { locale })} – {format(weekEnd, 'dd MMM yyyy', { locale })}
             </span>
             <Button variant="ghost" size="icon-sm" aria-label={language === 'fr' ? 'Semaine suivante' : language === 'zh' ? '下一週' : 'Next week'} onClick={() => setStartDate((d) => addDays(d, 7))}>
               <ChevronRight className="h-4 w-4" />
             </Button>
             <Button variant="outline" size="sm" onClick={() => { const d = new Date(); d.setHours(0,0,0,0); const dow = d.getDay(); d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow)); setStartDate(d) }}>
-              {t('today', language)}
+              {language === 'fr' ? "Aujourd'hui" : language === 'zh' ? '今天' : 'Today'}
             </Button>
             <Button
               variant="ghost"
@@ -1599,12 +1599,13 @@ export default function CalendarPage() {
               aria-label={language === 'fr' ? 'Raccourcis clavier (?)' : language === 'zh' ? '鍵盤快捷鍵（?）' : 'Keyboard shortcuts (?)'}
               title={language === 'fr' ? 'Raccourcis clavier (?)' : language === 'zh' ? '鍵盤快捷鍵（?）' : 'Keyboard shortcuts (?)'}
               onClick={openShortcutsHelp}
+              className="hidden md:inline-flex"
             >
               <Keyboard className="h-4 w-4" />
             </Button>
           </div>
         </div>
-        <div className="flex items-center gap-2 min-w-0 flex-1 justify-end overflow-hidden">
+        <div className="flex items-center gap-2 min-w-0 w-full md:w-auto flex-1 justify-end overflow-hidden">
           {undoCount > 0 && (
             <Button
               variant="ghost"
@@ -1673,7 +1674,7 @@ export default function CalendarPage() {
           )}
           <Button size="sm" onClick={() => { setSelectedDate(new Date()); setShowTaskForm(true) }}>
             <Plus className="h-4 w-4" />
-            {t('addTask', language)}
+            <span className="hidden sm:inline">{t('addTask', language)}</span>
           </Button>
         </div>
       </div>
@@ -1693,7 +1694,8 @@ export default function CalendarPage() {
       <div className="flex flex-1 min-h-0">
 
       {/* Left: chain panel */}
-      <div className={cn('shrink-0 border-r border-[#e2d6bc] bg-[#fbf7ee] flex flex-col overflow-hidden transition-all duration-200', chainPanelOpen ? 'w-56' : 'w-9')}>
+      {/* No room for the chain panel on phones; chains stay on Retroplanning */}
+      <div className={cn('shrink-0 border-r border-[#e2d6bc] bg-[#fbf7ee] hidden md:flex flex-col overflow-hidden transition-all duration-200', chainPanelOpen ? 'w-56' : 'w-9')}>
         <button
           onClick={() => setChainPanelOpen((v) => !v)}
           className="flex items-center gap-1.5 px-2.5 py-2.5 border-b border-[#ece2cb] hover:bg-[#f3ecdd] transition-colors shrink-0 w-full"
@@ -1876,7 +1878,7 @@ export default function CalendarPage() {
           }
         }}
       >
-        <div className="min-w-[700px]">
+        <div className="md:min-w-[700px]">
           {/* Day headers */}
           <div className={cn('grid border-b border-[#ece2cb] bg-[#fbf7ee] sticky top-0 z-10', hourColClass)}>
             <div className="py-2 px-1 text-[10px] text-[#a99873] border-r border-[#ece2cb] flex flex-col items-end justify-end gap-0.5 cursor-pointer hover:bg-[#f3ecdd] transition-colors" onClick={() => setTzDialogOpen(true)}>
@@ -2535,7 +2537,7 @@ function HabitDetailPanel({ habit, lang, onComplete, onClose }: {
     : (lang === 'zh' ? '週末' : lang === 'fr' ? 'Week-ends' : 'Weekends')
 
   return (
-    <div className="w-72 shrink-0 border-l border-[#e2d6bc] bg-[#fbf7ee] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-[60] w-full md:static md:z-auto md:w-72 shrink-0 md:border-l border-[#e2d6bc] bg-[#fbf7ee] flex flex-col overflow-hidden">
       <div className="h-1 w-full shrink-0" style={{ backgroundColor: habit.color }} />
       <div className="flex items-center justify-between px-4 pt-4 pb-2 gap-2">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-[#a99873]">
@@ -2739,7 +2741,7 @@ function ScheduledTaskPanel({
   const done = task.status === 'COMPLETED'
 
   return (
-    <div className="w-72 shrink-0 border-l border-[#e2d6bc] bg-[#fbf7ee] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-[60] w-full md:static md:z-auto md:w-72 shrink-0 md:border-l border-[#e2d6bc] bg-[#fbf7ee] flex flex-col overflow-hidden">
       <div className="h-1 w-full shrink-0 bg-[#ab3326]" />
       <div className="flex items-center justify-between px-4 pt-4 pb-2 gap-2">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-[#a99873]">
@@ -3407,7 +3409,7 @@ function EventDetailPanel({
   }, [event.start, event.end, event.allDay, lang])
 
   return (
-    <div className="w-72 shrink-0 border-l border-[#e2d6bc] bg-[#fbf7ee] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-[60] w-full md:static md:z-auto md:w-72 shrink-0 md:border-l border-[#e2d6bc] bg-[#fbf7ee] flex flex-col overflow-hidden">
       {/* Color bar + header */}
       <div className="h-1 w-full shrink-0" style={{ backgroundColor: evColor }} />
       <div className="flex items-center justify-between px-4 pt-4 pb-2 gap-2">
