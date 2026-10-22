@@ -12,7 +12,8 @@ const createTaskSchema = z.object({
   importance: z.number().min(1).max(10).default(5),
   urgency: z.number().min(1).max(10).default(5),
   estimatedMinutes: z.number().optional(),
-  deadline: z.string().optional(),
+  // The form sends null when no due date is set
+  deadline: z.string().nullish(),
   calendarAccountId: z.string().optional(),
   calendarEventId: z.string().optional(),
   scheduledStart: z.string().optional(),

@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { calculatePriority } from '@/lib/utils'
 import { updateGoogleEvent } from '@/lib/calendar/google'
+import { isDemoUser, getDemoTasks } from '@/lib/demo-data'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
@@ -10,6 +11,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { id } = await params
   const body = await req.json()
+
+  // The demo serves fixed tasks that are not in the database: echo the change
+  // so the page behaves, and keep nothing (same as demo creation).
+  if (isDemoUser(session.user.id)) {
+    const base = getDemoTasks().find((t) => t.id === id) ?? { id, subTasks: [], calendarAccount: null }
+    const merged = { ...base, ...body, updatedAt: new Date() }
+    if (body.status === 'COMPLETED') merged.completedAt = new Date()
+    else if (body.status === 'PENDING') merged.completedAt = null
+    if ('importance' in merged && 'urgency' in merged) merged.priority = calculatePriority(merged.importance, merged.urgency)
+    return NextResponse.json(merged)
+  }
 
   const existing = await prisma.task.findUnique({ where: { id, userId: session.user.id } })
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -78,6 +90,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
+  if (isDemoUser(session.user.id)) return NextResponse.json({ success: true })
 
   const existing = await prisma.task.findUnique({ where: { id, userId: session.user.id } })
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })

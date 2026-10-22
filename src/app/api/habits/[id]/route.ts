@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
+import { isDemoUser, getDemoHabits } from '@/lib/demo-data'
 
 const habitPatchSchema = z.object({
   title: z.string().min(1).max(500).optional(),
@@ -29,6 +30,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const data = parsed.data
 
+  // Demo habits are not in the database: echo the change, keep nothing.
+  if (isDemoUser(session.user.id)) {
+    const base = getDemoHabits().find((h) => h.id === id) ?? { id, completions: [] }
+    return NextResponse.json({ ...base, ...data, updatedAt: new Date() })
+  }
+
   const habit = await prisma.habit.update({
     where: { id, userId: session.user.id },
     data,
@@ -43,6 +50,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
+  if (isDemoUser(session.user.id)) return NextResponse.json({ success: true })
+
   await prisma.habit.update({
     where: { id, userId: session.user.id },
     data: { isActive: false },

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { loadUserHabits } from '@/lib/queries'
 import { getRequestTimeZone } from '@/lib/timezone-server'
 import { z } from 'zod'
+import { isDemoUser } from '@/lib/demo-data'
 
 const createHabitSchema = z.object({
   title: z.string().min(1),
@@ -34,6 +35,14 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 })
 
   const d = parsed.data
+
+  // Demo habits are served from fixed data, so a stored one would vanish on
+  // reload: echo it instead, like demo task creation.
+  if (isDemoUser(session.user.id)) {
+    const now = new Date()
+    return NextResponse.json({ id: `demo-h-${Date.now()}`, userId: session.user.id, ...d, description: d.description ?? null, icon: d.icon ?? null, targetDays: d.targetDays ?? null, scheduledTime: d.scheduledTime ?? null, durationMinutes: d.durationMinutes ?? null, isActive: true, streak: 0, longestStreak: 0, createdAt: now, updatedAt: now, completions: [] }, { status: 201 })
+  }
+
   try {
     const habit = await prisma.habit.create({
       data: {

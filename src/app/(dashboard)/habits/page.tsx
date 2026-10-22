@@ -263,7 +263,10 @@ export default function HabitsPage() {
     })
     if (res.ok) {
       const { streak } = await res.json()
-      setHabits(habits.map((h) => h.id === habitId ? { ...h, streak } : h))
+      setHabits(habits.map((h) => h.id === habitId
+        ? { ...h, streak, completions: [{ id: 'tmp', habitId, completedAt: new Date().toISOString() }] }
+        : h
+      ))
       toast({ title: `🔥 ${language === 'fr' ? 'Série' : language === 'zh' ? '連續天數' : 'Streak'}: ${streak}`, variant: 'success' })
     }
   }

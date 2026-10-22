@@ -647,6 +647,8 @@ export default function TodayClient({ initialTasks, initialHabits }: {
         const created = await res.json()
         addTask(created)
         toast({ title: language === 'fr' ? 'Tâche créée !' : language === 'zh' ? '任務已建立！' : 'Task created!', variant: 'success' })
+      } else {
+        toast({ title: language === 'fr' ? 'Impossible de créer la tâche' : language === 'zh' ? '無法建立任務' : 'Could not create the task', variant: 'error' })
       }
     }
     setEditingTask(null)

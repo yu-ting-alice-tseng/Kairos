@@ -3,6 +3,14 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getRequestTimeZone } from '@/lib/timezone-server'
 import { zonedDayRange } from '@/lib/timezones'
+import { isDemoUser, getDemoHabits } from '@/lib/demo-data'
+
+// The demo serves fixed habits that are not in the database: answer as if the
+// check-in worked, and keep nothing.
+function demoStreak(habitId: string, delta: number) {
+  const streak = getDemoHabits().find((h) => h.id === habitId)?.streak ?? 0
+  return Math.max(0, streak + delta)
+}
 
 // DELETE — remove today's completion for a habit
 export async function DELETE(req: NextRequest) {
@@ -10,6 +18,8 @@ export async function DELETE(req: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { habitId } = await req.json()
+  if (isDemoUser(session.user.id)) return NextResponse.json({ success: true, streak: demoStreak(habitId, -1) })
+
   const habit = await prisma.habit.findFirst({ where: { id: habitId, userId: session.user.id } })
   if (!habit) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -29,6 +39,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { habitId, notes } = await req.json()
+  if (isDemoUser(session.user.id)) return NextResponse.json({ success: true, streak: demoStreak(habitId, 1) })
 
   const habit = await prisma.habit.findUnique({
     where: { id: habitId, userId: session.user.id },
