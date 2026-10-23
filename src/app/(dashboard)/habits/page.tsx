@@ -11,7 +11,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
-import { Repeat2, Plus, Flame, CheckCircle2, Trophy, Loader2, Trash2, Edit2, Clock } from 'lucide-react'
+import { completeHabitOptimistic } from '@/lib/habit-mutations'
+import { Repeat2, Plus, Flame, CheckCircle2, Trophy, Trash2, Edit2, Clock } from 'lucide-react'
 import { Candle } from '@/components/ui/Candle'
 import { InkLoader } from '@/components/ui/InkLoader'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
@@ -61,7 +62,6 @@ function HabitForm({ open, onClose, onSave, habit, lang }: {
   const [durationMinutes, setDurationMinutes] = useState(habit?.durationMinutes ?? 15)
   const [importance, setImportance] = useState(habit?.importance ?? 5)
   const [urgency, setUrgency] = useState(habit?.urgency ?? 5)
-  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     setTitle(habit?.title ?? '')
@@ -90,12 +90,11 @@ function HabitForm({ open, onClose, onSave, habit, lang }: {
     return lang === 'zh' ? '⚪ 不重要不緊急' : lang === 'fr' ? '⚪ Ni urgent ni important' : '⚪ Neither urgent nor important'
   }
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!title.trim()) return
-    setSaving(true)
-    await onSave({ title, description, color, icon, frequency, scheduledTime, durationMinutes, importance, urgency })
-    setSaving(false)
+    // The list updates at once and saves in the background, so the form need not wait
     onClose()
+    void onSave({ title, description, color, icon, frequency, scheduledTime, durationMinutes, importance, urgency }).catch(() => {})
   }
 
   return (
@@ -173,8 +172,8 @@ function HabitForm({ open, onClose, onSave, habit, lang }: {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t('cancel', lang)}</Button>
-          <Button onClick={handleSave} disabled={!title.trim() || saving}>
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : t('save', lang)}
+          <Button onClick={handleSave} disabled={!title.trim()}>
+            {t('save', lang)}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -187,9 +186,10 @@ const HABITS_SHORTCUTS: Shortcut[] = [
 ]
 
 export default function HabitsPage() {
-  const { language, habits, setHabits } = useAppStore()
+  const { language, habits, habitsLoaded, setHabits, addHabit, updateHabit, removeHabit } = useAppStore()
   const { toast } = useGlobalToast()
-  const [loading, setLoading] = useState(true)
+  // Habits this session already read show at once; loadHabits refreshes them
+  const [loading, setLoading] = useState(!habitsLoaded)
   const [showForm, setShowForm] = useState(false)
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null)
 
@@ -199,7 +199,6 @@ export default function HabitsPage() {
   })
 
   const loadHabits = useCallback(async () => {
-    setLoading(true)
     try {
       const res = await fetch('/api/habits')
       if (res.ok) setHabits(await res.json())
@@ -212,68 +211,50 @@ export default function HabitsPage() {
 
   const handleSave = async (data: Partial<Habit>) => {
     const errorMsg = language === 'fr' ? 'Erreur lors de la sauvegarde' : language === 'zh' ? '儲存失敗，請稍後再試' : 'Failed to save, please try again'
-    if (editingHabit) {
+    const editing = editingHabit
+    setEditingHabit(null)
+    if (editing) {
+      // Show the change at once, put it back if the server refuses it
+      updateHabit(editing.id, data)
       try {
-        const res = await fetch(`/api/habits/${editingHabit.id}`, {
+        const res = await fetch(`/api/habits/${editing.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data),
         })
-        if (res.ok) {
-          const updated = await res.json()
-          setHabits(habits.map((h) => h.id === editingHabit.id ? updated : h))
-          toast({ title: language === 'fr' ? 'Habitude mise à jour !' : language === 'zh' ? '習慣已更新！' : 'Habit updated!', variant: 'success' })
-        } else {
-          const err = await res.json().catch(() => ({}))
-          console.error('PATCH habit error:', err)
-          toast({ title: errorMsg, variant: 'error' })
-        }
-      } catch (e) {
-        console.error(e)
+        if (!res.ok) throw new Error(String(res.status))
+        updateHabit(editing.id, await res.json())
+      } catch {
+        updateHabit(editing.id, editing)
         toast({ title: errorMsg, variant: 'error' })
       }
-    } else {
-      try {
-        const res = await fetch('/api/habits', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        })
-        if (res.ok) {
-          await loadHabits()
-          toast({ title: language === 'fr' ? 'Habitude créée !' : language === 'zh' ? '習慣已建立！' : 'Habit created!', variant: 'success' })
-        } else {
-          const err = await res.json().catch(() => ({}))
-          console.error('POST habit error:', res.status, err)
-          toast({ title: errorMsg, description: `${res.status}: ${err.detail ?? err.error ?? 'unknown'}`, variant: 'error' })
-        }
-      } catch (e) {
-        console.error(e)
-        toast({ title: errorMsg, variant: 'error' })
-      }
+      return
     }
-    setEditingHabit(null)
+    try {
+      const res = await fetch('/api/habits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) throw new Error(String(res.status))
+      addHabit(await res.json())
+    } catch {
+      toast({ title: errorMsg, variant: 'error' })
+    }
   }
 
-  const handleComplete = async (habitId: string) => {
-    const res = await fetch('/api/habits/complete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ habitId }),
-    })
-    if (res.ok) {
-      const { streak } = await res.json()
-      setHabits(habits.map((h) => h.id === habitId
-        ? { ...h, streak, completions: [{ id: 'tmp', habitId, completedAt: new Date().toISOString() }] }
-        : h
-      ))
-      toast({ title: `🔥 ${language === 'fr' ? 'Série' : language === 'zh' ? '連續天數' : 'Streak'}: ${streak}`, variant: 'success' })
-    }
-  }
+  const handleComplete = (habitId: string) =>
+    completeHabitOptimistic(habitId, () =>
+      toast({ title: language === 'fr' ? 'Erreur de mise à jour' : language === 'zh' ? '更新失敗' : 'Update failed', variant: 'error' }))
 
   const handleDelete = async (id: string) => {
-    await fetch(`/api/habits/${id}`, { method: 'DELETE' })
-    setHabits(habits.filter((h) => h.id !== id))
+    const before = habits
+    removeHabit(id)
+    const res = await fetch(`/api/habits/${id}`, { method: 'DELETE' }).catch(() => null)
+    if (!res?.ok) {
+      setHabits(before)
+      toast({ title: language === 'fr' ? 'Suppression impossible' : language === 'zh' ? '刪除失敗' : 'Delete failed', variant: 'error' })
+    }
   }
 
   if (loading) return <InkLoader size="page" />
@@ -315,7 +296,7 @@ export default function HabitsPage() {
         {habits.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#e2d6bc] py-16 text-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo_v5/empty-habits.png" alt="" className="h-32 w-auto mb-4 object-contain opacity-85" />
+            <img src="/img/empty-habits.webp" alt="" className="h-32 w-auto mb-4 object-contain opacity-85" />
             <p className="text-sm font-medium text-[#8a7a5e]">{t('noHabits', language)}</p>
             <Button variant="outline" size="sm" className="mt-4" onClick={() => setShowForm(true)}>
               <Plus className="h-4 w-4" />

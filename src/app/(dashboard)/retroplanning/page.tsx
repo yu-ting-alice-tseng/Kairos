@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { TaskForm } from '@/components/tasks/TaskForm'
 import { cn } from '@/lib/utils'
+import { saveTaskEdit, deleteTaskOptimistic } from '@/lib/task-mutations'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
 import {
   GitBranch, Plus, Trash2, Edit2, Save, X, Check, ChevronDown,
@@ -890,24 +891,17 @@ export default function RetroplanningPage() {
   }
 
   const handleSaveTask = async (data: Partial<Task>) => {
-    if (!editingTask) return
-    const res = await fetch(`/api/tasks/${editingTask.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    })
-    if (res.ok) {
-      const updated = await res.json()
-      updateTask(editingTask.id, updated)
-    }
+    const editing = editingTask
+    if (!editing) return
     setEditingTask(null)
+    await saveTaskEdit(editing.id, data, () =>
+      toast({ title: lang === 'fr' ? 'Modification non enregistrée' : lang === 'zh' ? '修改未儲存' : 'Change not saved', variant: 'error' }))
   }
 
   const handleDeleteTask = async (id: string) => {
-    await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
-    const fresh = await fetch('/api/tasks')
-    if (fresh.ok) setTasks(await fresh.json())
     setEditingTask(null)
+    await deleteTaskOptimistic(id, () =>
+      toast({ title: lang === 'fr' ? 'Suppression impossible' : lang === 'zh' ? '刪除失敗' : 'Delete failed', variant: 'error' }))
   }
 
   const openLinkDialog = async (parentId: string, parentTitle: string) => {
@@ -1205,7 +1199,7 @@ export default function RetroplanningPage() {
           {chains.length === 0 && suggestedTasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#e2d6bc] py-20 text-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo_v5/empty state retroplanning.png" alt="" className="h-28 w-auto mb-5 object-contain" style={{ mixBlendMode: 'multiply' }} />
+              <img src="/img/empty-retro.webp" alt="" className="h-28 w-auto mb-5 object-contain" style={{ mixBlendMode: 'multiply' }} />
               <p className="text-sm font-medium text-[#8a7a5e] max-w-xs">
                 {lang === 'fr'
                   ? 'Aucune chaîne de tâches. Ouvrez une tâche avec deadline et cliquez sur "Rétroplanifier".'

@@ -104,7 +104,7 @@ export default async function SignInPage() {
         <div className="flex-1 min-w-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/logo_v5/Banner.png"
+            src="/img/banner.webp"
             alt="Kairos 墨時"
             className="w-full rounded-2xl shadow-[0_4px_24px_rgba(42,31,18,0.13)]"
           />

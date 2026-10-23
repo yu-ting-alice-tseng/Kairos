@@ -55,7 +55,6 @@ export function TaskForm({ open, onClose, onSave, onDelete, task, calendarAccoun
   const defaultCalendarId = task?.calendarAccountId ?? (calendarAccounts.length === 1 ? calendarAccounts[0].id : '')
   const [calendarAccountId, setCalendarAccountId] = useState(defaultCalendarId)
   const [notes, setNotes] = useState(task?.notes ?? '')
-  const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [ruleApplied, setRuleApplied] = useState<string | null>(null)
   const ruleAppliedRef = useRef(false)
@@ -152,22 +151,19 @@ export function TaskForm({ open, onClose, onSave, onDelete, task, calendarAccoun
     if (isNewTask && calendarAccounts.length > 0 && !calendarAccountId) {
       setCalendarAccountId(calendarAccounts[0].id) // auto-select first
     }
-    setIsSaving(true)
-    try {
-      await onSave({
-        title: title.trim(),
-        description: description || undefined,
-        importance,
-        urgency,
-        estimatedMinutes,
-        deadline: deadline ? new Date(deadline) : null,
-        calendarAccountId: calendarAccountId || undefined,
-        notes: notes || undefined,
-      })
-      onClose()
-    } finally {
-      setIsSaving(false)
-    }
+    // Close at once: the pages show the change straight away and save in the
+    // background (rolling back with a message if the server refuses it).
+    onClose()
+    void Promise.resolve(onSave({
+      title: title.trim(),
+      description: description || undefined,
+      importance,
+      urgency,
+      estimatedMinutes,
+      deadline: deadline ? new Date(deadline) : null,
+      calendarAccountId: calendarAccountId || undefined,
+      notes: notes || undefined,
+    })).catch(() => {})
   }
 
   return (
@@ -391,8 +387,8 @@ export function TaskForm({ open, onClose, onSave, onDelete, task, calendarAccoun
             </Button>
           )}
           <Button variant="outline" onClick={onClose}>{t('cancel', lang)}</Button>
-          <Button onClick={handleSave} disabled={!title.trim() || isSaving || (calendarAccounts.length > 0 && !calendarAccountId)}>
-            {isSaving ? t('loading', lang) : t('save', lang)}
+          <Button onClick={handleSave} disabled={!title.trim() || (calendarAccounts.length > 0 && !calendarAccountId)}>
+            {t('save', lang)}
           </Button>
         </DialogFooter>
 

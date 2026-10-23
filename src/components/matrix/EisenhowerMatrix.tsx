@@ -17,9 +17,9 @@ import { CSS } from '@dnd-kit/utilities'
 import { Task, Habit, EISENHOWER_QUADRANTS, QUADRANT_LABEL_ZH } from '@/types'
 import { t } from '@/lib/i18n'
 import { useAppStore } from '@/stores/useAppStore'
-import { cn, getQuadrant, formatDuration } from '@/lib/utils'
+import { cn, getQuadrant, formatDuration, dueInLabel } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { Clock, AlertCircle, Zap, CheckCircle2, Circle, Loader2 } from 'lucide-react'
+import { Clock, AlertCircle, Zap, CheckCircle2, Circle, Hourglass } from 'lucide-react'
 
 function MatrixHabitCard({ habit, onComplete }: { habit: Habit; onComplete: (id: string) => void }) {
   const doneToday = ((habit as Habit & { completions?: { id: string }[] }).completions?.length ?? 0) > 0
@@ -51,16 +51,20 @@ interface QuadrantDroppableProps {
   onTaskClick: (task: Task) => void
   onComplete: (id: string) => Promise<void>
   onCompleteHabit: (id: string) => void
+  referenceDate: Date
+  lang: 'fr' | 'en' | 'zh'
 }
 
-function MatrixTaskCard({ task, isDragging = false, onComplete, onTaskClick }: { task: Task; isDragging?: boolean; onComplete: (id: string) => Promise<void>; onTaskClick: (t: Task) => void }) {
+function MatrixTaskCard({ task, isDragging = false, onComplete, onTaskClick, referenceDate, lang }: { task: Task; isDragging?: boolean; onComplete: (id: string) => Promise<void>; onTaskClick: (t: Task) => void; referenceDate: Date; lang: 'fr' | 'en' | 'zh' }) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: task.id })
   const style = { transform: CSS.Translate.toString(transform) }
-  const [completing, setCompleting] = React.useState(false)
 
   const urgencyColor = task.urgency >= 8 ? 'text-red-600' : task.urgency >= 6 ? 'text-amber-600' : 'text-[#a99873]'
   const importanceColor = task.importance >= 8 ? 'text-red-800' : task.importance >= 6 ? 'text-blue-500' : 'text-[#a99873]'
   const done = task.status === 'COMPLETED'
+  // Tasks due on a later day are in the matrix early so they can be planned
+  const due = task.deadline ? dueInLabel(String(task.deadline), referenceDate, lang) : null
+  const overdue = !!task.deadline && new Date(String(task.deadline)) < referenceDate
 
   return (
     <div
@@ -69,10 +73,10 @@ function MatrixTaskCard({ task, isDragging = false, onComplete, onTaskClick }: {
       className={`group relative bg-[#fbf7ee] rounded-xl border border-[#ece2cb] p-3 shadow-sm hover:shadow-md hover:border-[#e2d6bc] transition-all duration-150 select-none flex items-start gap-2 ${isDragging ? 'opacity-50' : ''} ${done ? 'opacity-50' : ''}`}
     >
       <button
-        onClick={async (e) => { e.stopPropagation(); if (completing) return; setCompleting(true); await onComplete(task.id); setCompleting(false) }}
+        onClick={(e) => { e.stopPropagation(); onComplete(task.id) }}
         className="shrink-0 mt-0.5 hover:scale-110 transition-transform"
       >
-        {completing ? <Loader2 className="h-4 w-4 text-red-400 animate-spin" /> : done ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <Circle className="h-4 w-4 text-[#cbb98e] group-hover:text-red-400" />}
+        {done ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <Circle className="h-4 w-4 text-[#cbb98e] group-hover:text-red-400" />}
       </button>
       <div className="flex-1 min-w-0 cursor-grab active:cursor-grabbing" {...listeners} {...attributes} onClick={() => onTaskClick(task)}>
         <p className={`text-sm font-medium line-clamp-2 mb-2 ${done ? 'line-through text-[#a99873]' : 'text-[#2a2420]'}`}>{task.title}</p>
@@ -91,13 +95,22 @@ function MatrixTaskCard({ task, isDragging = false, onComplete, onTaskClick }: {
             <AlertCircle className="h-3 w-3" />
             {task.urgency}
           </span>
+          {due && (
+            <span className={cn(
+              'flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium border',
+              overdue ? 'border-red-200 bg-red-50 text-red-700' : 'border-[#e7c894] bg-[#fbeacb]/60 text-[#8a6b3e]'
+            )}>
+              <Hourglass className="h-2.5 w-2.5" />
+              {due}
+            </span>
+          )}
         </div>
       </div>
     </div>
   )
 }
 
-function QuadrantDroppable({ id, label, color, bgColor, tasks, habits, onTaskClick, onComplete, onCompleteHabit }: QuadrantDroppableProps) {
+function QuadrantDroppable({ id, label, color, bgColor, tasks, habits, onTaskClick, onComplete, onCompleteHabit, referenceDate, lang }: QuadrantDroppableProps) {
   const { setNodeRef, isOver } = useDroppable({ id })
   const sorted = [...tasks].sort((a, b) => (a.status === 'COMPLETED' ? 1 : 0) - (b.status === 'COMPLETED' ? 1 : 0))
   const total = tasks.length + habits.length
@@ -117,7 +130,7 @@ function QuadrantDroppable({ id, label, color, bgColor, tasks, habits, onTaskCli
       </div>
       <div className="flex flex-col gap-2 flex-1">
         {sorted.map((task) => (
-          <MatrixTaskCard key={task.id} task={task} onComplete={onComplete} onTaskClick={onTaskClick} />
+          <MatrixTaskCard key={task.id} task={task} onComplete={onComplete} onTaskClick={onTaskClick} referenceDate={referenceDate} lang={lang} />
         ))}
         {habits.map((habit) => (
           <MatrixHabitCard key={habit.id} habit={habit} onComplete={onCompleteHabit} />
@@ -125,7 +138,7 @@ function QuadrantDroppable({ id, label, color, bgColor, tasks, habits, onTaskCli
         {total === 0 && (
           <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-[#e2d6bc] rounded-xl min-h-[80px] gap-1">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo_v5/empty matric.png" alt="" className="h-10 w-10 opacity-30 object-contain" />
+            <img src="/img/empty-matrix.webp" alt="" className="h-10 w-10 opacity-30 object-contain" />
             <span className="text-xs text-[#c9b88a] italic">Glissez ici</span>
           </div>
         )}
@@ -142,9 +155,16 @@ interface EisenhowerMatrixProps {
   onComplete: (id: string) => Promise<void>
   onCompleteHabit?: (id: string) => void
   lang?: 'fr' | 'en' | 'zh'
+  /** The day the matrix shows; deadlines are labelled relative to it */
+  referenceDate?: Date
 }
 
-export function EisenhowerMatrix({ tasks, habits = [], onTaskUpdate, onTaskClick, onComplete, onCompleteHabit, lang = 'fr' }: EisenhowerMatrixProps) {
+export function EisenhowerMatrix({ tasks, habits = [], onTaskUpdate, onTaskClick, onComplete, onCompleteHabit, lang = 'fr', referenceDate }: EisenhowerMatrixProps) {
+  const dayStart = React.useMemo(() => {
+    const d = referenceDate ? new Date(referenceDate) : new Date()
+    d.setHours(0, 0, 0, 0)
+    return d
+  }, [referenceDate])
   const [activeTask, setActiveTask] = useState<Task | null>(null)
   // Touch needs a press-and-hold, otherwise scrolling the page on a phone picks up cards
   const sensors = useSensors(
@@ -241,6 +261,8 @@ export function EisenhowerMatrix({ tasks, habits = [], onTaskUpdate, onTaskClick
                 onTaskClick={onTaskClick}
                 onComplete={onComplete}
                 onCompleteHabit={onCompleteHabit ?? (() => {})}
+                referenceDate={dayStart}
+                lang={lang}
               />
             ))}
           </div>

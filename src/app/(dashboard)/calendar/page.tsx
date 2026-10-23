@@ -13,6 +13,8 @@ import { Shortcut, isTypingTarget, shortcutsBlocked, usePageShortcuts, openShort
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn, formatTime, getQuadrant, EISENHOWER_QUADRANTS } from '@/lib/utils'
+import { createTaskOptimistic, saveTaskEdit, deleteTaskOptimistic } from '@/lib/task-mutations'
+import { completeHabitOptimistic, uncompleteHabitOptimistic } from '@/lib/habit-mutations'
 import {
   ChevronLeft, ChevronRight, ChevronDown, Calendar, Plus, Clock, Loader2, Pencil, Trash2, X,
   MapPin, ExternalLink, GitBranch, AlignLeft, CheckCircle2, Circle, Check, Sparkles, Undo2, AlertTriangle, RefreshCw,
@@ -470,7 +472,7 @@ function EventSearchBox({ lang, calendarAccounts, onPick }: {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
-  const { language, tasks, setTasks, updateTask, removeTask, addTask, calendarAccounts, habits, setHabits, hideHabitsViews, toggleHabitsView, primaryTimezone, secondaryTimezone, setPrimaryTimezone, setSecondaryTimezone } = useAppStore()
+  const { language, tasks, tasksLoaded, setTasks, updateTask, removeTask, addTask, calendarAccounts, habits, setHabits, hideHabitsViews, toggleHabitsView, primaryTimezone, secondaryTimezone, setPrimaryTimezone, setSecondaryTimezone } = useAppStore()
   const habitsHidden = hideHabitsViews.includes('calendar')
   const { toast } = useGlobalToast()
   // startDate is always Monday of the current week (Sunday → previous Monday)
@@ -485,7 +487,8 @@ export default function CalendarPage() {
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [viewingScheduledTask, setViewingScheduledTask] = useState<Task | null>(null)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
-  const [loading, setLoading] = useState(true)
+  // Tasks this session already read show at once; the fetch below refreshes them
+  const [loading, setLoading] = useState(!tasksLoaded)
   const [externalEvents, setExternalEvents] = useState<CalendarEvent[]>([])
   const [eventsLoading, setEventsLoading] = useState(false)
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
@@ -1138,35 +1141,12 @@ export default function CalendarPage() {
   }, [tasks, handleCompleteTask, addTask, updateTask, language])
 
   const handleCompleteHabit = useCallback(async (habit: Habit) => {
-    const alreadyDone = (habit.completions?.length ?? 0) > 0
-    if (alreadyDone) {
-      // Toggle off — delete the completion
-      const res = await fetch('/api/habits/complete', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ habitId: habit.id }),
-      })
-      if (res.ok) {
-        setHabits(habits.map((h) => h.id === habit.id
-          ? { ...h, completions: [] }
-          : h
-        ))
-      }
-      return
-    }
-    const res = await fetch('/api/habits/complete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ habitId: habit.id }),
-    })
-    if (res.ok) {
-      const { streak } = await res.json()
-      setHabits(habits.map((h) => h.id === habit.id
-        ? { ...h, streak, completions: [{ id: 'tmp', habitId: habit.id, completedAt: new Date().toISOString() }] }
-        : h
-      ))
-    }
-  }, [habits, setHabits])
+    const failed = () =>
+      toast({ title: language === 'fr' ? 'Erreur de mise à jour' : language === 'zh' ? '更新失敗' : 'Update failed', variant: 'error' })
+    if ((habit.completions?.length ?? 0) > 0) await uncompleteHabitOptimistic(habit.id, failed)
+    else await completeHabitOptimistic(habit.id, failed)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [language])
 
   const handleSaveTask = async (data: Partial<Task>) => {
     const payload = {
@@ -1176,68 +1156,51 @@ export default function CalendarPage() {
         ? new Date(selectedDate.getTime() + data.estimatedMinutes * 60000).toISOString()
         : undefined,
     }
-    if (editingTask) {
-      const res = await fetch(`/api/tasks/${editingTask.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      if (res.ok) {
-        const updated = await res.json()
-        updateTask(editingTask.id, updated)
-        toast({ title: language === 'fr' ? 'Tâche modifiée' : language === 'zh' ? '任務已更新' : 'Task updated', variant: 'success' })
-      }
-    } else {
-      // Create Google Calendar event first if a calendar account is selected
-      let calendarEventId: string | undefined
-      if (payload.calendarAccountId && (payload.scheduledStart || payload.deadline)) {
-        try {
-          const evStart = payload.scheduledStart
-            ? new Date(payload.scheduledStart)
-            : new Date(String(payload.deadline))
-          const evEnd = payload.scheduledEnd
-            ? new Date(payload.scheduledEnd)
-            : new Date(evStart.getTime() + 60 * 60 * 1000)
-          const evRes = await fetch('/api/calendar/events', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              calendarAccountId: payload.calendarAccountId,
-              calendarId: 'primary',
-              title: payload.title,
-              start: evStart.toISOString(),
-              end: evEnd.toISOString(),
-            }),
-          })
-          if (evRes.ok) {
-            const evData = await evRes.json()
-            calendarEventId = evData.eventId
-            invalidateEventCache()
-          }
-        } catch { /* best-effort */ }
-      }
-
-      const res = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, calendarEventId }),
-      })
-      if (res.ok) {
-        const created = await res.json()
-        addTask(created)
-        toast({ title: language === 'fr' ? 'Tâche créée !' : language === 'zh' ? '任務已建立！' : 'Task created!', variant: 'success' })
-      }
-    }
+    const editing = editingTask
     setEditingTask(null)
     setSelectedDate(null)
+    const failed = (fr: string, zh: string, en: string) => () =>
+      toast({ title: language === 'fr' ? fr : language === 'zh' ? zh : en, variant: 'error' })
+    if (editing) {
+      await saveTaskEdit(editing.id, payload, failed('Modification non enregistrée', '修改未儲存', 'Change not saved'))
+      return
+    }
+    // Create the Google Calendar event first if a calendar account is selected
+    const createEvent = async (): Promise<Partial<Task>> => {
+      if (!payload.calendarAccountId || !(payload.scheduledStart || payload.deadline)) return {}
+      try {
+        const evStart = payload.scheduledStart
+          ? new Date(payload.scheduledStart)
+          : new Date(String(payload.deadline))
+        const evEnd = payload.scheduledEnd
+          ? new Date(payload.scheduledEnd)
+          : new Date(evStart.getTime() + 60 * 60 * 1000)
+        const evRes = await fetch('/api/calendar/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            calendarAccountId: payload.calendarAccountId,
+            calendarId: 'primary',
+            title: payload.title,
+            start: evStart.toISOString(),
+            end: evEnd.toISOString(),
+          }),
+        })
+        if (evRes.ok) {
+          const evData = await evRes.json()
+          invalidateEventCache()
+          return { calendarEventId: evData.eventId }
+        }
+      } catch { /* best-effort */ }
+      return {}
+    }
+    await createTaskOptimistic(payload, failed('Impossible de créer la tâche', '無法建立任務', 'Could not create the task'), createEvent)
   }
 
   const handleDeleteTask = async (id: string) => {
-    await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
-    // Re-fetch so children's parentTaskId (cleared by API) reflects in the store
-    const fresh = await fetch('/api/tasks')
-    if (fresh.ok) setTasks(await fresh.json())
     setEditingTask(null)
+    await deleteTaskOptimistic(id, () =>
+      toast({ title: language === 'fr' ? 'Suppression impossible' : language === 'zh' ? '刪除失敗' : 'Delete failed', variant: 'error' }))
   }
 
   const handleCellClick = (day: Date, hour: number) => {

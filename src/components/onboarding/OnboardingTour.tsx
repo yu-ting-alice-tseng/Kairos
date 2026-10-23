@@ -368,7 +368,7 @@ export function OnboardingTour() {
                 <span className="text-[11px] leading-[1.05] text-[#f3ecdd] text-center" style={{ fontFamily: 'var(--font-brush)' }}>墨<br />時</span>
               </div>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo_v5/Logo.png" alt="Kairos" className="h-14 w-14 rounded-2xl object-cover shadow-lg shadow-black/40" />
+              <img src="/img/logo.webp" alt="Kairos" className="h-14 w-14 rounded-2xl object-cover shadow-lg shadow-black/40" />
             </div>
             <div className="px-6 pt-5 pb-4">
               <h2 className="font-serif text-[21px] font-semibold text-[#2a2420]">{copy.title}</h2>

@@ -230,7 +230,7 @@ function GoalColumn({
         {goals.length === 0 && !adding && (
           <div className="flex flex-col items-center gap-2 py-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo_v5/empty-goals.png" alt="" className="h-20 w-auto opacity-60 object-contain" />
+            <img src="/img/empty-goals.webp" alt="" className="h-20 w-auto opacity-60 object-contain" />
             <p className="text-xs text-[#a99873] italic">{t('noGoals', lang)}</p>
           </div>
         )}

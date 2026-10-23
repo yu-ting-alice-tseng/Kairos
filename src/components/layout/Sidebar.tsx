@@ -15,6 +15,10 @@ import {
 
 const LANG_LABEL: Record<'fr' | 'en' | 'zh', string> = { fr: 'EN', en: '中', zh: 'FR' }
 
+// Pages that read nothing on the server are prefetched in full, so opening
+// them is instant; Today and the review have a loading.tsx boundary instead.
+export const fullPrefetch = (href: string) => href !== '/today' && href !== '/review'
+
 const navItems = [
   { href: '/today',         icon: Zap,        key: 'today'         as const },
   { href: '/matrix',        icon: LayoutGrid,  key: 'matrix'        as const },
@@ -90,7 +94,7 @@ export function Sidebar() {
         <div className="flex items-center gap-2.5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/logo_v5/Logo.png"
+            src="/img/logo.webp"
             alt="Kairos"
             className="h-9 w-9 shrink-0 object-cover rounded-lg"
           />
@@ -139,6 +143,7 @@ export function Sidebar() {
               )}
               <Link
                 href={href}
+                prefetch={fullPrefetch(href) ? true : undefined}
                 data-tour={`nav-${key}`}
                 title={collapsed ? t(key, language) : undefined}
                 className={cn(

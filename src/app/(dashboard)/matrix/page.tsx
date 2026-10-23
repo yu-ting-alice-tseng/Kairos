@@ -13,10 +13,12 @@ import { InkLoader } from '@/components/ui/InkLoader'
 import { BreakdownDialog } from '@/components/ai/BreakdownDialog'
 import { Button } from '@/components/ui/button'
 import { Plus, LayoutGrid, Loader2, Settings, Wand2, Trash2, SlidersHorizontal, ChevronLeft, ChevronRight } from 'lucide-react'
-import { isSameDay, format } from 'date-fns'
+import { isSameDay, format, differenceInCalendarDays } from 'date-fns'
 import { fr, enUS, zhTW } from 'date-fns/locale'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
-import { cn } from '@/lib/utils'
+import { cn, isPendingTaskId } from '@/lib/utils'
+import { createTaskOptimistic, saveTaskEdit, deleteTaskOptimistic } from '@/lib/task-mutations'
+import { completeHabitOptimistic, uncompleteHabitOptimistic } from '@/lib/habit-mutations'
 
 const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === 'true'
 
@@ -29,10 +31,11 @@ const MATRIX_SHORTCUTS: Shortcut[] = [
 ]
 
 export default function MatrixPage() {
-  const { language, tasks, setTasks, updateTask, removeTask, addTask, habits, setHabits, calendarAccounts, matrixExcludePatterns, setMatrixExcludePatterns, keywordRules, setKeywordRules, hideHabitsViews, toggleHabitsView } = useAppStore()
+  const { language, tasks, tasksLoaded, setTasks, habits, setHabits, calendarAccounts, matrixExcludePatterns, setMatrixExcludePatterns, keywordRules, setKeywordRules, hideHabitsViews, toggleHabitsView } = useAppStore()
   const habitsHiddenMatrix = hideHabitsViews.includes('matrix')
   const { toast } = useGlobalToast()
-  const [loading, setLoading] = useState(true)
+  // Tasks this session already read show at once; loadTasks refreshes them
+  const [loading, setLoading] = useState(!tasksLoaded)
   const [showTaskForm, setShowTaskForm] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [breakdownTask, setBreakdownTask] = useState<Task | null>(null)
@@ -50,7 +53,6 @@ export default function MatrixPage() {
   }
 
   const loadTasks = useCallback(async () => {
-    setLoading(true)
     const res = await fetch('/api/tasks')
     if (res.ok) setTasks(await res.json())
     setLoading(false)
@@ -118,56 +120,31 @@ export default function MatrixPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const failed = (fr: string, zh: string, en: string) => () =>
+    toast({ title: language === 'fr' ? fr : language === 'zh' ? zh : en, variant: 'error' })
+
+  // A drop moves the card at once; the save follows
   const handleTaskUpdate = async (id: string, importance: number, urgency: number) => {
-    const res = await fetch(`/api/tasks/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ importance, urgency }),
-    })
-    if (res.ok) {
-      const updated = await res.json()
-      updateTask(id, updated)
-      toast({ title: language === 'fr' ? 'Tâche déplacée' : language === 'zh' ? '任務已移動' : 'Task moved', variant: 'info' })
-    }
+    await saveTaskEdit(id, { importance, urgency }, failed('Déplacement non enregistré', '移動未儲存', 'Move not saved'))
   }
 
   const handleSaveTask = async (data: Partial<Task>) => {
-    if (editingTask) {
-      const res = await fetch(`/api/tasks/${editingTask.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      if (res.ok) { const updated = await res.json(); updateTask(editingTask.id, updated) }
-    } else {
-      const res = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      if (res.ok) {
-        const created = await res.json()
-        addTask(created)
-      }
-    }
+    const editing = editingTask
     setEditingTask(null)
+    if (editing) await saveTaskEdit(editing.id, data, failed('Modification non enregistrée', '修改未儲存', 'Change not saved'))
+    else await createTaskOptimistic(data, failed('Impossible de créer la tâche', '無法建立任務', 'Could not create the task'))
   }
 
   const handleDeleteTask = async (id: string) => {
-    await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
-    const fresh = await fetch('/api/tasks')
-    if (fresh.ok) setTasks(await fresh.json())
     setEditingTask(null)
+    await deleteTaskOptimistic(id, failed('Suppression impossible', '刪除失敗', 'Delete failed'))
   }
 
   const handleCompleteTask = async (id: string) => {
     const task = tasks.find((t) => t.id === id)
-    if (!task) return
+    if (!task || isPendingTaskId(id)) return
     const newStatus = task.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED'
-    updateTask(id, { status: newStatus })
-    const res = await fetch(`/api/tasks/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: newStatus }) })
-    if (res.ok) { const data = await res.json(); updateTask(id, data) }
-    else updateTask(id, task)
+    await saveTaskEdit(id, { status: newStatus, completedAt: newStatus === 'COMPLETED' ? new Date().toISOString() : null }, failed('Erreur de mise à jour', '更新失敗', 'Update failed'))
   }
 
   const handleTaskClick = (task: Task) => {
@@ -175,21 +152,9 @@ export default function MatrixPage() {
     setShowTaskForm(true)
   }
 
-  const handleCompleteHabit = async (habitId: string) => {
-    const res = await fetch('/api/habits/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ habitId }) })
-    if (res.ok) {
-      const { streak } = await res.json()
-      setHabits(habits.map((h) => h.id === habitId ? { ...h, streak, completions: [{ id: 'tmp', habitId, completedAt: new Date().toISOString() }] } : h))
-    }
-  }
-
-  const handleUncompleteHabit = async (habitId: string) => {
-    const res = await fetch('/api/habits/complete', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ habitId }) })
-    if (res.ok) {
-      const { streak } = await res.json()
-      setHabits(habits.map((h) => h.id === habitId ? { ...h, streak, completions: [] } : h))
-    }
-  }
+  const habitFailed = failed('Erreur de mise à jour', '更新失敗', 'Update failed')
+  const handleCompleteHabit = (habitId: string) => completeHabitOptimistic(habitId, habitFailed)
+  const handleUncompleteHabit = (habitId: string) => uncompleteHabitOptimistic(habitId, habitFailed)
 
   const todayHabits = (() => {
     const dow = selectedDate.getDay()
@@ -204,6 +169,15 @@ export default function MatrixPage() {
 
   const isExcludedFromMatrix = (title: string) =>
     matrixExcludePatterns.some((p) => p && title.toLowerCase().includes(p.toLowerCase()))
+
+  // Due in the next week: shown ahead of time (with a "dans 3 j" badge) so
+  // big work can be placed in a quadrant before its deadline day
+  const UPCOMING_DAYS = 7
+  const isDueSoon = (task: Task, date: Date) => {
+    if (!task.deadline) return false
+    const days = differenceInCalendarDays(new Date(String(task.deadline)), date)
+    return days >= 1 && days <= UPCOMING_DAYS
+  }
 
   const isDueOnDate = (task: Task, date: Date) => {
     const endOfDate = new Date(date); endOfDate.setHours(23, 59, 59, 999)
@@ -231,7 +205,7 @@ export default function MatrixPage() {
       t.status !== 'CANCELLED' &&
       !t.scheduledStart &&
       !t.calendarEventId &&
-      isDueOnDate(t, selectedDate) &&
+      (isDueOnDate(t, selectedDate) || isDueSoon(t, selectedDate)) &&
       !isExcludedFromMatrix(t.title)
     )
     .map(applyKeywordRules)
@@ -421,6 +395,7 @@ export default function MatrixPage() {
             else handleCompleteHabit(id)
           }}
           lang={language}
+          referenceDate={selectedDate}
         />
       </div>
 

@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { useAppStore } from '@/stores/useAppStore'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
+import { fullPrefetch } from '@/components/layout/Sidebar'
 import {
   Zap, LayoutGrid, Calendar, Repeat2, GitBranch, BarChart3,
   MoreHorizontal, Settings, Info, Globe, HelpCircle, LogOut, X,
@@ -102,6 +103,7 @@ export function MobileNav() {
           <Link
             key={href}
             href={href}
+            prefetch={fullPrefetch(href) ? true : undefined}
             data-tour={`nav-${key}`}
             onClick={() => setMoreOpen(false)}
             className={cn(

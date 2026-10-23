@@ -16,7 +16,9 @@ import { Badge } from '@/components/ui/badge'
 import { Sundial } from '@/components/ui/Sundial'
 import { Shortcut, usePageShortcuts, openShortcutsHelp } from '@/components/ui/ShortcutsDialog'
 import { Candle } from '@/components/ui/Candle'
-import { generatePriorityList, formatDate, formatDeadlineLabel, deadlineTooltip, formatTime, cn } from '@/lib/utils'
+import { createTaskOptimistic, saveTaskEdit } from '@/lib/task-mutations'
+import { completeHabitOptimistic, uncompleteHabitOptimistic } from '@/lib/habit-mutations'
+import { generatePriorityList, isPendingTaskId, dueInLabel, formatDate, formatDeadlineLabel, deadlineTooltip, formatTime, cn } from '@/lib/utils'
 import {
   Plus, Sparkles, Sun, Flame, RefreshCw, MessageSquare, ChevronRight, ChevronLeft,
   CheckCircle2, Clock, Loader2, X, AlarmCheck, ChevronDown, Zap, CalendarDays, SlidersHorizontal, Keyboard, Bell, Hourglass,
@@ -518,11 +520,6 @@ export default function TodayClient({ initialTasks, initialHabits }: {
     return days >= 1 && days <= UPCOMING_DAYS
   }).map(applyKeywordRules).sort((a, b) =>
     String(a.deadline).localeCompare(String(b.deadline)) || (b.priority ?? 0) - (a.priority ?? 0))
-  const upcomingLabel = (deadline: string | Date) => {
-    const n = differenceInCalendarDays(new Date(String(deadline)), selectedDate)
-    if (n === 1) return language === 'fr' ? 'demain' : language === 'zh' ? '明天' : 'tomorrow'
-    return language === 'fr' ? `dans ${n} j` : language === 'zh' ? `${n} 天後` : `in ${n} days`
-  }
 
   // Only the slots booked on the day being shown; done ones stay, struck through.
   const scheduledTasks = tasks.filter(
@@ -559,7 +556,7 @@ export default function TodayClient({ initialTasks, initialHabits }: {
 
   const handleComplete = async (id: string) => {
     const task = tasks.find((t) => t.id === id)
-    if (!task) return
+    if (!task || isPendingTaskId(id)) return
     const isCompleted = task.status === 'COMPLETED'
     const newStatus = isCompleted ? 'PENDING' : 'COMPLETED'
     const nowStr = new Date().toISOString()
@@ -623,55 +620,36 @@ export default function TodayClient({ initialTasks, initialHabits }: {
   }
 
   const handleSaveTask = async (data: Partial<Task>) => {
+    const failed = (fr: string, zh: string, en: string) => () =>
+      toast({ title: language === 'fr' ? fr : language === 'zh' ? zh : en, variant: 'error' })
     if (editingTask) {
-      const res = await fetch(`/api/tasks/${editingTask.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      if (res.ok) {
-        const updated = await res.json()
-        updateTask(editingTask.id, updated)
-      }
-    } else {
-      // Sync new task to Google Calendar if a calendar account is selected
-      let calendarEventId: string | undefined
-      if (data.calendarAccountId && data.deadline) {
-        try {
-          const evStart = new Date(String(data.deadline))
-          const evEnd = new Date(evStart.getTime() + 60 * 60 * 1000)
-          const evRes = await fetch('/api/calendar/events', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              calendarAccountId: data.calendarAccountId,
-              calendarId: 'primary',
-              title: data.title,
-              start: evStart.toISOString(),
-              end: evEnd.toISOString(),
-            }),
-          })
-          if (evRes.ok) {
-            const evData = await evRes.json()
-            calendarEventId = evData.eventId
-          }
-        } catch { /* best-effort */ }
-      }
-
-      const res = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...data, calendarEventId }),
-      })
-      if (res.ok) {
-        const created = await res.json()
-        addTask(created)
-        toast({ title: language === 'fr' ? 'Tâche créée !' : language === 'zh' ? '任務已建立！' : 'Task created!', variant: 'success' })
-      } else {
-        toast({ title: language === 'fr' ? 'Impossible de créer la tâche' : language === 'zh' ? '無法建立任務' : 'Could not create the task', variant: 'error' })
-      }
+      setEditingTask(null)
+      await saveTaskEdit(editingTask.id, data, failed('Modification non enregistrée', '修改未儲存', 'Change not saved'))
+      return
     }
     setEditingTask(null)
+    // Sync the new task to Google Calendar first if an account is selected
+    const createEvent = async (): Promise<Partial<Task>> => {
+      if (!data.calendarAccountId || !data.deadline) return {}
+      try {
+        const evStart = new Date(String(data.deadline))
+        const evEnd = new Date(evStart.getTime() + 60 * 60 * 1000)
+        const evRes = await fetch('/api/calendar/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            calendarAccountId: data.calendarAccountId,
+            calendarId: 'primary',
+            title: data.title,
+            start: evStart.toISOString(),
+            end: evEnd.toISOString(),
+          }),
+        })
+        if (evRes.ok) return { calendarEventId: (await evRes.json()).eventId }
+      } catch { /* best-effort */ }
+      return {}
+    }
+    await createTaskOptimistic(data, failed('Impossible de créer la tâche', '無法建立任務', 'Could not create the task'), createEvent)
   }
 
   // Dismissing an overdue item marks it cancelled: off every list, but kept
@@ -692,6 +670,7 @@ export default function TodayClient({ initialTasks, initialHabits }: {
   }
 
   const handleDelete = async (id: string) => {
+    if (isPendingTaskId(id)) return
     const before = tasks
     removeTask(id)
     const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE' }).catch(() => null)
@@ -770,34 +749,10 @@ export default function TodayClient({ initialTasks, initialHabits }: {
     return false
   })
 
-  const handleCompleteHabit = async (habitId: string) => {
-    const res = await fetch('/api/habits/complete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ habitId }),
-    })
-    if (res.ok) {
-      const { streak } = await res.json()
-      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
-      setHabits(habits.map((h) => h.id === habitId
-        ? { ...h, streak, completions: [{ id: 'tmp', habitId, completedAt: new Date().toISOString() }] }
-        : h
-      ))
-      toast({ title: language === 'fr' ? `Habitude accomplie ! 🔥 Série: ${streak}` : language === 'zh' ? `習慣已完成！🔥 連續天數：${streak}` : `Habit done! 🔥 Streak: ${streak}`, variant: 'success' })
-    }
-  }
-
-  const handleUncompleteHabit = async (habitId: string) => {
-    const res = await fetch('/api/habits/complete', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ habitId }),
-    })
-    if (res.ok) {
-      const { streak } = await res.json()
-      setHabits(habits.map((h) => h.id === habitId ? { ...h, streak, completions: [] } : h))
-    }
-  }
+  const habitFailed = () =>
+    toast({ title: language === 'fr' ? 'Erreur de mise à jour' : language === 'zh' ? '更新失敗' : 'Update failed', variant: 'error' })
+  const handleCompleteHabit = (habitId: string) => completeHabitOptimistic(habitId, habitFailed)
+  const handleUncompleteHabit = (habitId: string) => uncompleteHabitOptimistic(habitId, habitFailed)
 
   const handleScheduleTask = async (event: DragEndEvent) => {
     const { active, over } = event
@@ -1177,7 +1132,7 @@ export default function TodayClient({ initialTasks, initialHabits }: {
                 {prioritizedTasks.length === 0 ? (
                   <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#e7c894]/60 py-12 text-center bg-[#fbeacb]/40">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/logo_v5/empty-task.png" alt="" className="h-20 w-20 mb-4 opacity-70" />
+                    <img src="/img/empty-task.webp" alt="" className="h-20 w-20 mb-4 opacity-70" />
                     <p className="text-sm font-medium text-[#6b5840]">{t('noTasks', language)}</p>
                     <Button variant="outline" size="sm"
                       className="mt-4 border-[#e7c894] text-[#6b5840] hover:bg-[#f3dcb2] hover:border-[#c9aa72]"
@@ -1343,7 +1298,7 @@ export default function TodayClient({ initialTasks, initialHabits }: {
                               className="text-[10px] text-[#8a6b3e] shrink-0"
                               title={deadlineTooltip(String(task.deadline), language, selectedDate)}
                             >
-                              {upcomingLabel(task.deadline!)}
+                              {dueInLabel(String(task.deadline), selectedDate, language)}
                             </span>
                           </div>
                         ))}

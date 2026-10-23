@@ -8,6 +8,11 @@ const nextConfig: NextConfig = {
     // which corrupts Turbopack's persistent cache and crashes `next dev` on startup.
     turbopackFileSystemCacheForDev: false,
   },
+  // The compressed images in /img never change in place (a new version gets a
+  // new name), so browsers can keep them instead of asking again on every visit
+  async headers() {
+    return [{ source: '/img/:path*', headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }] }]
+  },
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'lh3.googleusercontent.com' },

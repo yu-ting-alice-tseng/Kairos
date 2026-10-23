@@ -1,7 +1,8 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import { format, isToday, isTomorrow, isPast, addMinutes } from 'date-fns'
+import { format, isToday, isTomorrow, isPast, addMinutes, differenceInCalendarDays } from 'date-fns'
 import { fr, enUS, zhTW } from 'date-fns/locale'
+import type { Task } from '@/types'
 export { EISENHOWER_QUADRANTS } from '@/types'
 
 export function cn(...inputs: ClassValue[]) {
@@ -141,4 +142,46 @@ export function generatePriorityList<T extends { id: string; importance: number;
     const scoreB = b.importance * 10 + b.urgency + (b.deadline && isPast(new Date(b.deadline as string)) ? 20 : 0)
     return scoreB - scoreA
   })
+}
+
+/** Ids of tasks shown before the server has saved them. */
+export const isPendingTaskId = (id: string) => id.startsWith('tmp-')
+
+/**
+ * A stand-in for a task that is still being saved, so it shows the moment the
+ * form closes. Swap it for the server's row (store.replaceTask) when that
+ * arrives, or drop it if saving fails.
+ */
+export function placeholderTask(data: Partial<Task>): Task {
+  const now = new Date().toISOString()
+  const importance = data.importance ?? 5
+  const urgency = data.urgency ?? 5
+  return {
+    userId: '',
+    status: 'PENDING',
+    isRecurring: false,
+    aiSuggested: false,
+    parentTaskId: null,
+    subTasks: [],
+    createdAt: now,
+    updatedAt: now,
+    ...data,
+    id: `tmp-${now}-${Math.random().toString(36).slice(2, 7)}`,
+    title: data.title ?? '',
+    importance,
+    urgency,
+    priority: calculatePriority(importance, urgency),
+  }
+}
+
+/**
+ * How far a deadline is from `referenceDate`, in whole calendar days, as a
+ * short label: "demain", "dans 3 j", "en retard". Null when it is that day.
+ */
+export function dueInLabel(deadline: Date | string, referenceDate: Date, lang = 'fr'): string | null {
+  const n = differenceInCalendarDays(new Date(deadline), referenceDate)
+  if (n === 0) return null
+  if (n < 0) return lang === 'fr' ? 'en retard' : lang === 'zh' ? '已過期' : 'overdue'
+  if (n === 1) return lang === 'fr' ? 'demain' : lang === 'zh' ? '明天' : 'tomorrow'
+  return lang === 'fr' ? `dans ${n} j` : lang === 'zh' ? `${n} 天後` : `in ${n} days`
 }

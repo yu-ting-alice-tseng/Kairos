@@ -108,7 +108,7 @@ export default function AboutPage() {
           {/* Banner */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/logo_v5/Banner.png"
+            src="/img/banner.webp"
             alt="Kairos 墨時"
             className="w-full rounded-2xl shadow-[0_6px_32px_rgba(42,31,18,0.10)]"
           />
@@ -131,7 +131,7 @@ export default function AboutPage() {
             <div className="md:w-[220px] shrink-0">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/logo_v5/About us Page.png"
+                src="/img/about.webp"
                 alt="鑿壁偷光"
                 className="w-full rounded-xl shadow-[0_4px_20px_rgba(42,31,18,0.10)]"
               />
@@ -143,7 +143,7 @@ export default function AboutPage() {
         <div className="flex items-center gap-4">
           <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#c9aa72]/50 to-transparent" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo_v5/Waterprint_Social Media.png" alt="" className="h-8 w-auto opacity-45" />
+          <img src="/img/seal.webp" alt="" className="h-8 w-auto opacity-45" />
           <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#c9aa72]/50 to-transparent" />
         </div>
 
@@ -152,7 +152,7 @@ export default function AboutPage() {
           <div className="flex items-center gap-4">
             <h2 className="font-brush text-2xl text-[#2a1f12] tracking-wider">{h.featureTitle}</h2>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo_v5/Icon of features.png" alt="" className="h-12 w-auto opacity-80" />
+            <img src="/img/features.webp" alt="" className="h-12 w-auto opacity-80" />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -163,7 +163,7 @@ export default function AboutPage() {
               >
                 <div className="absolute top-4 right-4">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/logo_v5/Waterprint_Social Media.png" alt="" className="h-5 w-auto opacity-10 group-hover:opacity-20 transition-opacity" />
+                  <img src="/img/seal.webp" alt="" className="h-5 w-auto opacity-10 group-hover:opacity-20 transition-opacity" />
                 </div>
                 <h3 className="font-semibold text-[#2a1f12] text-sm mb-2">{f.title}</h3>
                 <p className="text-[#6b5840] text-xs leading-relaxed">{f.body}</p>
@@ -176,7 +176,7 @@ export default function AboutPage() {
         <div className="flex items-center gap-4">
           <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#c9aa72]/50 to-transparent" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo_v5/Waterprint_Social Media.png" alt="" className="h-8 w-auto opacity-45" />
+          <img src="/img/seal.webp" alt="" className="h-8 w-auto opacity-45" />
           <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#c9aa72]/50 to-transparent" />
         </div>
 
@@ -207,7 +207,7 @@ export default function AboutPage() {
         {/* ── Footer stamp ── */}
         <footer className="flex flex-col items-center gap-3 pb-8">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo_v5/Waterprint_Social Media.png" alt="墨時" className="h-16 w-auto opacity-70" />
+          <img src="/img/seal.webp" alt="墨時" className="h-16 w-auto opacity-70" />
           <p className="text-[#a87f3e] text-xs tracking-widest uppercase">Kairos · Time, Inked.</p>
         </footer>
 

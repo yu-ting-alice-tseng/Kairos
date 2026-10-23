@@ -2,9 +2,9 @@ import { Suspense } from 'react'
 import { auth } from '@/lib/auth'
 import { loadUserTasks, loadUserHabits, serialize } from '@/lib/queries'
 import { getRequestTimeZone } from '@/lib/timezone-server'
-import { InkLoader } from '@/components/ui/InkLoader'
 import { Task, Habit } from '@/types'
 import TodayClient from './today-client'
+import TodayFallback from './today-fallback'
 
 // Per-user data that changes on every write — nothing here is cacheable.
 export const dynamic = 'force-dynamic'
@@ -32,9 +32,10 @@ async function TodayData() {
 
 export default function TodayPage() {
   // Streams the shell straight away and swaps in the list when the queries
-  // land, so a slow database delays the content and not the whole page.
+  // land, so a slow database delays the content and not the whole page. The
+  // fallback shows the list this session already holds, if any.
   return (
-    <Suspense fallback={<InkLoader size="page" />}>
+    <Suspense fallback={<TodayFallback />}>
       <TodayData />
     </Suspense>
   )

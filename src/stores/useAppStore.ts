@@ -35,6 +35,17 @@ export interface AppState {
    * the HTML the server sent instead of an empty store.
    */
   dataSeeded: boolean
+  /** True once tasks / habits have been read from the server this session, so a
+   *  page can show them right away and refresh in the background instead of
+   *  putting up a loader on every visit. */
+  tasksLoaded: boolean
+  habitsLoaded: boolean
+  /** When the last local task/habit edit happened (ms). A server snapshot
+   *  taken before it must not overwrite it. */
+  lastMutationAt: number
+  /** When Today started showing cached data while the server read a fresh copy. */
+  navigationStartedAt: number
+  markNavigationStart: () => void
 
   seedServerData: (tasks: Task[], habits: Habit[]) => void
   setLanguage: (lang: Language) => void
@@ -46,6 +57,8 @@ export interface AppState {
   addTask: (task: Task) => void
   updateTask: (id: string, updates: Partial<Task>) => void
   removeTask: (id: string) => void
+  /** Swap a placeholder shown while saving for the row the server returned. */
+  replaceTask: (id: string, task: Task) => void
   setHabits: (habits: Habit[]) => void
   addHabit: (habit: Habit) => void
   updateHabit: (id: string, updates: Partial<Habit>) => void
@@ -84,29 +97,43 @@ export const useAppStore = create<AppState>()(
       hasCompletedOnboarding: false,
       onboardingOpen: false,
       dataSeeded: false,
+      tasksLoaded: false,
+      habitsLoaded: false,
+      lastMutationAt: 0,
+      navigationStartedAt: 0,
+      markNavigationStart: () => set({ navigationStartedAt: Date.now() }),
 
-      seedServerData: (tasks, habits) => set({ tasks, habits, dataSeeded: true }),
+      // A copy read before an edit made while it was on its way would undo that
+      // edit on screen, so it is dropped; the next refresh brings it in.
+      seedServerData: (tasks, habits) => set((state) =>
+        state.lastMutationAt > state.navigationStartedAt && state.navigationStartedAt > 0
+          ? { dataSeeded: true }
+          : { tasks, habits, dataSeeded: true, tasksLoaded: true, habitsLoaded: true }),
       setLanguage: (lang) => set({ language: lang }),
       setOnboardingOpen: (open) => set({ onboardingOpen: open }),
       completeOnboarding: () => set({ hasCompletedOnboarding: true, onboardingOpen: false }),
       setPrimaryTimezone: (tz) => set({ primaryTimezone: tz }),
       setSecondaryTimezone: (tz) => set({ secondaryTimezone: tz }),
-      setTasks: (tasks) => set({ tasks }),
-      addTask: (task) => set((state) => ({ tasks: [...state.tasks, task] })),
+      setTasks: (tasks) => set({ tasks, tasksLoaded: true }),
+      addTask: (task) => set((state) => ({ tasks: [...state.tasks, task], lastMutationAt: Date.now() })),
       updateTask: (id, updates) =>
         set((state) => ({
           tasks: state.tasks.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+          lastMutationAt: Date.now(),
         })),
       removeTask: (id) =>
-        set((state) => ({ tasks: state.tasks.filter((t) => t.id !== id) })),
-      setHabits: (habits) => set({ habits }),
-      addHabit: (habit) => set((state) => ({ habits: [...state.habits, habit] })),
+        set((state) => ({ tasks: state.tasks.filter((t) => t.id !== id), lastMutationAt: Date.now() })),
+      replaceTask: (id, task) =>
+        set((state) => ({ tasks: state.tasks.map((t) => (t.id === id ? task : t)), lastMutationAt: Date.now() })),
+      setHabits: (habits) => set({ habits, habitsLoaded: true }),
+      addHabit: (habit) => set((state) => ({ habits: [...state.habits, habit], lastMutationAt: Date.now() })),
       updateHabit: (id, updates) =>
         set((state) => ({
           habits: state.habits.map((h) => (h.id === id ? { ...h, ...updates } : h)),
+          lastMutationAt: Date.now(),
         })),
       removeHabit: (id) =>
-        set((state) => ({ habits: state.habits.filter((h) => h.id !== id) })),
+        set((state) => ({ habits: state.habits.filter((h) => h.id !== id), lastMutationAt: Date.now() })),
       setCalendarAccounts: (accounts) => set({ calendarAccounts: accounts }),
       setSelectedDate: (date) => set({ selectedDate: date }),
       setIsLoading: (loading) => set({ isLoading: loading }),
