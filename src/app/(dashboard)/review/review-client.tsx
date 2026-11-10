@@ -1,11 +1,11 @@
 'use client'
 
 import { Shortcut, usePageShortcuts } from '@/components/ui/ShortcutsDialog'
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useAppStore } from '@/stores/useAppStore'
 import { t } from '@/lib/i18n'
 import { cn, getQuadrant } from '@/lib/utils'
-import { EISENHOWER_QUADRANTS, QUADRANT_LABEL_ZH, type EisenhowerQuadrant, type MonthlyStats } from '@/types'
+import { EISENHOWER_QUADRANTS, QUADRANT_LABEL_ZH, type EisenhowerQuadrant, type MonthlyStats, type FilterAccount } from '@/types'
 import { Sundial } from '@/components/ui/Sundial'
 import {
   ChevronLeft, ChevronRight, Loader2, CheckCircle2, AlarmClock, Flame, TrendingUp, TrendingDown, Minus,
@@ -13,12 +13,7 @@ import {
 import { format, parse } from 'date-fns'
 import { fr, enUS, zhTW } from 'date-fns/locale'
 
-export interface FilterAccount {
-  id: string
-  name: string
-  color: string
-  subCalendars: { externalId: string; name: string; color: string }[]
-}
+export type { FilterAccount }
 
 const MONTHS_SHOWN = 12
 
@@ -75,6 +70,8 @@ const COPY = {
   },
 }
 
+const reviewKey = (month: string, accountId: string, calendarId: string) => `${month}|${accountId}|${calendarId}`
+
 function shiftMonth(key: string, delta: number): string {
   const [y, m] = key.split('-').map(Number)
   const d = new Date(y, m - 1 + delta, 1)
@@ -100,6 +97,7 @@ export default function ReviewClient({ initialStats, accounts }: {
   const copy = COPY[language]
   const locale = language === 'fr' ? fr : language === 'zh' ? zhTW : enUS
 
+  const { reviewCache, cacheReview, setReviewAccounts } = useAppStore()
   const [stats, setStats] = useState<MonthlyStats | null>(initialStats)
   const [loading, setLoading] = useState(false)
   const [month, setMonth] = useState(initialStats?.summary.key ?? currentMonthKey())
@@ -111,27 +109,58 @@ export default function ReviewClient({ initialStats, accounts }: {
   const monthLabel = format(monthDate, language === 'zh' ? 'yyyy 年 M 月' : 'MMMM yyyy', { locale })
   const selectedAccount = accounts.find((a) => a.id === accountId)
 
+  const fetchStats = async (m: string, a: string, c: string): Promise<MonthlyStats | null> => {
+    const params = new URLSearchParams({ month: m, months: String(MONTHS_SHOWN) })
+    if (a) params.set('accountId', a)
+    if (a && a !== 'none' && c) params.set('calendarId', c)
+    const res = await fetch(`/api/stats/monthly?${params}`).catch(() => null)
+    if (!res?.ok) return null
+    const data: MonthlyStats = await res.json()
+    cacheReview(reviewKey(m, a, c), data)
+    return data
+  }
+
+  // The months next to the one shown are read ahead, so stepping with the
+  // arrows shows them at once instead of waiting on the server.
+  const prefetchNeighbours = (m: string, a: string, c: string) => {
+    const cache = useAppStore.getState().reviewCache
+    for (const n of [shiftMonth(m, -1), shiftMonth(m, 1)]) {
+      if (n > currentMonthKey() || cache[reviewKey(n, a, c)]) continue
+      void fetchStats(n, a, c)
+    }
+  }
+
+  // Keep what the server sent for later visits, then read ahead
+  useEffect(() => {
+    if (initialStats) cacheReview(reviewKey(initialStats.summary.key, '', ''), initialStats)
+    setReviewAccounts(accounts)
+    prefetchNeighbours(initialStats?.summary.key ?? currentMonthKey(), '', '')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialStats, accounts])
+
   /**
    * Every control routes through here, so the request that lands last is always
    * the one the user asked for — a slow response for a filter they already
-   * moved past can't overwrite the view.
+   * moved past can't overwrite the view. Figures read before show at once and
+   * are refreshed quietly; only a month never seen shows the spinner.
    */
   const load = async (next: { month?: string; accountId?: string; calendarId?: string }) => {
     const m = next.month ?? month
     const a = next.accountId ?? accountId
     const c = next.calendarId ?? calendarId
-    setMonth(m); setAccountId(a); setCalendarId(c); setLoading(true)
+    setMonth(m); setAccountId(a); setCalendarId(c)
+    const cached = reviewCache[reviewKey(m, a, c)]
+    if (cached) setStats(cached)
+    setLoading(!cached)
     const seq = ++reqSeq.current
     try {
-      const params = new URLSearchParams({ month: m, months: String(MONTHS_SHOWN) })
-      if (a) params.set('accountId', a)
-      if (a && a !== 'none' && c) params.set('calendarId', c)
-      const res = await fetch(`/api/stats/monthly?${params}`)
+      const data = await fetchStats(m, a, c)
       if (seq !== reqSeq.current) return
-      if (res.ok) setStats(await res.json())
+      if (data) setStats(data)
     } finally {
       if (seq === reqSeq.current) setLoading(false)
     }
+    prefetchNeighbours(m, a, c)
   }
 
   usePageShortcuts(REVIEW_SHORTCUTS, (key) => {
@@ -211,7 +240,7 @@ export default function ReviewClient({ initialStats, accounts }: {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 flex flex-col gap-4 animate-fade-in">
+      <div className={cn('flex-1 overflow-y-auto p-4 md:p-6 flex flex-col gap-4 animate-fade-in transition-opacity', loading && 'opacity-60')}>
         {/* Filters — one row, above everything they scope */}
         <div className="flex items-center gap-2 flex-wrap">
           <label className="flex items-center gap-1.5 text-xs text-[#8a7a5e]">

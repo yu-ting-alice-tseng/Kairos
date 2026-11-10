@@ -4,9 +4,9 @@ import { prisma } from '@/lib/prisma'
 import { loadMonthlyStats } from '@/lib/stats'
 import { serialize } from '@/lib/queries'
 import { isDemoUser } from '@/lib/demo-data'
-import { InkLoader } from '@/components/ui/InkLoader'
 import type { MonthlyStats } from '@/types'
 import ReviewClient, { type FilterAccount } from './review-client'
+import ReviewFallback from './review-fallback'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,7 +42,7 @@ async function ReviewData() {
 
 export default function ReviewPage() {
   return (
-    <Suspense fallback={<InkLoader size="page" />}>
+    <Suspense fallback={<ReviewFallback />}>
       <ReviewData />
     </Suspense>
   )

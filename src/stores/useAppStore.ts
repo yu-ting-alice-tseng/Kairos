@@ -2,7 +2,7 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { Task, Habit, CalendarAccount, Language } from '@/types'
+import { Task, Habit, CalendarAccount, Language, MonthlyStats, FilterAccount } from '@/types'
 
 export interface KeywordRule {
   id: string
@@ -46,6 +46,12 @@ export interface AppState {
   /** When Today started showing cached data while the server read a fresh copy. */
   navigationStartedAt: number
   markNavigationStart: () => void
+  /** Monthly review figures already read this session, by "month|account|calendar",
+   *  so revisiting the page or a month shows them at once. Not persisted. */
+  reviewCache: Record<string, MonthlyStats>
+  reviewAccounts: FilterAccount[] | null
+  cacheReview: (key: string, stats: MonthlyStats) => void
+  setReviewAccounts: (accounts: FilterAccount[]) => void
 
   seedServerData: (tasks: Task[], habits: Habit[]) => void
   setLanguage: (lang: Language) => void
@@ -102,6 +108,10 @@ export const useAppStore = create<AppState>()(
       lastMutationAt: 0,
       navigationStartedAt: 0,
       markNavigationStart: () => set({ navigationStartedAt: Date.now() }),
+      reviewCache: {},
+      reviewAccounts: null,
+      cacheReview: (key, stats) => set((state) => ({ reviewCache: { ...state.reviewCache, [key]: stats } })),
+      setReviewAccounts: (accounts) => set({ reviewAccounts: accounts }),
 
       // A copy read before an edit made while it was on its way would undo that
       // edit on screen, so it is dropped; the next refresh brings it in.

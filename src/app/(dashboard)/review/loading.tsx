@@ -1,7 +1,7 @@
-import { InkLoader } from '@/components/ui/InkLoader'
+import ReviewFallback from './review-fallback'
 
-// Lets Next prefetch up to here, so the page answers a click at once while the
-// month's figures are read.
+// Lets Next prefetch up to here, so the page answers a click at once: with the
+// figures this session already has, or a loader on a first visit.
 export default function Loading() {
-  return <InkLoader size="page" />
+  return <ReviewFallback />
 }

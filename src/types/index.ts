@@ -232,6 +232,14 @@ export interface MonthBucket {
   due: number        // tasks whose deadline falls in it
 }
 
+/** A calendar account as the monthly review's filter lists it. */
+export interface FilterAccount {
+  id: string
+  name: string
+  color: string
+  subCalendars: { externalId: string; name: string; color: string }[]
+}
+
 export interface MonthlyStats {
   months: MonthBucket[]
   summary: {
