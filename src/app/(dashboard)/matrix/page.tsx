@@ -2,6 +2,7 @@
 
 import { Shortcut, usePageShortcuts } from '@/components/ui/ShortcutsDialog'
 import React, { useEffect, useState, useCallback } from 'react'
+import { isRoutineTitle } from '@/lib/routine'
 import { useAppStore, AppState, KeywordRule } from '@/stores/useAppStore'
 import { syncCalendarTasks } from '@/lib/calendar-sync'
 import { Task, Habit, CalendarEvent } from '@/types'
@@ -31,7 +32,7 @@ const MATRIX_SHORTCUTS: Shortcut[] = [
 ]
 
 export default function MatrixPage() {
-  const { language, tasks, tasksLoaded, setTasks, habits, setHabits, calendarAccounts, matrixExcludePatterns, setMatrixExcludePatterns, keywordRules, setKeywordRules, hideHabitsViews, toggleHabitsView } = useAppStore()
+  const { language, tasks, tasksLoaded, setTasks, habits, setHabits, calendarAccounts, matrixExcludePatterns, setMatrixExcludePatterns, routinePatterns, keywordRules, setKeywordRules, hideHabitsViews, toggleHabitsView } = useAppStore()
   const habitsHiddenMatrix = hideHabitsViews.includes('matrix')
   const { toast } = useGlobalToast()
   // Tasks this session already read show at once; loadTasks refreshes them
@@ -184,7 +185,9 @@ export default function MatrixPage() {
     const today = new Date(); today.setHours(23, 59, 59, 999)
     if (task.deadline) {
       const dl = new Date(String(task.deadline))
-      // On today's view: include overdue tasks (deadline in the past); on other days: exact match only
+      // On today's view: include overdue tasks (deadline in the past); on other days: exact match only.
+      // A routine slot left undone is not owed work, so it never comes back as overdue.
+      if (isSameDay(date, new Date()) && isRoutineTitle(task.title, routinePatterns)) return isSameDay(dl, date)
       return isSameDay(date, new Date()) ? dl <= today : isSameDay(dl, date)
     }
     // Manually created tasks without deadline: show only when viewing today

@@ -24,6 +24,8 @@ export interface AppState {
   /** Title keywords that turn a task or all-day event into a reminder on Today (birthdays…) */
   todayReminderPatterns: string[]
   keywordRules: KeywordRule[]
+  /** Title keywords for routine slots (shower…): past and undone, they are not overdue */
+  routinePatterns: string[]
   hideHabitsViews: string[]
   primaryTimezone: string | null   // null = browser local
   secondaryTimezone: string | null // null = not shown
@@ -77,6 +79,7 @@ export interface AppState {
   setTodayExcludePatterns: (patterns: string[]) => void
   setTodayReminderPatterns: (patterns: string[]) => void
   setKeywordRules: (rules: KeywordRule[]) => void
+  setRoutinePatterns: (patterns: string[]) => void
   addKeywordRule: (rule: KeywordRule) => void
   updateKeywordRule: (id: string, updates: Partial<KeywordRule>) => void
   removeKeywordRule: (id: string) => void
@@ -97,6 +100,7 @@ export const useAppStore = create<AppState>()(
       todayExcludePatterns: [],
       todayReminderPatterns: ['生日', 'Birthday', 'Anniversaire'],
       keywordRules: [],
+      routinePatterns: [],
       hideHabitsViews: [],
       primaryTimezone: null,
       secondaryTimezone: null,
@@ -152,6 +156,7 @@ export const useAppStore = create<AppState>()(
       setTodayExcludePatterns: (patterns) => set({ todayExcludePatterns: patterns }),
       setTodayReminderPatterns: (patterns) => set({ todayReminderPatterns: patterns }),
       setKeywordRules: (rules) => set({ keywordRules: rules }),
+      setRoutinePatterns: (patterns) => set({ routinePatterns: patterns }),
       addKeywordRule: (rule) => set((state) => ({ keywordRules: [...state.keywordRules, rule] })),
       updateKeywordRule: (id, updates) =>
         set((state) => ({
@@ -178,6 +183,9 @@ export const useAppStore = create<AppState>()(
         primaryTimezone: state.primaryTimezone,
         secondaryTimezone: state.secondaryTimezone,
         hasCompletedOnboarding: state.hasCompletedOnboarding,
+        // Kept here too so the first paint already hides past routine slots;
+        // the copy in the database (loaded on login) is the one that counts.
+        routinePatterns: state.routinePatterns,
         // keywordRules loaded from DB on login — not persisted in localStorage
       }),
     }

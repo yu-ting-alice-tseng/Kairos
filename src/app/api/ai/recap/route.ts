@@ -4,6 +4,7 @@ import { getRequestTimeZone } from '@/lib/timezone-server'
 import { zonedDayRange } from '@/lib/timezones'
 import { generateDailyRecap } from '@/lib/ai'
 import { prisma } from '@/lib/prisma'
+import { parseRoutinePatterns, isRoutineTitle } from '@/lib/routine'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
   const yesterday = new Date(today)
   yesterday.setDate(yesterday.getDate() - 1)
 
-  const [todayTasks, completedYesterday, missedYesterday] = await Promise.all([
+  const [openTasks, completedYesterday, missedYesterdayAll, owner] = await Promise.all([
     prisma.task.findMany({
       where: {
         userId: session.user.id,
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
         parentTaskId: null,
       },
       orderBy: { priority: 'desc' },
-      take: 10,
+      take: 40,
     }),
     prisma.task.findMany({
       where: {
@@ -40,7 +41,19 @@ export async function POST(req: NextRequest) {
         scheduledEnd: { gte: yesterday, lt: today },
       },
     }),
+    prisma.user.findUnique({ where: { id: session.user.id }, select: { routinePatterns: true } }),
   ])
+
+  // Routine slots (shower…) left undone are not misses, and once their day has
+  // passed they are not today's work either.
+  const routinePatterns = parseRoutinePatterns(owner?.routinePatterns)
+  const isPastRoutine = (t: { title: string; scheduledStart: Date | null; deadline: Date | null }) => {
+    if (!isRoutineTitle(t.title, routinePatterns)) return false
+    const when = t.scheduledStart ?? t.deadline
+    return !!when && when < today
+  }
+  const todayTasks = openTasks.filter((t) => !isPastRoutine(t)).slice(0, 10)
+  const missedYesterday = missedYesterdayAll.filter((t) => !isRoutineTitle(t.title, routinePatterns))
 
   try {
     const summary = await generateDailyRecap(

@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { isDemoUser, getDemoTasks } from '@/lib/demo-data'
 import { getQuadrant } from '@/lib/utils'
 import type { MonthlyStats, MonthBucket } from '@/types'
+import { parseRoutinePatterns, isRoutineTitle } from '@/lib/routine'
 
 /**
  * Completion volume per month plus a review of one month, read from one
@@ -71,7 +72,7 @@ export async function loadMonthlyStats(userId: string, opts: MonthlyStatsOptions
     if (opts.calendarId) scope.calendarId = opts.calendarId
   }
 
-  const [tasks, habitCompletions] = await Promise.all([
+  const [tasks, habitCompletions, owner] = await Promise.all([
     prisma.task.findMany({
       where: {
         ...scope,
@@ -90,7 +91,11 @@ export async function loadMonthlyStats(userId: string, opts: MonthlyStatsOptions
     prisma.habitCompletion.count({
       where: { habit: { userId }, completedAt: { gte: monthStart, lt: monthEnd } },
     }),
+    prisma.user.findUnique({ where: { id: userId }, select: { routinePatterns: true } }),
   ])
+  // Routine slots (shower…) are time holders, not commitments: neither a
+  // done one nor a skipped one says anything about the month.
+  const routinePatterns = parseRoutinePatterns(owner?.routinePatterns)
 
   const byQuadrant: MonthlyStats['summary']['byQuadrant'] = {
     'do-first': 0, schedule: 0, delegate: 0, eliminate: 0,
@@ -103,6 +108,7 @@ export async function loadMonthlyStats(userId: string, opts: MonthlyStatsOptions
   const now = new Date()
 
   for (const t of tasks) {
+    if (isRoutineTitle(t.title, routinePatterns)) continue
     if (t.status === 'COMPLETED') {
       const done = completionDate(t)
       const doneBucket = buckets.get(monthKey(done))

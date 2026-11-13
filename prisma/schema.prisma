@@ -19,6 +19,9 @@ model User {
   updatedAt     DateTime  @updatedAt
 
   keywordRules     String   @default("[]")
+  // Title keywords for routine slots (shower, commute…): once their day has
+  // passed undone they leave the overdue list and are left out of the stats.
+  routinePatterns  String   @default("[]")
 
   accounts         Account[]
   sessions         Session[]

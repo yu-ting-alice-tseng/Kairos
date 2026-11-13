@@ -21,11 +21,12 @@ import { completeHabitOptimistic, uncompleteHabitOptimistic } from '@/lib/habit-
 import { generatePriorityList, isPendingTaskId, dueInLabel, formatDate, formatDeadlineLabel, deadlineTooltip, formatTime, cn } from '@/lib/utils'
 import {
   Plus, Sparkles, Sun, Flame, RefreshCw, MessageSquare, ChevronRight, ChevronLeft,
-  CheckCircle2, Clock, Loader2, X, AlarmCheck, ChevronDown, Zap, CalendarDays, SlidersHorizontal, Keyboard, Bell, Hourglass,
+  CheckCircle2, Clock, Loader2, X, AlarmCheck, ChevronDown, Zap, CalendarDays, SlidersHorizontal, Keyboard, Bell, Hourglass, Repeat,
 } from 'lucide-react'
 import { format, isSameDay, differenceInCalendarDays } from 'date-fns'
 import { fr, enUS, zhTW } from 'date-fns/locale'
 import { useGlobalToast } from '@/components/providers/ToastProvider'
+import { isRoutineTitle } from '@/lib/routine'
 import {
   DndContext, DragEndEvent,
   useDraggable, useDroppable,
@@ -306,7 +307,7 @@ export default function TodayClient({ initialTasks, initialHabits }: {
   initialTasks: Task[]
   initialHabits: Habit[]
 }) {
-  const { language, tasks: storeTasks, habits: storeHabits, dataSeeded, seedServerData, setTasks, updateTask, removeTask, addTask, setHabits, calendarAccounts, todayExcludePatterns, setTodayExcludePatterns, todayReminderPatterns, setTodayReminderPatterns, keywordRules, hideHabitsViews, toggleHabitsView } = useAppStore()
+  const { language, tasks: storeTasks, habits: storeHabits, dataSeeded, seedServerData, setTasks, updateTask, removeTask, addTask, setHabits, calendarAccounts, todayExcludePatterns, setTodayExcludePatterns, todayReminderPatterns, setTodayReminderPatterns, routinePatterns, setRoutinePatterns, keywordRules, hideHabitsViews, toggleHabitsView } = useAppStore()
   const habitsHidden = hideHabitsViews.includes('today')
   const { toast } = useGlobalToast()
 
@@ -439,6 +440,22 @@ export default function TodayClient({ initialTasks, initialHabits }: {
   const isReminder = (title: string) =>
     todayReminderPatterns.some((p) => p && title.toLowerCase().includes(p.toLowerCase()))
 
+  // Routine slots (shower…) hold time on their own day; skipped, they are not
+  // owed work, so they never reach the overdue list.
+  const isRoutine = (title: string) => isRoutineTitle(title, routinePatterns)
+  const saveRoutinePatterns = (patterns: string[]) => {
+    const previous = routinePatterns
+    setRoutinePatterns(patterns)
+    fetch('/api/routine-patterns', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patterns),
+    }).then((r) => { if (!r.ok) throw new Error() }).catch(() => {
+      setRoutinePatterns(previous)
+      toast({ title: language === 'fr' ? "Échec de l'enregistrement" : language === 'zh' ? '儲存失敗' : 'Could not save', variant: 'error' })
+    })
+  }
+
   // All-day calendar events for today
   const todayAllDayEvents = todayEvents.filter((ev) => ev.allDay)
   const todayAllDayEventIds = new Set(todayAllDayEvents.map((ev) => ev.id))
@@ -498,7 +515,7 @@ export default function TodayClient({ initialTasks, initialHabits }: {
   const overdueEventCutoff = new Date(selectedDayStart.getTime() - OVERDUE_EVENT_DAYS * 86400_000)
   const overdueTasks = dedupeCalendarTasks(tasks.filter((t) => {
     if (t.status === 'COMPLETED' || t.status === 'CANCELLED' || t.parentTaskId !== null) return false
-    if (isExcludedFromToday(t.title) || isReminder(t.title)) return false
+    if (isExcludedFromToday(t.title) || isReminder(t.title) || isRoutine(t.title)) return false
     if (isStaleSchedule(t)) return true
     if (t.scheduledStart || !t.deadline || !isBeforeSelectedDay(t.deadline)) return false
     if (!t.calendarEventId) return true
@@ -902,6 +919,19 @@ export default function TodayClient({ initialTasks, initialHabits }: {
             placeholder={language === 'fr' ? 'ex: Anniversaire' : language === 'zh' ? '例：生日' : 'e.g. Birthday'}
             patterns={todayReminderPatterns}
             onChange={setTodayReminderPatterns}
+          />
+          <PatternEditor
+            className="mt-4"
+            icon={<Repeat className="h-3.5 w-3.5 text-[#8a7a5e]" />}
+            label={language === 'fr' ? 'Routine (non comptée)' : language === 'zh' ? '例行（不計分）' : 'Routine (not tracked)'}
+            hint={language === 'fr'
+              ? "Pour ce qui réserve juste du temps (douche, trajet…). Le jour même, la tâche reste à cocher ; non faite, elle ne passe pas en retard et n'entre pas dans les statistiques. Rien n'est supprimé."
+              : language === 'zh'
+                ? '用在只是佔個時段的行程（洗澡、通勤等）。當天照常可以打勾；沒做的話，過了那天不會列為逾期，也不算進統計。資料不會被刪除。'
+                : 'For slots that only hold time (shower, commute…). On the day itself you can still tick it off; left undone, it does not become overdue and stays out of the stats. Nothing is deleted.'}
+            placeholder={language === 'fr' ? 'ex: Douche' : language === 'zh' ? '例：洗澡' : 'e.g. Shower'}
+            patterns={routinePatterns}
+            onChange={saveRoutinePatterns}
           />
         </div>
       )}

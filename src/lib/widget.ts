@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
+import { parseRoutinePatterns, isRoutineTitle } from '@/lib/routine'
 import { isDemoUser, getDemoTasks } from '@/lib/demo-data'
 
 // Widget tokens are HMAC-signed with AUTH_SECRET so the read-only widget API
@@ -119,6 +120,14 @@ export async function getWidgetData(userId: string, tzParam?: string): Promise<W
         ],
       },
       orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
+    })
+    // Routine slots (shower…) from an earlier day are not overdue work.
+    const owner = await prisma.user.findUnique({ where: { id: userId }, select: { routinePatterns: true } })
+    const routinePatterns = parseRoutinePatterns(owner?.routinePatterns)
+    records = records.filter((t) => {
+      if (t.status === 'COMPLETED' || !isRoutineTitle(t.title, routinePatterns)) return true
+      const when = t.scheduledStart ?? t.deadline
+      return !when || when >= start
     })
   }
 

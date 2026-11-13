@@ -30,7 +30,7 @@ const navItems = [
 
 export function Sidebar() {
   const pathname    = usePathname()
-  const { language, setLanguage, setTasks, setHabits, setCalendarAccounts, setKeywordRules, setOnboardingOpen } = useAppStore()
+  const { language, setLanguage, setTasks, setHabits, setCalendarAccounts, setKeywordRules, setRoutinePatterns, setOnboardingOpen } = useAppStore()
   const { data: session } = useSession()
   const [collapsed, setCollapsed] = React.useState(() => {
     try { return localStorage.getItem('sidebar-collapsed') === 'true' } catch { return false }
@@ -72,7 +72,11 @@ export function Sidebar() {
       .then((r) => r.ok ? r.json() : [])
       .then((data) => setKeywordRules(Array.isArray(data) ? data : []))
       .catch(() => {})
-  }, [session?.user?.id, setTasks, setHabits, setCalendarAccounts, setKeywordRules])
+    fetch('/api/routine-patterns')
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (Array.isArray(data)) setRoutinePatterns(data) })
+      .catch(() => {})
+  }, [session?.user?.id, setTasks, setHabits, setCalendarAccounts, setKeywordRules, setRoutinePatterns])
 
   return (
     <aside
