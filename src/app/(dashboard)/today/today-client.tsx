@@ -228,16 +228,11 @@ function ScheduleHourSlot({ hour, events, scheduledTasks, calendarAccounts, isAc
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `hour-${hour}` })
   const label = `${String(hour).padStart(2, '0')}:00`
-  const hasContent = events.length > 0 || scheduledTasks.length > 0
   return (
     <div
       ref={setNodeRef}
-      className={`flex gap-2 min-h-[40px] rounded-xl px-2 py-2 border transition-all text-xs ${
-        isOver
-          ? 'border-red-400 bg-red-50 shadow-sm'
-          : hasContent
-            ? 'border-[#e2d6bc] bg-[#fbf7ee]'
-            : 'border-dashed border-[#e2d6bc] bg-transparent'
+      className={`flex shrink-0 gap-2 min-h-[36px] rounded-lg px-2 py-1.5 border-b transition-colors text-xs ${
+        isOver ? 'border-red-300 bg-red-50' : 'border-[#ece2cb]'
       }`}
     >
       <span className={`w-10 shrink-0 font-mono text-[10px] mt-0.5 ${isActive ? 'text-red-500 font-bold' : 'text-[#a99873]'}`}>{label}</span>
@@ -1099,7 +1094,7 @@ export default function TodayClient({ initialTasks, initialHabits }: {
                     {language === 'fr' ? 'Déposer pour planifier' : language === 'zh' ? '拖入以排程' : 'Drop to schedule'}
                   </span>
                 </div>
-                <div ref={scheduleScrollRef} className="overflow-y-auto p-2 flex flex-col gap-0.5">
+                <div ref={scheduleScrollRef} className="overflow-y-auto p-2 flex flex-col">
                   {SCHEDULE_HOURS.map((hour) => {
                     const nowHour = new Date().getHours()
                     const eventsAtHour = todayEvents
