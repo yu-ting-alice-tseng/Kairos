@@ -242,7 +242,15 @@ function ScheduleHourSlot({ hour, events, scheduledTasks, calendarAccounts, isAc
     >
       <span className={`w-10 shrink-0 font-mono text-[10px] mt-0.5 ${isActive ? 'text-red-500 font-bold' : 'text-[#a99873]'}`}>{label}</span>
       <div className="flex-1 flex flex-col gap-0.5">
-        {events.map((ev) => {
+        {[
+          ...events.map((ev) => ({ kind: 'event' as const, at: new Date(String(ev.start)).getTime(), ev })),
+          ...scheduledTasks.map((task) => ({ kind: 'task' as const, at: new Date(String(task.scheduledStart)).getTime(), task })),
+        ].sort((a, b) => a.at - b.at).map((item) => {
+          if (item.kind === 'task') {
+            const task = item.task
+            return <DraggableScheduledTask key={task.id} task={task} onEdit={onEditTask} onToggleDone={onToggleTask} lang={lang} />
+          }
+          const ev = item.ev
           const acc = calendarAccounts.find((a) => a.id === ev.calendarAccountId)
           const color = ev.color ?? acc?.color ?? '#6366F1'
           const done = isEventDone(ev)
@@ -257,9 +265,6 @@ function ScheduleHourSlot({ hour, events, scheduledTasks, calendarAccounts, isAc
             </div>
           )
         })}
-        {scheduledTasks.map((task) => (
-          <DraggableScheduledTask key={task.id} task={task} onEdit={onEditTask} onToggleDone={onToggleTask} lang={lang} />
-        ))}
         {isOver && <div className="text-red-400 italic text-[10px]">→ {label}</div>}
       </div>
     </div>
