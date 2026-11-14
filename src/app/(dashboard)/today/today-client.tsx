@@ -443,15 +443,16 @@ export default function TodayClient({ initialTasks, initialHabits }: {
   // Routine slots (shower…) hold time on their own day; skipped, they are not
   // owed work, so they never reach the overdue list.
   const isRoutine = (title: string) => isRoutineTitle(title, routinePatterns)
-  const saveRoutinePatterns = (patterns: string[]) => {
-    const previous = routinePatterns
-    setRoutinePatterns(patterns)
-    fetch('/api/routine-patterns', {
+  // Both lists live in the database (the server leaves their tasks out of the
+  // stats), so a failed save puts the old list back.
+  const savePatterns = (url: string, patterns: string[], previous: string[], apply: (p: string[]) => void) => {
+    apply(patterns)
+    fetch(url, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patterns),
     }).then((r) => { if (!r.ok) throw new Error() }).catch(() => {
-      setRoutinePatterns(previous)
+      apply(previous)
       toast({ title: language === 'fr' ? "Échec de l'enregistrement" : language === 'zh' ? '儲存失敗' : 'Could not save', variant: 'error' })
     })
   }
@@ -912,13 +913,13 @@ export default function TodayClient({ initialTasks, initialHabits }: {
             icon={<Bell className="h-3.5 w-3.5 text-[#b08948]" />}
             label={language === 'fr' ? 'Rappels (anniversaires…)' : language === 'zh' ? '提醒（生日等）' : 'Reminders (birthdays…)'}
             hint={language === 'fr'
-              ? 'Les tâches et événements dont le titre contient ces mots apparaissent dans « Rappels » et non dans la liste.'
+              ? "Les tâches et événements dont le titre contient ces mots apparaissent dans « Rappels » et non dans la liste, ne passent jamais en retard et n'entrent pas dans les statistiques."
               : language === 'zh'
-                ? '標題含有這些字的任務與事件會放進「提醒」區，不列入待辦。'
-                : 'Tasks and events whose title contains these words go to Reminders instead of the to-do list.'}
+                ? '標題含有這些字的任務與事件會放進「提醒」區，不列入待辦、不算逾期，也不算進統計。'
+                : 'Tasks and events whose title contains these words go to Reminders instead of the to-do list, never become overdue and stay out of the stats.'}
             placeholder={language === 'fr' ? 'ex: Anniversaire' : language === 'zh' ? '例：生日' : 'e.g. Birthday'}
             patterns={todayReminderPatterns}
-            onChange={setTodayReminderPatterns}
+            onChange={(p) => savePatterns('/api/reminder-patterns', p, todayReminderPatterns, setTodayReminderPatterns)}
           />
           <PatternEditor
             className="mt-4"
@@ -931,7 +932,7 @@ export default function TodayClient({ initialTasks, initialHabits }: {
                 : 'For slots that only hold time (shower, commute…). On the day itself you can still tick it off; left undone, it does not become overdue and stays out of the stats. Nothing is deleted.'}
             placeholder={language === 'fr' ? 'ex: Douche' : language === 'zh' ? '例：洗澡' : 'e.g. Shower'}
             patterns={routinePatterns}
-            onChange={saveRoutinePatterns}
+            onChange={(p) => savePatterns('/api/routine-patterns', p, routinePatterns, setRoutinePatterns)}
           />
         </div>
       )}

@@ -3,6 +3,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { Task, Habit, CalendarAccount, Language, MonthlyStats, FilterAccount } from '@/types'
+import { DEFAULT_REMINDER_PATTERNS } from '@/lib/routine'
 
 export interface KeywordRule {
   id: string
@@ -98,7 +99,7 @@ export const useAppStore = create<AppState>()(
       activeView: 'today',
       matrixExcludePatterns: [],
       todayExcludePatterns: [],
-      todayReminderPatterns: ['生日', 'Birthday', 'Anniversaire'],
+      todayReminderPatterns: DEFAULT_REMINDER_PATTERNS,
       keywordRules: [],
       routinePatterns: [],
       hideHabitsViews: [],

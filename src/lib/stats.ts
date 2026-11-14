@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { isDemoUser, getDemoTasks } from '@/lib/demo-data'
 import { getQuadrant } from '@/lib/utils'
 import type { MonthlyStats, MonthBucket } from '@/types'
-import { parseRoutinePatterns, isRoutineTitle } from '@/lib/routine'
+import { untrackedPatterns, isRoutineTitle, UNTRACKED_SELECT } from '@/lib/routine'
 
 /**
  * Completion volume per month plus a review of one month, read from one
@@ -91,11 +91,11 @@ export async function loadMonthlyStats(userId: string, opts: MonthlyStatsOptions
     prisma.habitCompletion.count({
       where: { habit: { userId }, completedAt: { gte: monthStart, lt: monthEnd } },
     }),
-    prisma.user.findUnique({ where: { id: userId }, select: { routinePatterns: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: UNTRACKED_SELECT }),
   ])
-  // Routine slots (shower…) are time holders, not commitments: neither a
-  // done one nor a skipped one says anything about the month.
-  const routinePatterns = parseRoutinePatterns(owner?.routinePatterns)
+  // Routine slots (shower…) and reminders (birthdays…) are not commitments:
+  // neither a done one nor a skipped one says anything about the month.
+  const routinePatterns = untrackedPatterns(owner)
 
   const byQuadrant: MonthlyStats['summary']['byQuadrant'] = {
     'do-first': 0, schedule: 0, delegate: 0, eliminate: 0,

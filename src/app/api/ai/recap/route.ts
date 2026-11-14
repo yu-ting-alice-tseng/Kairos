@@ -4,7 +4,7 @@ import { getRequestTimeZone } from '@/lib/timezone-server'
 import { zonedDayRange } from '@/lib/timezones'
 import { generateDailyRecap } from '@/lib/ai'
 import { prisma } from '@/lib/prisma'
-import { parseRoutinePatterns, isRoutineTitle } from '@/lib/routine'
+import { untrackedPatterns, isRoutineTitle, UNTRACKED_SELECT } from '@/lib/routine'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -41,12 +41,12 @@ export async function POST(req: NextRequest) {
         scheduledEnd: { gte: yesterday, lt: today },
       },
     }),
-    prisma.user.findUnique({ where: { id: session.user.id }, select: { routinePatterns: true } }),
+    prisma.user.findUnique({ where: { id: session.user.id }, select: UNTRACKED_SELECT }),
   ])
 
-  // Routine slots (shower…) left undone are not misses, and once their day has
-  // passed they are not today's work either.
-  const routinePatterns = parseRoutinePatterns(owner?.routinePatterns)
+  // Routine slots (shower…) and reminders (birthdays…) left undone are not
+  // misses, and once their day has passed they are not today's work either.
+  const routinePatterns = untrackedPatterns(owner)
   const isPastRoutine = (t: { title: string; scheduledStart: Date | null; deadline: Date | null }) => {
     if (!isRoutineTitle(t.title, routinePatterns)) return false
     const when = t.scheduledStart ?? t.deadline

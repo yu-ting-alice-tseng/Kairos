@@ -22,6 +22,9 @@ model User {
   // Title keywords for routine slots (shower, commute…): once their day has
   // passed undone they leave the overdue list and are left out of the stats.
   routinePatterns  String   @default("[]")
+  // Title keywords for reminders (birthdays…): shown on their day, never owed
+  // work, left out of the stats. NULL until the page first saves its list.
+  reminderPatterns String?
 
   accounts         Account[]
   sessions         Session[]

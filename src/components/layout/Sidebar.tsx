@@ -30,7 +30,7 @@ const navItems = [
 
 export function Sidebar() {
   const pathname    = usePathname()
-  const { language, setLanguage, setTasks, setHabits, setCalendarAccounts, setKeywordRules, setRoutinePatterns, setOnboardingOpen } = useAppStore()
+  const { language, setLanguage, setTasks, setHabits, setCalendarAccounts, setKeywordRules, setRoutinePatterns, setTodayReminderPatterns, setOnboardingOpen } = useAppStore()
   const { data: session } = useSession()
   const [collapsed, setCollapsed] = React.useState(() => {
     try { return localStorage.getItem('sidebar-collapsed') === 'true' } catch { return false }
@@ -76,7 +76,21 @@ export function Sidebar() {
       .then((r) => r.ok ? r.json() : null)
       .then((data) => { if (Array.isArray(data)) setRoutinePatterns(data) })
       .catch(() => {})
-  }, [session?.user?.id, setTasks, setHabits, setCalendarAccounts, setKeywordRules, setRoutinePatterns])
+    fetch('/api/reminder-patterns')
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { patterns: string[] | null } | null) => {
+        if (!data) return // demo account or error: keep the list this browser holds
+        if (Array.isArray(data.patterns)) { setTodayReminderPatterns(data.patterns); return }
+        // Never saved yet: the list lived only in this browser until now, so
+        // it becomes the account's list.
+        fetch('/api/reminder-patterns', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(useAppStore.getState().todayReminderPatterns),
+        }).catch(() => {})
+      })
+      .catch(() => {})
+  }, [session?.user?.id, setTasks, setHabits, setCalendarAccounts, setKeywordRules, setRoutinePatterns, setTodayReminderPatterns])
 
   return (
     <aside
